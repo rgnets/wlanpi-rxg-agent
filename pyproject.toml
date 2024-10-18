@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools >= 61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = []
+
+[project]
+requires-python = ">=3.9"
+name = "wlanpi-rxg-agent"
+authors = [
+    {name = "Michael Ketchel", email = "michael.ketchel@gmail.com"},
+    {name = "Michael Ketchel", email = "mdk@rgnets.com"},
+]
+maintainers = [
+    {name = "Michael Ketchel", email = "michael.ketchel@gmail.com"},
+    {name = "Michael Ketchel", email = "mdk@rgnets.com"},
+]
+dynamic=["version", "description", "license", "urls", "classifiers"]
+
+#version = "1.0.0-0"
+dependencies = [
+    "requests",
+    "schedule",
+    "pydantic-settings",
+    "python-daemon"
+]
+
+[project.optional-dependencies]
+dev = [
+    "mypy",
+    "black",
+    "types-paho-mqtt",
+    "types-requests",
+]
+test = [
+    "black",
+    "flake8",
+    "mypy",
+    "autoflake",
+    "pytest",
+    "pytest-cov",
+    "pytest-mock",
+]

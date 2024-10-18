@@ -1,0 +1,29 @@
+# wlanpi-rxg-agent.service
+
+# TODO: Automate recovery, if needed: https://www.redhat.com/sysadmin/systemd-automate-recovery
+
+[Unit]
+Description=The rXg Agent communicates, authenticates with, and configures the WLAN Pi MQTT Bridge to communicate with the RG Nets rXg.
+After=network.target
+StartLimitIntervalSec=30
+StartLimitBurst=4
+
+[Service]
+Type=notify
+
+# this is a soft link created via maintainer script
+WorkingDirectory=/opt/wlanpi-rxg-agent/workingdirectory
+ExecStart=/opt/wlanpi-rxg-agent/bin/python3 -m wlanpi_rxg_agent
+# TODO: Finalize exec method
+
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=mixed
+TimeoutStopSec=5
+PrivateTmp=true
+
+Restart=on-failure
+Type=notify
+NotifyAccess=all
+
+[Install]
+WantedBy=multi-user.target
