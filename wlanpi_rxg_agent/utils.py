@@ -1,8 +1,8 @@
+import datetime
 import json
 import subprocess
-import datetime
 import time
-from typing import Optional
+from typing import Any, Optional
 
 from wlanpi_rxg_agent.models.command_result import CommandResult
 from wlanpi_rxg_agent.models.runcommand_error import RunCommandError
@@ -47,36 +47,43 @@ def get_default_gateways() -> dict[str, str]:
             gateways[res[1].strip()] = res[0].strip()
     return gateways
 
-def trace_route(target:str) -> dict[str, any]:
+
+def trace_route(target: str) -> dict[str, Any]:
     # Execute 'ip route show' command which lists all network routes
-    output = run_command(['jc','traceroute',target]).output_from_json()
+    output = run_command(["jc", "traceroute", target]).output_from_json()
     return output
+
 
 def get_model_info() -> dict[str, str]:
     model_info = run_command(["wlanpi-model"]).output.split("\n")
-    model_info = [a.split(':', 1) for a in model_info if a.strip() != '']
+    split_model_info = [a.split(":", 1) for a in model_info if a.strip() != ""]
     model_dict = {}
-    for a,b in model_info:
+    for a, b in split_model_info:
         model_dict[a.strip()] = b.strip()
     return model_dict
 
+
 def get_uptime() -> dict[str, str]:
-    cmd="jc uptime"
+    cmd = "jc uptime"
     return run_command(cmd.split(" ")).output_from_json()
 
+
 def get_hostname() -> str:
-    cmd="uptime"
+    cmd = "uptime"
     return run_command(cmd.split(" ")).output
 
-def get_interface_ip_addr(interface : Optional[str]=None) -> dict[str, any]:
-    cmd: list[str]= "ip -j addr show".split(" ")
-    if interface is not None and interface.strip() != '':
+
+def get_interface_ip_addr(interface: Optional[str] = None) -> dict[str, Any]:
+    cmd: list[str] = "ip -j addr show".split(" ")
+    if interface is not None and interface.strip() != "":
         cmd.append(interface.strip())
     return run_command(cmd).output_from_json()
+
 
 def get_current_unix_timestamp():
     ms = datetime.datetime.now()
     return time.mktime(ms.timetuple()) * 1000
+
 
 def get_eth0_mac() -> str:
     eth0_res = subprocess.run(
@@ -88,4 +95,3 @@ def get_eth0_mac() -> str:
 
 if __name__ == "__main__":
     print(get_interface_ip_addr())
-

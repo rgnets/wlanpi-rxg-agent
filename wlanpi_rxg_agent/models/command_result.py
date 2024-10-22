@@ -2,6 +2,7 @@ import json
 from json import JSONDecodeError
 from typing import Union
 
+
 class CommandResult:
     """Returned by run_command"""
 

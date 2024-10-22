@@ -27,6 +27,7 @@ dependencies = [
     "cryptography",
     "toml",
     "dbus-python",
+    "systemd-python",
 ]
 
 [project.optional-dependencies]
@@ -36,6 +37,7 @@ dev = [
     "types-paho-mqtt",
     "types-requests",
     "types-toml",
+    "types-cryptography",
 ]
 test = [
     "black",

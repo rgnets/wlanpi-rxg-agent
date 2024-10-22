@@ -1,6 +1,5 @@
 import daemon
-
-import rxg_agent
+from wlanpi_rxg_agent import rxg_agent
 
 with daemon.DaemonContext():
     rxg_agent.main()
