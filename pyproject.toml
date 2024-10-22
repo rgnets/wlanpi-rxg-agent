@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 py-modules = []
 
 [project]
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 name = "wlanpi-rxg-agent"
 authors = [
     {name = "Michael Ketchel", email = "michael.ketchel@gmail.com"},
