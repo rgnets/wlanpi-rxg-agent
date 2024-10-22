@@ -11,8 +11,10 @@ SNAKE=/usr/bin/python3
 
 DH_VENV_DIR=debian/$(PACKAGE)$(DH_VIRTUALENV_INSTALL_ROOT)/$(PACKAGE)
 
-#DBUS_PYTHON_SPEC=$(shell grep dbus-python== requirements.txt)
-#DBUS_VERSION=$(shell grep dbus-python== requirements.txt | cut -d '=' -f3)
+DBUS_PYTHON_SPEC=$(shell grep dbus-python== requirements.txt)
+DBUS_VERSION=$(shell grep dbus-python== requirements.txt | cut -d '=' -f3)
+SYSTEMD_PYTHON_SPEC=$(shell grep systemd-python== requirements.txt)
+SYSTEMD_VERSION=$(shell grep systemd-python== requirements.txt | cut -d '=' -f3)
 PKG_PREFIX=debian/wlanpi-rxg-agent
 SDIST_DIR=debian/$(PACKAGE)-$(VERSION)
 
@@ -35,7 +37,7 @@ override_dh_virtualenv:
 		--install-suffix "wlanpi-rxg-agent" \
 		--builtin-venv \
 		--python ${SNAKE} \
-		--upgrade-pip-to=23.2 \
+		--upgrade-pip-to=24.2 \
 		--preinstall="setuptools==65.5.0" \
 		--preinstall="wheel==0.37.1"
 		--preinstall="mock" \
@@ -43,6 +45,8 @@ override_dh_virtualenv:
 		--extras="all,systemd,test"
 
 	$(DH_VENV_DIR)/bin/python $(DH_VENV_DIR)/bin/pip cache purge --verbose
-	#$(DH_VENV_DIR)/bin/python $(DH_VENV_DIR)/bin/pip download $(DBUS_PYTHON_SPEC) --no-binary dbus-python ${DBUS_PYTHON_SPEC} --verbose
-	#$(DH_VENV_DIR)/bin/python $(DH_VENV_DIR)/bin/pip install dbus-python-$(DBUS_VERSION).tar.gz --verbose
+	$(DH_VENV_DIR)/bin/python $(DH_VENV_DIR)/bin/pip download $(DBUS_PYTHON_SPEC) --no-binary dbus-python ${DBUS_PYTHON_SPEC} --verbose
+	$(DH_VENV_DIR)/bin/python $(DH_VENV_DIR)/bin/pip install dbus-python-$(DBUS_VERSION).tar.gz --verbose
+	$(DH_VENV_DIR)/bin/python $(DH_VENV_DIR)/bin/pip download $(SYSTEMD_PYTHON_SPEC) --no-binary systemd-python ${SYSTEMD_PYTHON_SPEC} --verbose
+	$(DH_VENV_DIR)/bin/python $(DH_VENV_DIR)/bin/pip install systemd-python-$(SYSTEMD_VERSION).tar.gz --verbose
 
