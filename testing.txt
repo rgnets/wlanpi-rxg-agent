@@ -60,6 +60,8 @@ requests==2.32.3
     # via wlanpi-rxg-agent (pyproject.toml)
 schedule==1.2.2
     # via wlanpi-rxg-agent (pyproject.toml)
+systemd-python==235
+    # via wlanpi-rxg-agent (pyproject.toml)
 toml==0.10.2
     # via wlanpi-rxg-agent (pyproject.toml)
 typing-extensions==4.12.2

@@ -1,9 +1,10 @@
-wlanpi-rxg-agent (1.0.0-1+deb12u3) UNRELEASED; urgency=medium
+wlanpi-rxg-agent (1.0.0-1+deb12u4) UNRELEASED; urgency=medium
 
   * Update python version
   * Update python version
+  * Update python version
 
- -- Michael Ketchel <michael.ketchel@gmail.com>  Tue, 22 Oct 2024 05:18:10 -0400
+ -- Michael Ketchel <michael.ketchel@gmail.com>  Tue, 22 Oct 2024 05:21:08 -0400
 
 wlanpi-rxg-agent (1.0.0-1+deb12u1) unstable; urgency=medium
 
