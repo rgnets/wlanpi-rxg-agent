@@ -1,0 +1,5 @@
+wlanpi-rxg-agent: package-installs-python-pycache-dir opt/wlanpi-rxg-agent/lib*
+wlanpi-rxg-agent: unusual-interpreter *
+wlanpi-rxg-agent: script-not-executable opt/wlanpi-rxg-agent/lib*
+wlanpi-rxg-agent: dir-or-file-in-opt *
+wlanpi-rxg-agent: unstripped-binary-or-object *

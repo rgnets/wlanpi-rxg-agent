@@ -18,7 +18,7 @@ ExecStart=/opt/wlanpi-rxg-agent/bin/python3 -m wlanpi_rxg_agent
 
 ExecReload=/bin/kill -s HUP $MAINPID
 KillMode=mixed
-TimeoutStopSec=5
+TimeoutStopSec=60
 PrivateTmp=true
 
 Restart=on-failure

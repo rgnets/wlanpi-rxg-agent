@@ -3,14 +3,11 @@ from typing import Optional
 
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.backends.openssl.x509 import (
-    _Certificate,
-    _CertificateSigningRequest,
-)
+
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.serialization import load_pem_private_key
-from cryptography.x509 import load_pem_x509_certificate, load_pem_x509_csr
+from cryptography.x509 import load_pem_x509_certificate, load_pem_x509_csr, CertificateSigningRequest, Certificate
 
 
 class CertificateTool:
@@ -44,29 +41,29 @@ class CertificateTool:
             pem_out.write(pem)
             os.chmod(filename, 0o600)
 
-    def save_csr(self, csr: _CertificateSigningRequest):
+    def save_csr(self, csr: CertificateSigningRequest):
         pem = csr.public_bytes(
             encoding=serialization.Encoding.PEM,
         )
         with open(self.csr_file, "wb") as pem_out:
             pem_out.write(pem)
 
-    def load_csr(self) -> _CertificateSigningRequest:
+    def load_csr(self) -> CertificateSigningRequest:
         with open(self.csr_file, "rb") as pem_in:
             pem_lines = pem_in.read()
         data = load_pem_x509_csr(pem_lines, default_backend())
         return data
 
-    def save_ca(self, ca: _Certificate):
+    def save_ca(self, ca: Certificate):
         return self.save_cert(ca, self.ca_file)
 
     def save_ca_from_pem(self, ca: str):
         self.save_cert_from_pem(cert=ca, cert_file=self.ca_file)
 
-    def load_ca(self) -> _Certificate:
+    def load_ca(self) -> Certificate:
         return self.load_cert(self.ca_file)
 
-    def save_cert(self, cert: _Certificate, cert_file: Optional[str] = None):
+    def save_cert(self, cert: Certificate, cert_file: Optional[str] = None):
         if not cert_file:
             cert_file = self.cert_file
         pem = cert.public_bytes(
@@ -81,7 +78,7 @@ class CertificateTool:
         cert_data = load_pem_x509_certificate(cert.encode("utf-8"), default_backend())
         self.save_cert(cert=cert_data, cert_file=cert_file)
 
-    def load_cert(self, cert_file: Optional[str] = None) -> _Certificate:
+    def load_cert(self, cert_file: Optional[str] = None) -> Certificate:
         if not cert_file:
             cert_file = self.cert_file
         with open(cert_file, "rb") as pem_in:

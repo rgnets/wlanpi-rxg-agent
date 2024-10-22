@@ -1,5 +1,5 @@
-wlanpi-rxg-agent (1.0.0-1) unstable; urgency=medium
+wlanpi-rxg-agent (1.0.0-1+deb12u1) unstable; urgency=medium
 
   * Initial release
 
- -- Michael Ketchel <michael.ketchel@gmail.com>  Thu, 17 Oct 2024 22:00:00 -0500
+ -- Michael Ketchel <michael.ketchel@gmail.com>  Tue, 22 Oct 2024 04:22:42 -0400
