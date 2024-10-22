@@ -23,7 +23,8 @@ dependencies = [
     "requests",
     "schedule",
     "pydantic-settings",
-    "python-daemon"
+    "python-daemon",
+    "cryptography"
 ]
 
 [project.optional-dependencies]

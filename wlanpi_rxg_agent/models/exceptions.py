@@ -1,0 +1,3 @@
+
+class RXGAgentException(Exception):
+    pass

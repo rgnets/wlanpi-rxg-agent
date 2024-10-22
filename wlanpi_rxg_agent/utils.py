@@ -1,3 +1,4 @@
+import json
 import subprocess
 import datetime
 import time
@@ -46,6 +47,11 @@ def get_default_gateways() -> dict[str, str]:
             gateways[res[1].strip()] = res[0].strip()
     return gateways
 
+def trace_route(target:str) -> dict[str, any]:
+    # Execute 'ip route show' command which lists all network routes
+    output = run_command(['jc','traceroute',target]).output_from_json()
+    return output
+
 def get_model_info() -> dict[str, str]:
     model_info = run_command(["wlanpi-model"]).output.split("\n")
     model_info = [a.split(':', 1) for a in model_info if a.strip() != '']
@@ -58,6 +64,10 @@ def get_uptime() -> dict[str, str]:
     cmd="jc uptime"
     return run_command(cmd.split(" ")).output_from_json()
 
+def get_hostname() -> str:
+    cmd="uptime"
+    return run_command(cmd.split(" ")).output
+
 def get_interface_ip_addr(interface : Optional[str]=None) -> dict[str, any]:
     cmd: list[str]= "ip -j addr show".split(" ")
     if interface is not None and interface.strip() != '':
@@ -68,6 +78,14 @@ def get_current_unix_timestamp():
     ms = datetime.datetime.now()
     return time.mktime(ms.timetuple()) * 1000
 
+def get_eth0_mac() -> str:
+    eth0_res = subprocess.run(
+        "jc ifconfig eth0", capture_output=True, text=True, shell=True
+    )
+    eth0_data = json.loads(eth0_res.stdout)[0]
+    return eth0_data["mac_addr"]
+
 
 if __name__ == "__main__":
     print(get_interface_ip_addr())
+

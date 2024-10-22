@@ -15,7 +15,8 @@ Build-Depends: debhelper (>= 11),
                python3-venv,
                python3-daemon,
                python3-requests,
-               python3-schedule
+               python3-schedule,
+               python3-cryptography
 Standards-Version: 4.6.0
 X-Python3-Version: >= 3.9
 Homepage: https://github.com/rgnets/wlanpi-rxg-agent
