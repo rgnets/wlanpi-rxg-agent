@@ -24,7 +24,9 @@ dependencies = [
     "schedule",
     "pydantic-settings",
     "python-daemon",
-    "cryptography"
+    "cryptography",
+    "toml",
+    "dbus-python",
 ]
 
 [project.optional-dependencies]
@@ -33,6 +35,7 @@ dev = [
     "black",
     "types-paho-mqtt",
     "types-requests",
+    "types-toml",
 ]
 test = [
     "black",

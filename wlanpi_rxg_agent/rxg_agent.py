@@ -2,17 +2,19 @@ import json
 import logging
 import os
 import time
-from configparser import ConfigParser
+from collections import defaultdict
 from pprint import pp
 from typing import Optional
 from xxsubtype import bench
 import dbus
-
+import toml
 import schedule
+import systemd.daemon
 
 from requests import ConnectTimeout, ConnectionError
 from urllib3.exceptions import MaxRetryError
 
+from .__version__ import __version__, __description__
 import wlanpi_rxg_agent.utils as utils
 from api_client import ApiClient
 from certificate_tool import CertificateTool
@@ -20,10 +22,12 @@ from models.exceptions import RXGAgentException
 
 logger = logging.getLogger(__name__)
 # logging.basicConfig(filename='example.log', encoding='utf-8', level=logging.DEBUG)
-logging.basicConfig(encoding="utf-8", level=logging.INFO)
+logging.basicConfig(encoding="utf-8", level=logging.DEBUG)
 
 CONFIG_DIR = "/etc/wlanpi-rxg-agent"
-CONFIG_FILE = "/etc/wlanpi-rxg-agent/config.toml"
+CONFIG_FILE = os.path.join(CONFIG_DIR,"config.toml")
+BRIDGE_CONFIG_DIR = "/etc/wlanpi-mqtt-bridge"
+BRIDGE_CONFIG_FILE = os.path.join(BRIDGE_CONFIG_DIR, "config.toml")
 
 class RXGAgent:
 
@@ -31,7 +35,6 @@ class RXGAgent:
             self,
             verify_ssl:bool=True,
             config_path:str=CONFIG_FILE,
-
     ):
         self.logger = logging.getLogger(__name__)
         self.logger.info("Initializing RXGAgent")
@@ -75,14 +78,14 @@ class RXGAgent:
         Loads configuration from the defined config file
         """
         self.logger.info(f"Loading config file from {self.config_path}")
-        config = ConfigParser()
         if os.path.exists(self.config_path):
-            config.read(self.config_path)
+            config = toml.load(self.config_path)
         else:
             self.logger.error(f"Cannot find config file! Check {self.config_path}")
             raise RXGAgentException(f"Cannot find config file! Check {self.config_path}")
-        self.override_server = config.get("General", "override_rxg", fallback=None)
-        self.fallback_server = config.get("General", "fallback_rxg", fallback=None)
+        general_config = config["General"]
+        self.override_server = general_config.get("override_rxg", None)
+        self.fallback_server = general_config.get("fallback_rxg", None)
 
     def test_address_for_rxg(self, ip: str) -> bool:
         """
@@ -156,8 +159,7 @@ class RXGAgent:
                 self.certification_complete = False
                 # Reinitialize the certificate tool with the active server
                 self.cert_tool = CertificateTool(cert_directory=self.cert_dir)
-                #self.csr = self.cert_tool.get_csr_as_pem(node_name=utils.get_hostname())
-                self.reinitialize_cert_tool(partner_id=self.api_client.ip)
+                self.csr = self.cert_tool.get_csr_as_pem(node_name=utils.get_hostname())
 
                 registration_resp = self.api_client.register(
                     model= utils.get_model_info()['Model'],
@@ -180,7 +182,7 @@ class RXGAgent:
                 if get_cert_resp.status_code == 200:
                     # Registration has succeeded, we need to get our certs.
                     response_data = get_cert_resp.json()
-
+                    self.logger.debug(f"Get Cert Response: {json.dumps(response_data)}")
                     if not response_data['status'] == 'approved':
                         self.logger.warning(f"Server has not approved registration yet. Waiting for next cycle.")
                         return False
@@ -190,6 +192,7 @@ class RXGAgent:
 
                     self.cert_tool.save_cert_from_pem(response_data['certificate'])
                     self.cert_tool.save_ca_from_pem(response_data['ca'])
+                    self.active_port = response_data['port']
                     self.certification_complete = True
                     return True
 
@@ -206,17 +209,73 @@ class RXGAgent:
         self.active_server = self.new_server
         if self.handle_registration():
             self.new_server = None
+        else:
+            self.logger.warning("Server registration check failed. Aborting reconfiguration.")
+            return False
 
-        return
+        # Rewrite Bridge's config.toml
+
+        self.logger.info("Registration complete. Reconfiguring bridge.")
+        # Try to load existing toml and preserve. If we fail, it doesn't matter that much.
+        data = defaultdict(dict)
+        try:
+            data = toml.load(BRIDGE_CONFIG_FILE)
+            self.logger.info("Existing config loaded. Updating.")
+        except toml.decoder.TomlDecodeError as e:
+            self.logger.warning(f"Unable to decode existing bridge config, overwriting. Error: {e.msg}")
+
+
+        data['MQTT']['server'] = self.active_server
+        data['MQTT']['port'] = self.active_port
+        data['MQTT_TLS']['use_tls'] = True
+        data['MQTT_TLS']['ca_certs'] = self.cert_tool.ca_file
+        data['MQTT_TLS']['certfile'] = self.cert_tool.cert_file
+        data['MQTT_TLS']['keyfile'] = self.cert_tool.key_file
+        data['MQTT_TLS']['cert_reqs'] = 0
+
+        self.logger.info("Bridge config written. Restarting service.")
+
+        # [MQTT]
+        # oldserver = rxg.ketchel.xyz
+        # server = 192.168.20.81
+        # port = 1883
+        #
+        # # The server to connect to
+        # # <gateway> will cause the bridge to attempt to connect to the gateway device at the default route
+        # #server = <gateway>
+        # #port = 8884
+        #
+        # # Optional, only takes effect if use_tls is set
+        # [MQTT_TLS]
+        # use_tls = false
+        # ca_certs =/home/wlanpi/dev/wlanpi-mqtt-bridge/certs/combined.ca.crt
+        # certfile =/home/wlanpi/dev/wlanpi-mqtt-bridge/certs/client.crt
+        # keyfile = /home/wlanpi/dev/wlanpi-mqtt-bridge/certs/client.key
+        # # Verification of cert: 0=No verify, 1=Optional, 2=Required
+        # cert_reqs = 0
+        # # TLS version to use. Leave blank for any version.
+        # #tls_version =
+        # #ciphers =
+        # #keyfile_password =
+
+        with open(BRIDGE_CONFIG_FILE, 'w') as f:
+            toml.dump(data, f)
+
+
         system_bus = dbus.SystemBus()
         systemd1 = system_bus.get_object('org.freedesktop.systemd1', '/org/freedesktop/systemd1')
         manager = dbus.Interface(systemd1, 'org.freedesktop.systemd1.Manager')
-        manager.EnableUnitFiles(['picockpit-client.service'], False, True)
-        manager.Reload()
-        job = manager.RestartUnit('picockpit-client.service', 'fail')
-
-
-        pass
+        try:
+            manager.EnableUnitFiles(['wlanpi-mqtt-bridge.service'], False, True)
+            manager.Reload()
+        except Exception as e:
+            self.logger.error(f"Failed to enable and reload: {e}")
+        try:
+            job = manager.RestartUnit('wlanpi-mqtt-bridge.service', 'fail')
+        except Exception as e:
+            self.logger.error(f"Failed to restart unit: {e}")
+        else:
+            self.logger.info("Restarted bridge service")
 
     
     def check_for_new_server(self):
@@ -240,7 +299,8 @@ class RXGAgent:
             self.configure_mqtt_bridge()
 
         if self.active_server == self.new_server and not self.certification_complete:
-            self.logger.info(f"")
+            self.logger.info(f"Incomplete certification. Kicking off reconfiguration process.")
+            self.configure_mqtt_bridge()
         
 
     def setup(self):
@@ -258,6 +318,7 @@ def main():
     agent = RXGAgent(verify_ssl=False)
 
     agent.setup()
+    systemd.daemon.notify("READY=1")
     while True:
         agent.main_loop()
         time.sleep(1)
