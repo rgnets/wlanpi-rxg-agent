@@ -38,8 +38,9 @@ override_dh_virtualenv:
 		--builtin-venv \
 		--python ${SNAKE} \
 		--upgrade-pip-to=24.2 \
-		--preinstall="setuptools==65.5.0" \
-		--preinstall="wheel==0.37.1"
+		--preinstall="setuptools==75.2.0" \
+		--preinstall="ez_setup==0.9" \
+		--preinstall="wheel==0.44.1"
 		--preinstall="mock" \
 		--extra-pip-arg="--compile" \
 		--extras="all,systemd,test"
