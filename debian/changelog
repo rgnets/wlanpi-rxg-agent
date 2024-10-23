@@ -1,3 +1,9 @@
+wlanpi-rxg-agent (1.0.0-1+deb12u9) unstable; urgency=medium
+
+  * Actual Stable release
+
+ -- Michael Ketchel <michael.ketchel@gmail.com>  Wed, 23 Oct 2024 18:03:54 -0400
+
 wlanpi-rxg-agent (1.0.0-1+deb12u8) unstable; urgency=medium
 
   * Stable release
