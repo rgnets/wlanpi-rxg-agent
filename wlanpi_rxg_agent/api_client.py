@@ -19,13 +19,14 @@ class ApiClient:
         self.verify_ssl = verify_ssl
         self.timeout = timeout
         self.ip = server_ip
+        self.api_base = "api/apcert"
 
     def check_device(self, ip: Optional[str] = None) -> Response:
         if not ip:
             ip = self.ip
         return requests.get(
-            url=f"https://{ip}/api/wlanpi/check_device",
-            params={"mac": self.mac},
+            url=f"https://{ip}/{self.api_base}/check_device",
+            params={"mac": self.mac, "device_type": "wlanpi"},
             verify=self.verify_ssl,
             timeout=self.timeout,
         )
@@ -34,8 +35,8 @@ class ApiClient:
         if not ip:
             ip = self.ip
         return requests.get(
-            url=f"https://{ip}/api/wlanpi/get_cert",
-            params={"mac": self.mac},
+            url=f"https://{ip}/{self.api_base}/get_cert",
+            params={"mac": self.mac, "device_type": "wlanpi"},
             verify=self.verify_ssl,
             timeout=self.timeout,
         )
@@ -44,8 +45,9 @@ class ApiClient:
         if not ip:
             ip = self.ip
         return requests.post(
-            url=f"https://{ip}/api/wlanpi/register",
+            url=f"https://{ip}/{self.api_base}/register",
             json={
+                "device_type": "wlanpi",
                 "mac": self.mac,
                 "csr": csr,
                 "model": model,

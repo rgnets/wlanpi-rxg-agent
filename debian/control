@@ -19,12 +19,12 @@ Build-Depends: debhelper (>= 11),
                python3-cryptography,
                libsystemd-dev,
 Standards-Version: 4.6.0
-X-Python3-Version: >= 3.10
+X-Python3-Version: >= 3.9
 Homepage: https://github.com/rgnets/wlanpi-rxg-agent
 
 Package: wlanpi-rxg-agent
 Architecture: any
-Pre-Depends: dpkg (>= 1.16.1), python3 (>=3.10), python3-distutils, ${misc:Pre-Depends}
+Pre-Depends: dpkg (>= 1.16.1), python3 (>=3.9), python3-distutils, ${misc:Pre-Depends}
 Depends: ${misc:Depends}
 Description: WLAN Pi - optional RG Nets rXg Agent
  The rXg Agent communicates, authenticates with, and configures the WLAN Pi MQTT Bridge to

@@ -2,17 +2,19 @@ import datetime
 import json
 import subprocess
 import time
-from typing import Any, Optional
+from typing import Any, Optional, TextIO
 
 from wlanpi_rxg_agent.models.command_result import CommandResult
 from wlanpi_rxg_agent.models.runcommand_error import RunCommandError
 
 
-def run_command(cmd: list, shell=False, raise_on_fail=True) -> CommandResult:
+def run_command(cmd: list, shell=False, raise_on_fail=True, input:Optional[str]=None, stdin:Optional[TextIO]=None) -> CommandResult:
     """Run a single CLI command with subprocess and returns the output"""
     print("Running command:", cmd)
     cp = subprocess.run(
         cmd,
+        input=input,
+        stdin=stdin,
         encoding="utf-8",
         shell=shell,
         check=False,
@@ -69,8 +71,7 @@ def get_uptime() -> dict[str, str]:
 
 
 def get_hostname() -> str:
-    cmd = "uptime"
-    return run_command(cmd.split(" ")).output
+    return run_command(["hostname"]).output.strip("\n ")
 
 
 def get_interface_ip_addr(interface: Optional[str] = None) -> dict[str, Any]:

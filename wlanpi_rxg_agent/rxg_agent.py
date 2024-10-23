@@ -3,12 +3,10 @@ import logging
 import os
 import time
 from collections import defaultdict
-from pprint import pp
 from typing import Optional
 
 import dbus
 import schedule
-import systemd.daemon
 import toml
 from requests import ConnectionError, ConnectTimeout
 
@@ -62,12 +60,14 @@ class RXGAgent:
         os.chmod(self.cert_dir, 0o755)
         self.cert_tool = CertificateTool(cert_directory=self.cert_dir)
         self.csr = self.cert_tool.get_csr(node_name=utils.get_hostname())
+        self.current_ca = ''
+        self.current_cert = ''
 
     def reinitialize_cert_tool(self, partner_id: Optional[str] = None):
         self.cert_tool = CertificateTool(
             cert_directory=self.cert_dir, partner_id=partner_id
         )
-        self.csr = self.cert_tool.get_csr_as_pem(node_name=utils.get_hostname())
+        self.csr = self.cert_tool.get_csr(node_name=utils.get_hostname())
 
     def load_config(self) -> None:
         """
@@ -146,6 +146,42 @@ class RXGAgent:
 
         raise RXGAgentException("Unable to find an rXg.")
 
+
+    def get_client_cert(self):
+        get_cert_resp = self.api_client.get_cert()
+        if get_cert_resp.status_code == 200:
+            # Registration has succeeded, we need to get our certs.
+            response_data = get_cert_resp.json()
+            self.logger.debug(f"Get Cert Response: {json.dumps(response_data)}")
+
+            return True, response_data["status"], response_data["ca"], response_data["certificate"], response_data["port"]
+        else:
+            self.logger.warning(f"get_client_cert failed: {get_cert_resp.status_code}: {get_cert_resp.reason} ")
+            return False, None, None, None, None
+
+
+    def renew_client_cert(self):
+        get_cert_success, status, ca_str, cert_str, port = self.get_client_cert()
+        if get_cert_success:
+            if not status == "approved":
+                self.logger.warning(
+                    "Server has not approved registration yet. Waiting for next cycle."
+                )
+                return False
+            if not cert_str:
+                self.logger.warning(
+                    "Server has not provided a certificate. Waiting for next cycle"
+                )
+                return False
+
+            self.current_cert = cert_str
+            self.cert_tool.save_cert(cert_str)
+            self.current_ca = ca_str
+            self.cert_tool.save_ca(ca_str)
+            self.active_port = port
+            return True
+        return False
+
     def handle_registration(self) -> bool:
         try:
             self.api_client.ip = self.active_server
@@ -165,7 +201,7 @@ class RXGAgent:
                 self.certification_complete = False
                 # Reinitialize the certificate tool with the active server
                 self.cert_tool = CertificateTool(cert_directory=self.cert_dir)
-                self.csr = self.cert_tool.get_csr_as_pem(node_name=utils.get_hostname())
+                self.csr = self.cert_tool.get_csr(node_name=utils.get_hostname())
 
                 registration_resp = self.api_client.register(
                     model=utils.get_model_info()["Model"], csr=self.csr
@@ -191,27 +227,7 @@ class RXGAgent:
                 self.logger.info(
                     f"Registered with {self.api_client.ip}. Attempting to get cert info."
                 )
-                get_cert_resp = self.api_client.get_cert()
-                if get_cert_resp.status_code == 200:
-                    # Registration has succeeded, we need to get our certs.
-                    response_data = get_cert_resp.json()
-                    self.logger.debug(f"Get Cert Response: {json.dumps(response_data)}")
-                    if not response_data["status"] == "approved":
-                        self.logger.warning(
-                            "Server has not approved registration yet. Waiting for next cycle."
-                        )
-                        return False
-                    if not response_data["certificate"]:
-                        self.logger.warning(
-                            "Server has not provided a certificate. Waiting for next cycle"
-                        )
-                        return False
-
-                    self.cert_tool.save_cert_from_pem(response_data["certificate"])
-                    self.cert_tool.save_ca_from_pem(response_data["ca"])
-                    self.active_port = response_data["port"]
-                    self.certification_complete = True
-                    return True
+                return self.renew_client_cert()
 
             return False
         except (ConnectTimeout, ConnectionError) as e:
@@ -219,21 +235,7 @@ class RXGAgent:
             return False
 
     def configure_mqtt_bridge(self):
-        # Todo: Implement
-        logger.debug("I'm configuring!")
-
-        self.active_server = self.new_server
-        if self.handle_registration():
-            self.new_server = None
-        else:
-            self.logger.warning(
-                "Server registration check failed. Aborting reconfiguration."
-            )
-            return False
-
-        # Rewrite Bridge's config.toml
-
-        self.logger.info("Registration complete. Reconfiguring bridge.")
+        logger.info("Reconfiguring Bridge")
         # Try to load existing toml and preserve. If we fail, it doesn't matter that much.
         data = defaultdict(dict)
         try:
@@ -243,14 +245,14 @@ class RXGAgent:
             self.logger.warning(
                 f"Unable to decode existing bridge config, overwriting. Error: {e.msg}"
             )
-
+        # Rewrite Bridge's config.toml
         data["MQTT"]["server"] = self.active_server
         data["MQTT"]["port"] = self.active_port
         data["MQTT_TLS"]["use_tls"] = True
         data["MQTT_TLS"]["ca_certs"] = self.cert_tool.ca_file
         data["MQTT_TLS"]["certfile"] = self.cert_tool.cert_file
         data["MQTT_TLS"]["keyfile"] = self.cert_tool.key_file
-        data["MQTT_TLS"]["cert_reqs"] = 0
+        data["MQTT_TLS"]["cert_reqs"] = 2
 
         self.logger.info("Bridge config written. Restarting service.")
 
@@ -297,42 +299,91 @@ class RXGAgent:
         else:
             self.logger.info("Restarted bridge service")
 
-    def check_for_new_server(self):
+    def check_for_new_server(self) -> bool:
         # if not self.active_server:
         #     return
 
         # if self.new_server and:
         #     self.logger.info("Server reconfig in process, skipping new server check")
 
-        new_server = None
         try:
             new_server = self.find_rxg()
         except RXGAgentException:
             self.logger.warning(
                 "Check for new server failed--no valid possibilities were found"
             )
+            return True
 
         # Check if we found a new one and if it's different
-
+        do_reconfigure = False
         if new_server and new_server != self.active_server:
             self.logger.info(
                 f"New or higher-precedence server found, dropping {self.active_server}"
                 f" and reconfiguring for {new_server} "
             )
             self.new_server = new_server
-            self.configure_mqtt_bridge()
+            do_reconfigure=True
+
 
         if self.active_server == self.new_server and not self.certification_complete:
             self.logger.info(
                 "Incomplete certification. Kicking off reconfiguration process."
             )
+            do_reconfigure = True
+
+        if do_reconfigure:
+            if self.new_server:
+                self.active_server = self.new_server
+            if self.handle_registration():
+                self.new_server = None
+            else:
+                self.logger.warning(
+                    "Server registration check failed. Aborting reconfiguration."
+                )
+                return False
+
+            self.logger.info("Registration complete. Reconfiguring bridge.")
             self.configure_mqtt_bridge()
+        return do_reconfigure
+
+    def check_for_new_certs(self):
+        get_cert_success, status, ca_str, cert_str, port = self.get_client_cert()
+
+        if get_cert_success:
+            need_to_reload = False
+            if ca_str and ca_str != self.current_ca:
+                self.info("CA has changed! We need to reload.")
+                need_to_reload = True
+                # self.current_ca = ca_str
+                # self.cert_tool.save_ca(ca_str)
+            if cert_str and cert_str != self.current_cert:
+                self.info("Cert has changed! We need to reload.")
+                need_to_reload = True
+                # self.current_cert = cert_str
+                # self.cert_tool.save_cert(cert_str)
+            if port and port != self.active_port:
+                self.info("Cert has changed! We need to reload.")
+                need_to_reload = True
+                # self.active_port = port
+
+            if need_to_reload:
+                self.renew_client_cert()
+                self.configure_mqtt_bridge()
+
+
+        else:
+            self.logger.warning("Unabled to check for new certs.")
+
+    def do_periodic_checks(self):
+        if not self.check_for_new_server():
+            self.check_for_new_certs()
+
 
     def setup(self):
         self.check_for_new_server()
         # self.handle_registration()
         self.scheduled_jobs.append(
-            schedule.every(20).seconds.do(self.check_for_new_server)
+            schedule.every(20).seconds.do(self.do_periodic_checks)
         )
 
     def main_loop(self):
@@ -344,14 +395,12 @@ def main():
     # Todo: Test behavior on ssl failure
 
     agent = RXGAgent(verify_ssl=False)
-
     agent.setup()
-    systemd.daemon.notify("READY=1")
     while True:
         agent.main_loop()
         time.sleep(1)
 
     # print(agent.find_rxg())
-    pp(utils.get_model_info())
+    # pp(utils.get_model_info())
     # pp(find_rxg())
-    return None
+    # return None
