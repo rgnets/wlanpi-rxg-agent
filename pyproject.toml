@@ -27,6 +27,7 @@ dependencies = [
     "cryptography",
     "toml",
     "dbus-python",
+    "PyGObject"
 ]
 
 [project.optional-dependencies]

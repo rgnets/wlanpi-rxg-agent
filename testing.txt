@@ -36,6 +36,8 @@ lockfile==0.12.2
     # via
     #   python-daemon
     #   wlanpi-rxg-agent (pyproject.toml)
+pycairo==1.27.0
+    # via pygobject
 pycparser==2.22
     # via
     #   cffi
@@ -49,6 +51,8 @@ pydantic-core==2.23.4
     #   pydantic
     #   wlanpi-rxg-agent (pyproject.toml)
 pydantic-settings==2.6.0
+    # via wlanpi-rxg-agent (pyproject.toml)
+pygobject==3.50.0
     # via wlanpi-rxg-agent (pyproject.toml)
 python-daemon==3.0.1
     # via wlanpi-rxg-agent (pyproject.toml)
