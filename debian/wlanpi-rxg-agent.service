@@ -9,21 +9,19 @@ StartLimitIntervalSec=30
 StartLimitBurst=4
 
 [Service]
-Type=notify
+Type=exec
 
 # this is a soft link created via maintainer script
 WorkingDirectory=/opt/wlanpi-rxg-agent/workingdirectory
 ExecStart=/opt/wlanpi-rxg-agent/bin/python3 -m wlanpi_rxg_agent
 # TODO: Finalize exec method
 
-ExecReload=/bin/kill -s HUP $MAINPID
+#ExecReload=/bin/kill -s HUP $MAINPID
 KillMode=mixed
 TimeoutStopSec=60
 PrivateTmp=true
 
 Restart=on-failure
-Type=notify
-NotifyAccess=all
 
 [Install]
 WantedBy=multi-user.target
