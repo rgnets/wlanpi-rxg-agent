@@ -1,3 +1,9 @@
+wlanpi-rxg-agent (1.0.0-1+deb12u13) unstable; urgency=medium
+
+  * Add more build deps
+
+ -- Michael Ketchel <michael.ketchel@gmail.com>  Thu, 24 Oct 2024 13:51:49 -0400
+
 wlanpi-rxg-agent (1.0.0-1+deb12u12) unstable; urgency=medium
 
   * Remove unused cryptography lib
