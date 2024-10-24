@@ -37,7 +37,9 @@ lockfile==0.12.2
     #   python-daemon
     #   wlanpi-rxg-agent (pyproject.toml)
 pycairo==1.27.0
-    # via pygobject
+    # via
+    #   pygobject
+    #   wlanpi-rxg-agent (pyproject.toml)
 pycparser==2.22
     # via
     #   cffi

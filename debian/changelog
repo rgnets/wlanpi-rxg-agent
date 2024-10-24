@@ -1,3 +1,9 @@
+wlanpi-rxg-agent (1.0.0-1+deb12u12) unstable; urgency=medium
+
+  * Remove unused cryptography lib
+
+ -- Michael Ketchel <michael.ketchel@gmail.com>  Thu, 24 Oct 2024 13:08:01 -0400
+
 wlanpi-rxg-agent (1.0.0-1+deb12u11) unstable; urgency=medium
 
   * Updates to support dbus
