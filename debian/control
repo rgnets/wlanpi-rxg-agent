@@ -17,7 +17,9 @@ Build-Depends: debhelper (>= 11),
                python3-requests,
                python3-schedule,
                libglib2.0-dev,
-               libdbus-1-dev
+               libdbus-1-dev,
+               libdbus-glib-1-dev,
+               libgirepository1.0-dev
 Standards-Version: 4.6.0
 X-Python3-Version: >= 3.9
 Homepage: https://github.com/rgnets/wlanpi-rxg-agent
