@@ -41,7 +41,7 @@ jobs:
       - name: Archive artifacts and upload to GitHub
         uses: actions/upload-artifact@v3
         with:
-          name: wlanpi-mqtt-bridge-${{ matrix.distro }}-${{ matrix.arch }}
+          name: wlanpi-rxg-agent-${{ matrix.distro }}-${{ matrix.arch }}
           path: ${{ steps.build-debian-package.outputs.deb-package }}
 
       - name: Upload armhf package to raspbian/${{ matrix.distro }}
