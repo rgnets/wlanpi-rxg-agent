@@ -352,17 +352,17 @@ class RXGAgent:
         if get_cert_success:
             need_to_reload = False
             if ca_str and ca_str != self.current_ca:
-                self.info("CA has changed! We need to reload.")
+                self.logger.info("CA has changed! We need to reload.")
                 need_to_reload = True
                 # self.current_ca = ca_str
                 # self.cert_tool.save_ca(ca_str)
             if cert_str and cert_str != self.current_cert:
-                self.info("Cert has changed! We need to reload.")
+                self.logger.info("Cert has changed! We need to reload.")
                 need_to_reload = True
                 # self.current_cert = cert_str
                 # self.cert_tool.save_cert(cert_str)
             if port and port != self.active_port:
-                self.info("Cert has changed! We need to reload.")
+                self.logger.info("Cert has changed! We need to reload.")
                 need_to_reload = True
                 # self.active_port = port
 
