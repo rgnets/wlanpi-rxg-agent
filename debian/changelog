@@ -1,3 +1,9 @@
+wlanpi-rxg-agent (1.0.0-1+deb12u20) unstable; urgency=medium
+
+  * Fixed registration behavior
+
+ -- Michael Ketchel <michael.ketchel@gmail.com>  Mon, 28 Oct 2024 22:32:45 -0400
+
 wlanpi-rxg-agent (1.0.0-1+deb12u19) unstable; urgency=medium
 
   * Fixed handling unapprove and reapprove from controller
