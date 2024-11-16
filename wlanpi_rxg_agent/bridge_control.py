@@ -14,7 +14,6 @@ class BridgeControl:
         )
         self.manager = dbus.Interface(systemd1, "org.freedesktop.systemd1.Manager")
 
-
     def enable(self) -> bool:
         try:
             self.manager.EnableUnitFiles(["wlanpi-mqtt-bridge.service"], False, True)

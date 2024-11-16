@@ -3,17 +3,15 @@ import logging
 import os
 import time
 from collections import defaultdict
-from logging import Logger
 from typing import Optional
 
-import dbus
 import schedule
 import toml
 from requests import ConnectionError, ConnectTimeout, ReadTimeout
 
 import wlanpi_rxg_agent.utils as utils
-from wlanpi_rxg_agent.bridge_control import BridgeControl
 from wlanpi_rxg_agent.api_client import ApiClient
+from wlanpi_rxg_agent.bridge_control import BridgeControl
 from wlanpi_rxg_agent.certificate_tool import CertificateTool
 from wlanpi_rxg_agent.models.exceptions import RXGAgentException
 
@@ -64,8 +62,8 @@ class RXGAgent:
         os.chmod(self.cert_dir, 0o755)
         self.cert_tool = CertificateTool(cert_directory=self.cert_dir)
         self.csr = self.cert_tool.get_csr(node_name=utils.get_hostname())
-        self.current_ca = ''
-        self.current_cert = ''
+        self.current_ca = ""
+        self.current_cert = ""
 
     def reinitialize_cert_tool(self, partner_id: Optional[str] = None):
         self.cert_tool = CertificateTool(
@@ -150,8 +148,7 @@ class RXGAgent:
 
         raise RXGAgentException("Unable to find an rXg.")
 
-
-    def get_client_cert(self,server_ip:Optional[str]=None):
+    def get_client_cert(self, server_ip: Optional[str] = None):
         if not server_ip:
             server_ip = self.active_server
         api_client = ApiClient(verify_ssl=self.api_verify_ssl, server_ip=server_ip)
@@ -161,16 +158,25 @@ class RXGAgent:
             response_data = get_cert_resp.json()
             self.logger.debug(f"Get Cert Response: {json.dumps(response_data)}")
 
-            return True, response_data["status"], response_data["ca"], response_data["certificate"], response_data["port"]
+            return (
+                True,
+                response_data["status"],
+                response_data["ca"],
+                response_data["certificate"],
+                response_data["port"],
+            )
         else:
-            self.logger.warning(f"get_client_cert failed: {get_cert_resp.status_code}: {get_cert_resp.reason} ")
+            self.logger.warning(
+                f"get_client_cert failed: {get_cert_resp.status_code}: {get_cert_resp.reason} "
+            )
             return False, None, None, None, None
 
-
-    def renew_client_cert(self, server_ip:Optional[str]=None):
+    def renew_client_cert(self, server_ip: Optional[str] = None):
         if not server_ip:
             server_ip = self.active_server
-        get_cert_success, status, ca_str, cert_str, port = self.get_client_cert(server_ip=server_ip)
+        get_cert_success, status, ca_str, cert_str, port = self.get_client_cert(
+            server_ip=server_ip
+        )
         if get_cert_success:
             if not status == "approved":
                 self.logger.warning(
@@ -191,14 +197,12 @@ class RXGAgent:
             return True
         return False
 
-    def handle_registration(self, server_ip: Optional[str]=None) -> bool:
+    def handle_registration(self, server_ip: Optional[str] = None) -> bool:
         if not server_ip:
             server_ip = self.active_server
         api_client = ApiClient(server_ip=server_ip, verify_ssl=self.api_verify_ssl)
         try:
-            self.logger.info(
-                f"Checking if we need to register with {api_client.ip}"
-            )
+            self.logger.info(f"Checking if we need to register with {api_client.ip}")
             resp = api_client.check_device()
             if resp.status_code == 200:
                 response_data = resp.json()
@@ -206,9 +210,7 @@ class RXGAgent:
 
             self.reinitialize_cert_tool(partner_id=api_client.ip)
             if not self.registered:
-                self.logger.info(
-                    f"Not registered with {api_client.ip}. Registering..."
-                )
+                self.logger.info(f"Not registered with {api_client.ip}. Registering...")
                 self.certification_complete = False
                 # Reinitialize the certificate tool with the active server
                 self.cert_tool = CertificateTool(cert_directory=self.cert_dir)
@@ -296,8 +298,7 @@ class RXGAgent:
             )
             self.bridge_control.stop()
             self.new_server = new_server
-            do_reconfigure=True
-
+            do_reconfigure = True
 
         if self.active_server == self.new_server and not self.certification_complete:
             self.logger.info(
@@ -320,10 +321,12 @@ class RXGAgent:
             self.configure_mqtt_bridge()
         return do_reconfigure
 
-    def check_for_new_certs(self, server_ip:Optional[str]=None):
+    def check_for_new_certs(self, server_ip: Optional[str] = None):
         if not server_ip:
             server_ip = self.active_server
-        get_cert_success, status, ca_str, cert_str, port = self.get_client_cert(server_ip=server_ip)
+        get_cert_success, status, ca_str, cert_str, port = self.get_client_cert(
+            server_ip=server_ip
+        )
 
         if get_cert_success:
             need_to_reload = False
@@ -346,29 +349,32 @@ class RXGAgent:
                 self.renew_client_cert()
                 self.configure_mqtt_bridge()
 
-
         else:
             self.logger.warning("Unabled to check for new certs.")
 
-    def check_registration_status(self, server_ip: Optional[str]=None) -> tuple[bool, str]:
+    def check_registration_status(
+        self, server_ip: Optional[str] = None
+    ) -> tuple[bool, str]:
         if not server_ip:
             server_ip = self.active_server
         api_client = ApiClient(server_ip=server_ip, verify_ssl=self.api_verify_ssl)
-        self.logger.info(
-            f"Checking registration status {api_client.ip}"
-        )
+        self.logger.info(f"Checking registration status {api_client.ip}")
         resp = api_client.check_device()
         if resp.status_code == 200:
             response_data = resp.json()
-            return response_data["status"] in ['registered', 'approved'], response_data["status"]
-
+            return (
+                response_data["status"] in ["registered", "approved"],
+                response_data["status"],
+            )
 
     def do_periodic_checks(self):
         registration_status = False
         if self.active_server:
             registration_status, reg_status_response = self.check_registration_status()
             if not reg_status_response.lower() == "approved":
-                self.logger.warning("Device has not been approved, decertifying and stopping bridge if it's running.")
+                self.logger.warning(
+                    "Device has not been approved, decertifying and stopping bridge if it's running."
+                )
                 self.certification_complete = False
                 self.registered = False
                 self.bridge_control.stop()
@@ -376,13 +382,10 @@ class RXGAgent:
                 if not self.certification_complete or not self.registered:
                     self.handle_registration()
 
-
         if not self.check_for_new_server() and registration_status:
             self.check_for_new_certs()
 
-
     def setup(self):
-
 
         self.check_for_new_server()
         # self.handle_registration()

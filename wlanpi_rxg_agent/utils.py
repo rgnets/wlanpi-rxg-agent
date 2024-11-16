@@ -8,7 +8,13 @@ from wlanpi_rxg_agent.models.command_result import CommandResult
 from wlanpi_rxg_agent.models.runcommand_error import RunCommandError
 
 
-def run_command(cmd: list, shell=False, raise_on_fail=True, input:Optional[str]=None, stdin:Optional[TextIO]=None) -> CommandResult:
+def run_command(
+    cmd: list,
+    shell=False,
+    raise_on_fail=True,
+    input: Optional[str] = None,
+    stdin: Optional[TextIO] = None,
+) -> CommandResult:
     """Run a single CLI command with subprocess and returns the output"""
     print("Running command:", cmd)
     cp = subprocess.run(
@@ -74,11 +80,19 @@ def get_hostname() -> str:
     return run_command(["hostname"]).output.strip("\n ")
 
 
-def get_interface_ip_addr(interface: Optional[str] = None) -> dict[str, Any]:
+def get_interface_ip_addrs(interface: Optional[str] = None) -> dict[str, Any]:
     cmd: list[str] = "ip -j addr show".split(" ")
     if interface is not None and interface.strip() != "":
         cmd.append(interface.strip())
     return run_command(cmd).output_from_json()
+
+
+def get_interface_ip_addr(interface: str, version: int = 4) -> str:
+    return [
+        x["local"]
+        for x in get_interface_ip_addrs(interface)[0]["addr_info"]
+        if x["family"] == "inet"
+    ][0]
 
 
 def get_current_unix_timestamp():
@@ -95,4 +109,4 @@ def get_eth0_mac() -> str:
 
 
 if __name__ == "__main__":
-    print(get_interface_ip_addr())
+    print(get_interface_ip_addr("eth0"))

@@ -1,6 +1,8 @@
 import os
 from typing import Optional
+
 import utils
+
 
 class CertificateTool:
 
@@ -23,7 +25,7 @@ class CertificateTool:
             return pem_in.read()
 
     @staticmethod
-    def save_key(pk:str, filename:str):
+    def save_key(pk: str, filename: str):
         with open(filename, "w") as pem_out:
             pem_out.write(pk)
             os.chmod(filename, 0o600)
@@ -65,13 +67,24 @@ class CertificateTool:
 
     @staticmethod
     def gen_key(bits=4096) -> str:
-        return utils.run_command(['openssl','genrsa', str(bits)]).output
+        return utils.run_command(["openssl", "genrsa", str(bits)]).output
 
     @staticmethod
-    def gen_csr(cn:str, private_key:str) -> str:
+    def gen_csr(cn: str, private_key: str) -> str:
         # return utils.run_command(["openssl", "req", "-new", "-noout", "-text", "-key", "client.key", "-subj", "\"/C=''/ST=''/L=''/O=''/CN=$commonName/emailAddress=''\""]).output
-        return utils.run_command(["openssl", "req", "-new", "-subj", f"/C=''/ST=''/L=''/O=''/CN={cn}/emailAddress=''", "-key", "/dev/stdin"], input=private_key, shell=False).output
-
+        return utils.run_command(
+            [
+                "openssl",
+                "req",
+                "-new",
+                "-subj",
+                f"/C=''/ST=''/L=''/O=''/CN={cn}/emailAddress=''",
+                "-key",
+                "/dev/stdin",
+            ],
+            input=private_key,
+            shell=False,
+        ).output
 
     # Generate Certificate Signing Request (CSR)
     def get_csr(self, node_name: str) -> str:
@@ -83,9 +96,8 @@ class CertificateTool:
             return new_csr
 
 
-
 if __name__ == "__main__":
     key = CertificateTool.gen_key()
     print(key)
-    csr = CertificateTool.gen_csr('testboy', key)
+    csr = CertificateTool.gen_csr("testboy", key)
     print(csr)
