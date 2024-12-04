@@ -1,6 +1,8 @@
 import json
 import logging
 import os
+import ssl
+import subprocess
 import time
 from collections import defaultdict
 from typing import Optional
@@ -10,6 +12,8 @@ import toml
 from requests import ConnectionError, ConnectTimeout, ReadTimeout
 
 import wlanpi_rxg_agent.utils as utils
+from RxgMqttClient import RxgMqttClient
+from structures import TLSConfig
 from wlanpi_rxg_agent.api_client import ApiClient
 from wlanpi_rxg_agent.bridge_control import BridgeControl
 from wlanpi_rxg_agent.certificate_tool import CertificateTool
@@ -53,6 +57,8 @@ class RXGAgent:
         self.certification_complete = False
 
         self.api_verify_ssl = False
+
+        self.rxg_mqtt_client = RxgMqttClient()
 
         self.bridge_control = BridgeControl()
 
@@ -247,8 +253,32 @@ class RXGAgent:
             self.logger.warning(f"Registration with {self.active_server} failed: {e}")
             return False
 
+    def reconfigure_mqtt_client(self, server:str, port:int, use_tls:bool, ca_file:str, cert_file:str, key_file:str, cert_reqs:int):
+        self.logger.info("Reconfiguring Internal MQTT Client")
+        # Configure the internal client
+
+        # Shut down the existing client if it's running
+        if self.rxg_mqtt_client.connected or self.rxg_mqtt_client.run:
+            self.rxg_mqtt_client.stop()
+
+
+        eth0_res = subprocess.run(
+            "jc ifconfig eth0", capture_output=True, text=True, shell=True
+        )
+
+        eth0_data = json.loads(eth0_res.stdout)[0]
+        eth0_mac = eth0_data["mac_addr"]
+
+        tls_config = TLSConfig(ca_certs=ca_file, certfile=cert_file, keyfile=key_file, cert_reqs=ssl.VerifyMode(cert_reqs), tls_version=ssl.PROTOCOL_TLSv1_2, ciphers=None) if use_tls else None
+        self.logger.info(
+            f"Reconfiguring MQTT client with server: {server}, port: {port}, tls: {use_tls}, ca_file: {ca_file}, cert_file: {cert_file}, key_file: {key_file}, cert_reqs: {cert_reqs}"
+        )
+        self.rxg_mqtt_client = RxgMqttClient(mqtt_server=server, mqtt_port=port, tls_config=tls_config, identifier=eth0_mac)
+        self.logger.info("Starting Internal MQTT Client")
+        self.rxg_mqtt_client.go()
+
     def configure_mqtt_bridge(self):
-        logger.info("Reconfiguring Bridge")
+        self.logger.info("Reconfiguring Bridge")
         # Try to load existing toml and preserve. If we fail, it doesn't matter that much.
         data = defaultdict(dict)
         try:
@@ -266,6 +296,9 @@ class RXGAgent:
         data["MQTT_TLS"]["certfile"] = self.cert_tool.cert_file
         data["MQTT_TLS"]["keyfile"] = self.cert_tool.key_file
         data["MQTT_TLS"]["cert_reqs"] = 2
+
+        # Configure the internal client as well, as we transition to using it.
+        self.reconfigure_mqtt_client(self.active_server, self.active_port, True, self.cert_tool.ca_file, self.cert_tool.cert_file, self.cert_tool.key_file, 2)
 
         self.logger.info("Bridge config written. Restarting service.")
 
