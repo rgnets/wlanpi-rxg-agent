@@ -16,8 +16,12 @@ docutils==0.21.2
     # via python-daemon
 idna==3.10
     # via requests
+kismet-rest==2020.5.1
+    # via wlanpi-rxg-agent (pyproject.toml)
 lockfile==0.12.2
     # via python-daemon
+paho-mqtt==2.1.0
+    # via wlanpi-rxg-agent (pyproject.toml)
 pycairo==1.27.0
     # via pygobject
 pydantic==2.9.2
@@ -33,7 +37,9 @@ python-daemon==3.0.1
 python-dotenv==1.0.1
     # via pydantic-settings
 requests==2.32.3
-    # via wlanpi-rxg-agent (pyproject.toml)
+    # via
+    #   kismet-rest
+    #   wlanpi-rxg-agent (pyproject.toml)
 schedule==1.2.2
     # via wlanpi-rxg-agent (pyproject.toml)
 toml==0.10.2

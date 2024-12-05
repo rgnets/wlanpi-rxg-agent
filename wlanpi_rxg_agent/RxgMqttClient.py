@@ -1,3 +1,4 @@
+import re
 from ssl import SSLCertVerificationError
 from typing import Optional, Callable, Union
 
@@ -8,6 +9,7 @@ import time
 import paho.mqtt.client as mqtt
 import schedule
 
+from kismet_control import KismetControl
 from structures import TLSConfig, MQTTResponse
 import utils
 
@@ -15,7 +17,7 @@ import utils
 class RxgMqttClient:
 
 
-    __global_base_topic = "wlan-pi/all"
+    __global_base_topic = "wlan-pi/all/agent"
 
     def __init__(
         self,
@@ -31,7 +33,6 @@ class RxgMqttClient:
 
         self.run = False
         self.connected = False
-
 
         self.mqtt_server = mqtt_server
         self.mqtt_port = mqtt_port
@@ -74,6 +75,8 @@ class RxgMqttClient:
         # Holds scheduled jobs from `scheduler` so we can clean them up
         # on exit.
         self.scheduled_jobs: list[schedule.Job] = []
+
+        self.kismet_control = KismetControl()
 
 
     def go(self):
@@ -230,7 +233,12 @@ class RxgMqttClient:
         )
         self.logger.debug(f"User Data: {str(userdata)}")
         response_topic = f"{msg.topic}/_response"
+        is_global_topic = msg.topic.startswith(self.__global_base_topic)
         bridge_ident = None
+        if is_global_topic:
+            subtopic = msg.topic.removeprefix(self.__global_base_topic)
+        else:
+            subtopic = msg.topic.removeprefix(self.my_base_topic)
         try:
             if msg.payload is not None and msg.payload not in ["", b""]:
                 try:
@@ -268,6 +276,9 @@ class RxgMqttClient:
             self.logger.debug(
                 f"Payload: {payload}"
             )
+
+
+
 
             # response = self.core_client.execute_request(
             #     method=route.method,

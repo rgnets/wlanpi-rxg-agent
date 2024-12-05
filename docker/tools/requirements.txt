@@ -1,0 +1,7 @@
+pip
+pip-tools
+mypy
+black
+flake8
+autoflake
+pytest

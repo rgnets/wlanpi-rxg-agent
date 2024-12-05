@@ -13,6 +13,7 @@ from requests import ConnectionError, ConnectTimeout, ReadTimeout
 
 import wlanpi_rxg_agent.utils as utils
 from RxgMqttClient import RxgMqttClient
+from kismet_control import KismetControl
 from structures import TLSConfig
 from wlanpi_rxg_agent.api_client import ApiClient
 from wlanpi_rxg_agent.bridge_control import BridgeControl
@@ -59,7 +60,6 @@ class RXGAgent:
         self.api_verify_ssl = False
 
         self.rxg_mqtt_client = RxgMqttClient()
-
         self.bridge_control = BridgeControl()
 
         # Initialize certificates

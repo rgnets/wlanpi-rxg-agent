@@ -67,7 +67,7 @@ class CertificateTool:
 
     @staticmethod
     def gen_key(bits=4096) -> str:
-        return utils.run_command(["openssl", "genrsa", str(bits)]).output
+        return utils.run_command(["openssl", "genrsa", str(bits)]).stdout
 
     @staticmethod
     def gen_csr(cn: str, private_key: str) -> str:
@@ -83,8 +83,9 @@ class CertificateTool:
                 "/dev/stdin",
             ],
             input=private_key,
+            use_shlex=False,
             shell=False,
-        ).output
+        ).stdout
 
     # Generate Certificate Signing Request (CSR)
     def get_csr(self, node_name: str) -> str:
