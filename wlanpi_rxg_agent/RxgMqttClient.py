@@ -232,13 +232,14 @@ class RxgMqttClient:
             f"Received message on topic '{msg.topic}': {str(msg.payload)}"
         )
         self.logger.debug(f"User Data: {str(userdata)}")
-        response_topic = f"{msg.topic}/_response"
+        # response_topic = f"{msg.topic}/_response"
         is_global_topic = msg.topic.startswith(self.__global_base_topic)
         bridge_ident = None
         if is_global_topic:
-            subtopic = msg.topic.removeprefix(self.__global_base_topic)
+            subtopic = msg.topic.removeprefix(self.__global_base_topic + '/')
         else:
-            subtopic = msg.topic.removeprefix(self.my_base_topic)
+            subtopic = msg.topic.removeprefix(self.my_base_topic + '/')
+        response_topic = f"{self.my_base_topic}/{subtopic}/_response"
         try:
             if msg.payload is not None and msg.payload not in ["", b""]:
                 try:
@@ -276,6 +277,26 @@ class RxgMqttClient:
             self.logger.debug(
                 f"Payload: {payload}"
             )
+
+            if subtopic == "get_clients":
+                if self.kismet_control.is_kismet_running():
+                    seen_devices = self.kismet_control.get_seen_devices()
+                else:
+                    seen_devices = self.kismet_control.empty_seen_devices()
+
+                mqtt_response = MQTTResponse(
+                    status="success",
+                    rest_status="200",
+                    rest_reason="OK",
+                    data=json.dumps(seen_devices),
+                    bridge_ident=bridge_ident,
+                )
+
+                self.default_callback(
+                    client=client,
+                    topic=response_topic,
+                    message=mqtt_response.to_json(),
+                )
 
 
 

@@ -220,6 +220,9 @@ class KismetControl:
             })
         return results
 
+    @staticmethod
+    def empty_seen_devices():
+        return {"Wi-Fi Client": [], "Wi-Fi AP": [], "Wi-Fi Ad-Hoc": [], "Wi-Fi Bridged": [], "Wi-Fi Device": []}
     def get_seen_devices(self):
         # "kismet.device.base.type": "Wi-Fi Client",
         fields_of_interest = [
@@ -237,7 +240,7 @@ class KismetControl:
             # 'dot11.device.last_bssid'
         ]
 
-        res = {"Wi-Fi Client": [], "Wi-Fi AP": [], "Wi-Fi Ad-Hoc": [], "Wi-Fi Bridged": [], "Wi-Fi Device": []}
+        res = KismetControl.empty_seen_devices()
         current_avail_interfaces = list(self.available_kismet_interfaces().values())
 
         # Clients,Bridges, and Devices have client maps
