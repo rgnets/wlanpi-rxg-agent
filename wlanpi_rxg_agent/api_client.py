@@ -1,6 +1,7 @@
 from typing import Optional
 
 import requests
+import urllib3
 from requests import Response
 
 from wlanpi_rxg_agent.utils import get_eth0_mac, get_interface_ip_addr
@@ -21,6 +22,10 @@ class ApiClient:
         self.timeout = timeout
         self.ip = server_ip
         self.api_base = "api/apcert"
+
+        # Not the ideal way to silence this, but for now..
+        if not verify_ssl:
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
     def check_device(self, ip: Optional[str] = None) -> Response:
         if not ip:

@@ -12,6 +12,7 @@ from typing import Any, Optional, TextIO, Union
 from wlanpi_rxg_agent.models.command_result import CommandResult
 from wlanpi_rxg_agent.models.runcommand_error import RunCommandError, RunCommandTimeout
 
+logger = logging.getLogger('utils')
 
 def run_command(
     cmd: Union[list, str],
@@ -57,7 +58,7 @@ def run_command(
             return_code=-1,
         )
     if not use_shlex:
-        logging.getLogger().warning(
+        logger.warning(
             f"shlex protection disabled for command--make sure this command is otherwise protected from injections:\n {cmd}"
         )
     if shell:
@@ -66,7 +67,7 @@ def run_command(
             cmd: list
             cmd: str = shlex.join(cmd) if use_shlex else " ".join(cmd)
         cmd: str
-        logging.getLogger().warning(
+        logger.warning(
             f"Command {cmd} being run as a shell script. This could present "
             f"an injection vulnerability. Consider whether you really need to do this."
         )
@@ -94,7 +95,7 @@ def run_command(
             stdout, stderr = proc.communicate(input=input_data, timeout=timeout)
         except subprocess.TimeoutExpired:
             err_msg = f"Command {cmd} timed out after {timeout} seconds"
-            logging.getLogger().debug(err_msg)
+            logger.debug(err_msg)
             proc.terminate()
             if raise_on_fail:
                 raise RunCommandTimeout(err_msg)
@@ -148,7 +149,7 @@ async def run_command_async(
             return_code=-1,
         )
     if not use_shlex:
-        logging.getLogger().warning(
+        logger.warning(
             f"shlex protection disabled for command--make sure this command is otherwise protected from injections:\n {cmd}"
         )
     if shell:
@@ -157,7 +158,7 @@ async def run_command_async(
             cmd: list # type: ignore
             cmd: str = shlex.join(cmd) if use_shlex else " ".join(cmd) # type: ignore
         cmd: str # type: ignore
-        logging.getLogger().warning(
+        logger.warning(
             f"Command {cmd} being run as a shell script. This could present "
             f"an injection vulnerability. Consider whether you really need to do this."
         )
@@ -186,7 +187,7 @@ async def run_command_async(
             cmd: list
             cmd: str = use_shlex.join(cmd)
         cmd: str
-        logging.getLogger().warning(
+        logger.warning(
             f"Command {cmd} being run as a shell script. This could present "
             f"an injection vulnerability. Consider whether you really need to do this."
         )
@@ -207,7 +208,7 @@ async def run_command_async(
             )
         except asyncio.TimeoutError:
             err_msg = f"Command {cmd} timed out after {timeout} seconds"
-            logging.getLogger().debug(err_msg)
+            logger.debug(err_msg)
             proc.terminate()
             if raise_on_fail:
                 raise RunCommandTimeout(err_msg)
@@ -232,7 +233,7 @@ async def run_command_async(
             )
         except asyncio.TimeoutError:
             err_msg = f"Command {cmd} timed out after {timeout} seconds"
-            logging.getLogger().debug(err_msg)
+            logger.debug(err_msg)
             proc.terminate()
             if raise_on_fail:
                 raise RunCommandTimeout(err_msg)

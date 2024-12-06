@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -7,7 +8,6 @@ import time
 from collections import defaultdict
 from typing import Optional
 
-import schedule
 import toml
 from requests import ConnectionError, ConnectTimeout, ReadTimeout
 
@@ -21,7 +21,11 @@ from wlanpi_rxg_agent.certificate_tool import CertificateTool
 from wlanpi_rxg_agent.models.exceptions import RXGAgentException
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(encoding="utf-8", level=logging.INFO)
+logging.basicConfig(encoding="utf-8", level=logging.DEBUG)
+
+logging.getLogger("requests").setLevel(logging.WARNING)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
+logging.getLogger("wlanpi_rxg_agent.rxg_agent").setLevel(logging.INFO)
 
 CONFIG_DIR = "/etc/wlanpi-rxg-agent"
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.toml")
@@ -39,6 +43,8 @@ class RXGAgent:
         self.logger = logging.getLogger(__name__)
         self.logger.info("Initializing RXGAgent")
 
+        self.async_loop = asyncio.get_event_loop()
+
         self.verify_ssl = verify_ssl
         self.config_path = config_path
 
@@ -51,8 +57,6 @@ class RXGAgent:
         self.new_port: Optional[int] = None
 
         self.load_config()
-
-        self.scheduled_jobs: list[schedule.Job] = []
 
         self.registered = False
         self.certification_complete = False
@@ -208,7 +212,7 @@ class RXGAgent:
             server_ip = self.active_server
         api_client = ApiClient(server_ip=server_ip, verify_ssl=self.api_verify_ssl)
         try:
-            self.logger.info(f"Checking if we need to register with {api_client.ip}")
+            self.logger.debug(f"Checking if we need to register with {api_client.ip}")
             resp = api_client.check_device()
             if resp.status_code == 200:
                 response_data = resp.json()
@@ -243,7 +247,7 @@ class RXGAgent:
             # By now, the client should be registered. If not, we're waiting for a successful attempt.
             # Attempt to get our cert and CA
             if self.registered:
-                self.logger.info(
+                self.logger.debug(
                     f"Registered with {api_client.ip}. Attempting to get cert info."
                 )
                 return self.renew_client_cert()
@@ -253,13 +257,14 @@ class RXGAgent:
             self.logger.warning(f"Registration with {self.active_server} failed: {e}")
             return False
 
-    def reconfigure_mqtt_client(self, server:str, port:int, use_tls:bool, ca_file:str, cert_file:str, key_file:str, cert_reqs:int):
+    async def reconfigure_mqtt_client(self, server:str, port:int, use_tls:bool, ca_file:str, cert_file:str, key_file:str, cert_reqs:int):
         self.logger.info("Reconfiguring Internal MQTT Client")
         # Configure the internal client
 
         # Shut down the existing client if it's running
         if self.rxg_mqtt_client.connected or self.rxg_mqtt_client.run:
-            self.rxg_mqtt_client.stop()
+            self.logger.info("Stopping Internal MQTT Client")
+            await self.rxg_mqtt_client.stop()
 
 
         eth0_res = subprocess.run(
@@ -275,9 +280,9 @@ class RXGAgent:
         )
         self.rxg_mqtt_client = RxgMqttClient(mqtt_server=server, mqtt_port=port, tls_config=tls_config, identifier=eth0_mac)
         self.logger.info("Starting Internal MQTT Client")
-        self.rxg_mqtt_client.go()
+        self.async_loop.create_task(self.rxg_mqtt_client.go())
 
-    def configure_mqtt_bridge(self):
+    async def configure_mqtt_bridge(self):
         self.logger.info("Reconfiguring Bridge")
         # Try to load existing toml and preserve. If we fail, it doesn't matter that much.
         data = defaultdict(dict)
@@ -298,7 +303,7 @@ class RXGAgent:
         data["MQTT_TLS"]["cert_reqs"] = 2
 
         # Configure the internal client as well, as we transition to using it.
-        self.reconfigure_mqtt_client(self.active_server, self.active_port, True, self.cert_tool.ca_file, self.cert_tool.cert_file, self.cert_tool.key_file, 2)
+        await self.reconfigure_mqtt_client(self.active_server, self.active_port, True, self.cert_tool.ca_file, self.cert_tool.cert_file, self.cert_tool.key_file, 2)
 
         self.logger.info("Bridge config written. Restarting service.")
 
@@ -307,7 +312,7 @@ class RXGAgent:
 
         self.bridge_control.restart()
 
-    def check_for_new_server(self) -> bool:
+    async def check_for_new_server(self) -> bool:
         # if not self.active_server:
         #     return
 
@@ -351,10 +356,10 @@ class RXGAgent:
                 return False
 
             self.logger.info("Registration complete. Reconfiguring bridge.")
-            self.configure_mqtt_bridge()
+            await self.configure_mqtt_bridge()
         return do_reconfigure
 
-    def check_for_new_certs(self, server_ip: Optional[str] = None):
+    async def check_for_new_certs(self, server_ip: Optional[str] = None):
         if not server_ip:
             server_ip = self.active_server
         get_cert_success, status, ca_str, cert_str, port = self.get_client_cert(
@@ -380,7 +385,7 @@ class RXGAgent:
 
             if need_to_reload:
                 self.renew_client_cert()
-                self.configure_mqtt_bridge()
+                await self.configure_mqtt_bridge()
 
         else:
             self.logger.warning("Unabled to check for new certs.")
@@ -399,8 +404,9 @@ class RXGAgent:
                 response_data["status"] in ["registered", "approved"],
                 response_data["status"],
             )
+        return False, "unknown"
 
-    def do_periodic_checks(self):
+    async def do_periodic_checks(self):
         registration_status = False
         if self.active_server:
             registration_status, reg_status_response = self.check_registration_status()
@@ -415,32 +421,36 @@ class RXGAgent:
                 if not self.certification_complete or not self.registered:
                     self.handle_registration()
 
-        if not self.check_for_new_server() and registration_status:
-            self.check_for_new_certs()
-
-    def setup(self):
-
-        self.check_for_new_server()
-        # self.handle_registration()
-        self.scheduled_jobs.append(
-            schedule.every(20).seconds.do(self.do_periodic_checks)
-        )
-
-    def main_loop(self):
-        schedule.run_pending()
+        if not await self.check_for_new_server() and registration_status:
+            await self.check_for_new_certs()
 
 
-def main():
+    @staticmethod
+    async def every(__seconds: float, func, *args, **kwargs):
+        while True:
+            func(*args, **kwargs)
+            await asyncio.sleep(__seconds)
+
+
+    @staticmethod
+    async def aevery(__seconds: float, func, *args, **kwargs):
+        while True:
+            await func(*args, **kwargs)
+            await asyncio.sleep(__seconds)
+
+    async def go(self):
+        await self.check_for_new_server()
+        self.async_loop.create_task(self.aevery(1, self.do_periodic_checks))
+        # self.async_loop.run_forever()
+        while True:
+            await asyncio.sleep(1)
+
+
+
+async def main():
     # Todo: load override
     # Todo: Test behavior on ssl failure
 
     agent = RXGAgent(verify_ssl=False)
-    agent.setup()
-    while True:
-        agent.main_loop()
-        time.sleep(1)
+    await agent.go()
 
-    # print(agent.find_rxg())
-    # pp(utils.get_model_info())
-    # pp(find_rxg())
-    # return None

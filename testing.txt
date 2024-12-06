@@ -4,6 +4,8 @@
 #
 #    pip-compile --extra=testing --output-file=testing.txt pyproject.toml
 #
+aiomqtt==2.3.0
+    # via wlanpi-rxg-agent (pyproject.toml)
 annotated-types==0.7.0
     # via pydantic
 certifi==2024.8.30
@@ -14,6 +16,8 @@ dbus-python==1.3.2
     # via wlanpi-rxg-agent (pyproject.toml)
 docutils==0.21.2
     # via python-daemon
+dpkt==1.9.8
+    # via wlanpi-rxg-agent (pyproject.toml)
 idna==3.10
     # via requests
 kismet-rest==2020.5.1
@@ -21,7 +25,9 @@ kismet-rest==2020.5.1
 lockfile==0.12.2
     # via python-daemon
 paho-mqtt==2.1.0
-    # via wlanpi-rxg-agent (pyproject.toml)
+    # via
+    #   aiomqtt
+    #   wlanpi-rxg-agent (pyproject.toml)
 pycairo==1.27.0
     # via pygobject
 pydantic==2.9.2

@@ -8,25 +8,27 @@ import socket
 import time
 import paho.mqtt.client as mqtt
 import schedule
+import asyncio
+import aiomqtt
+from aiomqtt import TLSParameters
 
 from kismet_control import KismetControl
 from structures import TLSConfig, MQTTResponse
 import utils
+from utils import run_command_async
 
 
 class RxgMqttClient:
-
-
     __global_base_topic = "wlan-pi/all/agent"
 
     def __init__(
-        self,
-        mqtt_server: str = "wi.fi",
-        mqtt_port: int = 1883,
-        tls_config: Optional[TLSConfig] = None,
-        wlan_pi_core_base_url: str = "http://127.0.0.1:31415",
-        kismet_base_url: str = "http://127.0.0.1:2501",
-        identifier: Optional[str] = None,
+            self,
+            mqtt_server: str = "wi.fi",
+            mqtt_port: int = 1883,
+            tls_config: Optional[TLSConfig] = None,
+            wlan_pi_core_base_url: str = "http://127.0.0.1:31415",
+            kismet_base_url: str = "http://127.0.0.1:2501",
+            identifier: Optional[str] = None,
     ):
         self.logger = logging.getLogger(__name__)
         self.logger.info("Initializing RxgMqttClient")
@@ -41,23 +43,26 @@ class RxgMqttClient:
         self.kismet_base_url = kismet_base_url
 
         self.my_base_topic = f"wlan-pi/{identifier}/agent"
-        self.mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
-        if self.tls_config:
-            self.mqtt_client.tls_set(**self.tls_config.__dict__)
-        # self.core_client = CoreClient(base_url=self.core_base_url)
+        # self.mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+        self.mqtt_client = aiomqtt.Client(
+            mqtt_server,
+            port=self.mqtt_port,
+            tls_params=TLSParameters(**self.tls_config.__dict__) if self.tls_config else None,
+            will=aiomqtt.Will(f"{self.my_base_topic}/status", "Abnormally Disconnected", 1, True)
+        )
 
         # Endpoints in the core that should be routinely polled and updated
         # This may go away if we can figure out to do event-based updates
         # ['Topic', retain]
         self.monitored_core_endpoints: list[tuple[str, bool]] = [
-        #     ("api/v1/network/ethernet/all/vlan/all", True),
-        #     ("api/v1/network/ethernet/all", True),
-        #     ("api/v1/network/interfaces", True),
+            #     ("api/v1/network/ethernet/all/vlan/all", True),
+            #     ("api/v1/network/ethernet/all", True),
+            #     ("api/v1/network/interfaces", True),
         ]
 
         # Topics that the bridge itself populates and publishes:
         # [topic, function to call, retain
-        self.autopublished_topics: list[tuple[str, Callable, bool]]= [
+        self.autopublished_topics: list[tuple[str, Callable, bool]] = [
             # ("status", lambda: "Connected", True),
             # (
             #     "addresses",
@@ -78,8 +83,7 @@ class RxgMqttClient:
 
         self.kismet_control = KismetControl()
 
-
-    def go(self):
+    async def go(self):
         """
         Run the client. This calls the Paho client's `.loop_start()` method,
         which runs in the background until the Paho client is disconnected.
@@ -88,273 +92,237 @@ class RxgMqttClient:
         self.logger.info("Starting RxgMqttClient")
         self.run = True
 
-        def on_connect(client, userdata, flags, reason_code, properties) -> None:
-            return self.handle_connect(client, userdata, flags, reason_code, properties)
+        reconnect_interval = 5
 
-        self.mqtt_client.on_connect = on_connect
-
-        def on_message(client, userdata, msg) -> None:
-            return self.handle_message(client, userdata, msg)
-
-        self.mqtt_client.on_message = on_message
-        self.mqtt_client.on_disconnect = lambda *args: self.handle_disconnect(*args)
-        self.mqtt_client.on_connect_fail = lambda *args: self.handle_connect_fail(*args)
-
-        self.mqtt_client.will_set(
-            f"{self.my_base_topic}/status", "Abnormally Disconnected", 1, True
-        )
         self.logger.info(
             f"Connecting to MQTT server at {self.mqtt_server}:{self.mqtt_port}"
         )
-
         while True:
             try:
-                self.mqtt_client.connect(self.mqtt_server, self.mqtt_port, 60)
-                break
-            except ConnectionRefusedError:
-                self.logger.error(
-                    "Connection to MQTT server refused. Retrying in 10 seconds"
-                )
-                time.sleep(10)
-            except socket.timeout:
-                self.logger.error(
-                    "Connection to MQTT server timed out. Retrying in 10 seconds"
-                )
-                time.sleep(10)
-            except SSLCertVerificationError as e:
-                self.logger.error(f"SSL Error. Retrying in 10 seconds. Error: {e}")
-                time.sleep(10)
+                async with self.mqtt_client:
+                    self.logger.info(
+                        f"Connected to MQTT server at {self.mqtt_server}:{self.mqtt_port}."
+                    )
 
-        # # Schedule some tasks with `https://schedule.readthedocs.io/en/stable/`
-        # self.scheduled_jobs.append(
-        #     schedule.every(10).seconds.do(self.publish_periodic_data)
-        # )
+                    self.logger.info("Subscribing to topics of interest.")
+                    # Subscribe to the topics we're going to care about.
+                    for topic in self.topics_of_interest:
+                        self.logger.info(f"Subscribing to {topic}")
+                        await self.mqtt_client.subscribe(topic)
 
-        # Start the MQTT client loop,
-        self.mqtt_client.loop_start()
+                    # Once we're ready, announce that we're connected:
+                    await self.mqtt_client.publish(f"{self.my_base_topic}/status", "Connected", 1, True)
 
-        # while self.run:
-        #     schedule.run_pending()
-        #     time.sleep(1)
+                    self.connected = True
+                    # Now do the first round of periodic data:
+                    # self.publish_periodic_data()
 
-    def stop(self) -> None:
+                    async for message in self.mqtt_client.messages:
+                        # self.logger.info(f"Got message {message}: {message.payload}")
+                        await self.handle_message(self.mqtt_client, message)
+
+
+            except aiomqtt.MqttError:
+
+                self.connected = False
+                if not self.run:
+                    self.logger.warning("Run is false--not attempting to reconnect.")
+                    break
+                self.logger.warning(f"Connection lost; Reconnecting in {reconnect_interval} seconds ...")
+                await asyncio.sleep(reconnect_interval)
+
+        self.logger.info("Stopping MQTTBridge")
+
+        # for job in self.scheduled_jobs:
+        #     schedule.cancel_job(job)
+        #     self.scheduled_jobs.remove(job)
+
+    async def stop(self) -> None:
         """
         Closes the MQTT connection and shuts down any scheduled tasks for a clean exit.
         :return:
         """
         self.logger.info("Stopping MQTTBridge")
         self.run = False
-        self.mqtt_client.publish(
+        await self.mqtt_client.publish(
             f"{self.my_base_topic}/status", "Disconnected", 1, True
         )
-        self.mqtt_client.disconnect()
-        self.mqtt_client.loop_stop()
+        self.mqtt_client._client.disconnect()
 
         # for job in self.scheduled_jobs:
         #     schedule.cancel_job(job)
         #     self.scheduled_jobs.remove(job)
 
-    def add_subscription(self, topic) -> bool:
+    async def add_subscription(self, topic) -> bool:
         """
         Adds an MQTT subscription, and tracks it for re-subscription on reconnect
         :param topic: The MQTT topic to subscribe to
         :return: Whether the subscription was successfully added
         """
         if topic not in self.topics_of_interest:
-            result, mid = self.mqtt_client.subscribe(topic)
+            result, mid = await self.mqtt_client.subscribe(topic)
             self.topics_of_interest.append(topic)
             self.logger.debug(f"Sub result: {str(result)}")
             return result == mqtt.MQTT_ERR_SUCCESS
         else:
             return True
 
-    # noinspection PyUnusedLocal
-    def handle_disconnect(self, client, *data) -> None:
-        self.logger.warning(
-            f"Disconnected from MQTT server at {self.mqtt_server}:{self.mqtt_port}!"
-        )
-        self.connected = False
-
-        self.logger.warning(f"Disconnect details: {data}")
-
-    # noinspection PyUnusedLocal
-    def handle_connect_fail(self, client, *data) -> None:
-        self.logger.warning(
-            f"Failed to connect to MQTT server at {self.mqtt_server}:{self.mqtt_port}!"
-        )
-        self.connected = False
-        self.logger.warning(f"Failure details: {data}")
-
-    # noinspection PyUnusedLocal
-    def handle_connect(self, client, userdata, flags, reason_code, properties) -> None:
-        """
-        Handles the connect event from Paho. This is called when a connection
-        has been established, and we are ready to send messages.
-        :param client: An instance of Paho's Client class that is used to send
-         and receive messages
-        :param userdata:
-        :param flags:
-        :param reason_code: The reason code that was received from the MQTT
-         broker
-        :param properties:
-        :return:
-        """
-
-        self.logger.info(
-            f"Connected to MQTT server at {self.mqtt_server}:{self.mqtt_port} with result code {reason_code}."
-        )
-
-
-        self.logger.info("Subscribing to topics of interest.")
-        # Subscribe to the topics we're going to care about.
-        for topic in self.topics_of_interest:
-            self.logger.debug(f"Subscribing to {topic}")
-            client.subscribe(topic)
-
-        # Once we're ready, announce that we're connected:
-        client.publish(f"{self.my_base_topic}/status", "Connected", 1, True)
-
-        self.connected = True
-        # Now do the first round of periodic data:
-        # self.publish_periodic_data()
-
-
-    def handle_message(self, client, userdata, msg) -> None:
+    async def handle_message(self, client, msg) -> None:
         """
         Handles all incoming MQTT messages, usually dispatching them onward
         to the REST API
         :param client:
-        :param userdata:
         :param msg:
         :return:
         """
-        self.logger.debug(
-            f"Received message on topic '{msg.topic}': {str(msg.payload)}"
-        )
-        self.logger.debug(f"User Data: {str(userdata)}")
-        # response_topic = f"{msg.topic}/_response"
-        is_global_topic = msg.topic.startswith(self.__global_base_topic)
-        bridge_ident = None
-        if is_global_topic:
-            subtopic = msg.topic.removeprefix(self.__global_base_topic + '/')
-        else:
-            subtopic = msg.topic.removeprefix(self.my_base_topic + '/')
-        response_topic = f"{self.my_base_topic}/{subtopic}/_response"
         try:
-            if msg.payload is not None and msg.payload not in ["", b""]:
-                try:
-                    payload = json.loads(msg.payload)
-                    bridge_ident = payload.get("_bridge_ident", None)
-                    if bridge_ident is not None:
-                        del payload["_bridge_ident"]
-                    query_params = payload.get("_query_params", None)
-                    if query_params is not None:
-                        del payload["_query_params"]
-                    if not payload:
-                        payload = None
-                except json.decoder.JSONDecodeError as e:
-                    self.logger.error(
-                        f"Unable to decode payload as JSON: {str(e)}"
-                    )
-                    payload = msg.payload
+            if (msg.topic.matches(self.my_base_topic + "/error")
+                    or msg.topic.value.endswith('/_response')
+                    or msg.topic.value.endswith('/status') or not (
+                            msg.topic.matches(self.__global_base_topic + '/#') or msg.topic.matches(
+                        self.my_base_topic + '/#'))):
+                return
 
-                    # client.publish(
-                    #     response_topic,
-                    #     MQTTResponse(
-                    #         status="rest_error",
-                    #         rest_status=400,
-                    #         rest_reason="Bad Request",
-                    #     )
-                    # )
-
-            else:
-                query_params = None
-                payload = None
-
-            self.logger.warn(
+            self.logger.debug(
                 f"Received message on topic '{msg.topic}': {str(msg.payload)}"
             )
-            self.logger.debug(
-                f"Payload: {payload}"
-            )
+            # response_topic = f"{msg.topic}/_response"
+            is_global_topic = msg.topic.matches(self.__global_base_topic + '/#')
+            bridge_ident = None
+            if is_global_topic:
+                subtopic = msg.topic.value.removeprefix(self.__global_base_topic + '/')
+            else:
+                subtopic = msg.topic.value.removeprefix(self.my_base_topic + '/')
+            response_topic = f"{self.my_base_topic}/{subtopic}/_response"
+            try:
+                if msg.payload is not None and msg.payload not in ["", b""]:
+                    try:
+                        payload = json.loads(msg.payload)
+                        bridge_ident = payload.get("_bridge_ident", None)
+                        if bridge_ident is not None:
+                            del payload["_bridge_ident"]
+                        query_params = payload.get("_query_params", None)
+                        if query_params is not None:
+                            del payload["_query_params"]
+                        if not payload:
+                            payload = None
+                    except json.decoder.JSONDecodeError as e:
+                        self.logger.error(
+                            f"Unable to decode payload as JSON: {str(e)}"
+                        )
+                        payload = msg.payload
 
-            if subtopic == "get_clients":
-                if self.kismet_control.is_kismet_running():
-                    seen_devices = self.kismet_control.get_seen_devices()
+                        # client.publish(
+                        #     response_topic,
+                        #     MQTTResponse(
+                        #         status="rest_error",
+                        #         rest_status=400,
+                        #         rest_reason="Bad Request",
+                        #     )
+                        # )
+
                 else:
-                    seen_devices = self.kismet_control.empty_seen_devices()
+                    query_params = None
+                    payload = None
+
+                self.logger.warning(
+                    f"Received message on topic '{msg.topic}': {str(msg.payload)}"
+                )
+                self.logger.debug(
+                    f"Payload: {payload}"
+                )
+
+                result = None
+
+                if subtopic == "get_clients":
+                    result = await self.exec_get_clients(self.mqtt_client)
 
                 mqtt_response = MQTTResponse(
                     status="success",
                     rest_status="200",
                     rest_reason="OK",
-                    data=json.dumps(seen_devices),
+                    data=json.dumps(result),
                     bridge_ident=bridge_ident,
                 )
 
-                self.default_callback(
+                await self.default_callback(
                     client=client,
                     topic=response_topic,
                     message=mqtt_response.to_json(),
                 )
 
+                # response = self.core_client.execute_request(
+                #     method=route.method,
+                #     path=route.route,
+                #     data=payload if route.method.lower() != "get" else None,
+                #     params=(
+                #         payload
+                #         if route.method.lower() == "get" and not query_params
+                #         else query_params
+                #     ),
+                # )
 
+                # mqtt_response = MQTTResponse(
+                #     status="success" if response.ok else "rest_error",
+                #     rest_status=response.status_code,
+                #     rest_reason=response.reason,
+                #     data=response.text,
+                #     bridge_ident=bridge_ident,
+                # )
 
+                # mqtt_response = MQTTResponse(
+                #     status="success" if True else "rest_error",
+                #     rest_status=200,
+                #     rest_reason="OK",
+                #     data="Dummy Payload",
+                #     bridge_ident=bridge_ident,
+                # )
+                # self.default_callback(
+                #     client=client,
+                #     topic=response_topic,
+                #     message=mqtt_response.to_json(),
+                # )
+            except Exception as e:
+                self.logger.error(
+                    f"Exception while handling message on topic '{msg.topic}'",
+                    exc_info=e,
+                )
+                await self.mqtt_client.publish(
+                    response_topic,
+                    MQTTResponse(
+                        status="bridge_error",
+                        errors=[[utils.get_full_class_name(e), str(e)]],
+                        bridge_ident=bridge_ident,
+                    ).to_json(),
+                )
 
-            # response = self.core_client.execute_request(
-            #     method=route.method,
-            #     path=route.route,
-            #     data=payload if route.method.lower() != "get" else None,
-            #     params=(
-            #         payload
-            #         if route.method.lower() == "get" and not query_params
-            #         else query_params
-            #     ),
-            # )
-
-            # mqtt_response = MQTTResponse(
-            #     status="success" if response.ok else "rest_error",
-            #     rest_status=response.status_code,
-            #     rest_reason=response.reason,
-            #     data=response.text,
-            #     bridge_ident=bridge_ident,
-            # )
-
-
-            # mqtt_response = MQTTResponse(
-            #     status="success" if True else "rest_error",
-            #     rest_status=200,
-            #     rest_reason="OK",
-            #     data="Dummy Payload",
-            #     bridge_ident=bridge_ident,
-            # )
-            # self.default_callback(
-            #     client=client,
-            #     topic=response_topic,
-            #     message=mqtt_response.to_json(),
-            # )
         except Exception as e:
             self.logger.error(
-                f"Exception while handling message on topic '{msg.topic}'",
+                f"Big nasty thing while handling message on topic '{msg.topic}'",
                 exc_info=e,
             )
-            client.publish(
-                response_topic,
+            await self.mqtt_client.publish(
+                self.my_base_topic + "/error",
                 MQTTResponse(
                     status="bridge_error",
                     errors=[[utils.get_full_class_name(e), str(e)]],
-                    bridge_ident=bridge_ident,
                 ).to_json(),
             )
 
+    async def exec_get_clients(self, client):
+        if self.kismet_control.is_kismet_running():
+            return self.kismet_control.get_seen_devices()
+        else:
+            return self.kismet_control.empty_seen_devices()
 
-    def tcpdump_on_interface(self, interface_name):
-
-        run_
 
 
+    # async def tcpdump_on_interface(self, interface_name):
+    #     filename = '/tmp/output.pcap'
+    #     cmd = ["tcpdump", "-i", interface_name, '-w', filename]
+    #     await run_command_async(cmd)
 
-    def default_callback(self, client, topic, message: Union[str, bytes]) -> None:
+    async def default_callback(self, client, topic, message: Union[str, bytes]) -> None:
         """
         Default callback for sending a REST response on to the MQTT endpoint.
         :param client:
@@ -363,13 +331,13 @@ class RxgMqttClient:
         :return:
         """
         self.logger.info(f"Default callback. Topic: {topic} Message: {str(message)}")
-        client.publish(topic, message)
+        await client.publish(topic, message)
 
-    def __enter__(self) -> object:
+    async def __aenter__(self) -> object:
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
-        self.stop()
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        await self.stop()
 
 
 if __name__ == "__main__":
