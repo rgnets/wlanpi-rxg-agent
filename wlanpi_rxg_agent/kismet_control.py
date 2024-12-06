@@ -149,8 +149,8 @@ class KismetControl:
         if sources is None:
             sources = list(self.all_kismet_sources().values())
         for x in sources:
-            if x['kismet.datasource.probed.uuid'] == source_uuid and x[
-                'kismet.datasource.probed.uuid'] != '00000000-0000-0000-0000-000000000000':
+            if x['kismet.datasource.uuid'] == source_uuid and x[
+                'kismet.datasource.uuid'] != '00000000-0000-0000-0000-000000000000':
                 return x['kismet.datasource.interface']
         return None
 

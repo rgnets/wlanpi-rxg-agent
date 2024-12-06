@@ -17,6 +17,7 @@ import asyncio
 import aiomqtt
 from aiomqtt import TLSParameters
 
+from api_client import ApiClient
 from kismet_control import KismetControl
 from structures import TLSConfig, MQTTResponse
 import utils
@@ -46,6 +47,8 @@ class RxgMqttClient:
         self.tls_config = tls_config
         self.core_base_url = wlan_pi_core_base_url
         self.kismet_base_url = kismet_base_url
+
+        self.api_client = ApiClient(server_ip=mqtt_server, verify_ssl=False, timeout=None)
 
         self.my_base_topic = f"wlan-pi/{identifier}/agent"
         # self.mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
@@ -279,13 +282,19 @@ class RxgMqttClient:
                             f"Missing required key '{key}' in payload",
                         ]
                     ])
-        result = await self.tcpdump_on_interface(payload["interface"], payload["upload_token"], payload.get("max_packets", None), payload.get("timeout", None))
+        result = await self.tcpdump_on_interface(
+            interface_name=payload["interface"],
+            upload_token=payload["upload_token"],
+            max_packets=payload.get("max_packets", None),
+            timeout=payload.get("timeout", None),
+            filter=payload.get("filter", None),
+        )
 
         return MQTTResponse(
             data=result
         )
 
-    async def tcpdump_on_interface(self, interface_name, upload_token, max_packets: Optional[int]=None, timeout: Optional[int]=None) -> str:
+    async def tcpdump_on_interface(self, interface_name, upload_token, filter:Optional[str], max_packets: Optional[int]=None, timeout: Optional[int]=None) -> str:
         self.logger.info(f"Starting tcpdump on interface {interface_name}")
 
         if timeout is None and max_packets is None:
@@ -293,7 +302,7 @@ class RxgMqttClient:
             timeout = 60
 
         # Query kismet control to see if the interface is one it has active, if so, append "mon"
-        if interface_name in self.kismet_control.active_kismet_interfaces().keys() and not interface_name.endswith("mon"):
+        if self.kismet_control.is_kismet_running() and interface_name in self.kismet_control.active_kismet_interfaces().keys() and not interface_name.endswith("mon"):
             interface_name += "mon"
 
         random_str = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
@@ -301,20 +310,26 @@ class RxgMqttClient:
 
         cmd = ["tcpdump", "-i", interface_name, '-w', filepath]
 
-        result = ''
         if max_packets:
             cmd.extend(["-c", str(max_packets)])
         if timeout:
             cmd = ["timeout", "--preserve-status", str(timeout)] + cmd
+        if filter:
+            cmd.extend(filter.split(' '))
+
+        result = ''
         try:
             self.logger.info(f"Starting tcpdump with command: {cmd}")
-            c_res = await run_command_async(cmd)
+            c_res = await run_command_async(cmd, use_shlex=False)
             result = c_res.stdout + c_res.stderr
             self.logger.info(f"Finished tcpdump on interface {interface_name}")
             # Then get a token and upload it
+            self.logger.info(f"Uploading dump file to {self.api_client.ip}")
+            ul_result = await self.api_client.upload_tcpdump(file_path=filepath, submit_token=upload_token)
+            self.logger.info(f"Finished upload. Result: {ul_result.status_code} { ul_result.reason} {ul_result.text}")
         finally:
             self.logger.info(f"Unlinking {filepath}")
-            # unlink(filepath)
+            unlink(filepath)
         return result
 
     async def configure_radios(self, client, payload):
