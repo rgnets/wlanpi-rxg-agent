@@ -8,9 +8,14 @@ import os
 import subprocess
 import time
 from typing import Optional, Any
-
+import dpkt
 import kismet_rest  # type: ignore
+import time
 
+from scapy.data import DLT_IEEE802_11, DLT_EN10MB
+from scapy.layers.dot11 import Dot11
+from scapy.utils import PcapReader, PcapWriter, PcapNgReader, PcapNgWriter
+import kismet_capture
 from models.runcommand_error import RunCommandError
 from utils import run_command
 
@@ -31,11 +36,17 @@ class KismetControl:
             username=self.kismet_config["httpd_username"],
             password=self.kismet_config["httpd_password"]
         )
-        self.kismet_devices = kismet_rest.Devices(username=self.kismet_config["httpd_username"],
+        self.kismet_devices = kismet_rest.Devices(
+            username=self.kismet_config["httpd_username"],
             password=self.kismet_config["httpd_password"])
-        self.kismet_sources = kismet_rest.Datasources(username=self.kismet_config["httpd_username"],
+        self.kismet_sources = kismet_rest.Datasources(
+            username=self.kismet_config["httpd_username"],
             password=self.kismet_config["httpd_password"])
-        self.kismet_alerts = kismet_rest.Alerts(username=self.kismet_config["httpd_username"],
+        self.kismet_alerts = kismet_rest.Alerts(
+            username=self.kismet_config["httpd_username"],
+            password=self.kismet_config["httpd_password"])
+        self.kismet_capture = kismet_capture.KismetCapture(
+            username=self.kismet_config["httpd_username"],
             password=self.kismet_config["httpd_password"])
 
     def read_kismet_config(self) -> dict[str, str]:
@@ -121,7 +132,8 @@ class KismetControl:
 
     # Source management
     def available_kismet_interfaces(self) -> dict[str, dict[str, Any]]:
-        return {x['kismet.datasource.probed.interface']: x for x in self.kismet_sources.interfaces() if not x['kismet.datasource.probed.interface'].endswith('mon')}
+        return {x['kismet.datasource.probed.interface']: x for x in self.kismet_sources.interfaces() if
+                not x['kismet.datasource.probed.interface'].endswith('mon')}
 
     def active_kismet_interfaces(self) -> dict[str, str]:
         return {x['kismet.datasource.probed.interface']: x['kismet.datasource.probed.in_use_uuid']
@@ -129,11 +141,12 @@ class KismetControl:
                 if x['kismet.datasource.probed.in_use_uuid'] != '00000000-0000-0000-0000-000000000000'
                 and not x['kismet.datasource.probed.interface'].endswith('mon')}
 
-    def source_uuid_to_name(self, source_uuid, interfaces:Optional[list[Any]]=None)-> Optional[str]:
+    def source_uuid_to_name(self, source_uuid, interfaces: Optional[list[Any]] = None) -> Optional[str]:
         if interfaces is None:
             interfaces = list(self.available_kismet_interfaces().values())
         for x in interfaces:
-            if x['kismet.datasource.probed.in_use_uuid'] == source_uuid and x['kismet.datasource.probed.in_use_uuid'] != '00000000-0000-0000-0000-000000000000':
+            if x['kismet.datasource.probed.in_use_uuid'] == source_uuid and x[
+                'kismet.datasource.probed.in_use_uuid'] != '00000000-0000-0000-0000-000000000000':
                 return x['kismet.datasource.probed.interface']
         return None
 
@@ -194,7 +207,7 @@ class KismetControl:
             seen_by = []
             for seer in ap['kismet.device.base.seenby']:
                 # seen_by.append(self.source_uuid_to_name(seer, interfaces=current_avail_interfaces))
-                new_seer = {key.lstrip("kismet.common.seenby.") :value for key, value in seer.items()}
+                new_seer = {key.lstrip("kismet.common.seenby."): value for key, value in seer.items()}
                 new_seer['interface'] = self.source_uuid_to_name(new_seer['uuid'], interfaces=current_avail_interfaces)
                 seen_by.append(new_seer)
             if 'kismet.device.base.signal' in ap:
@@ -223,6 +236,7 @@ class KismetControl:
     @staticmethod
     def empty_seen_devices():
         return {"Wi-Fi Client": [], "Wi-Fi AP": [], "Wi-Fi Ad-Hoc": [], "Wi-Fi Bridged": [], "Wi-Fi Device": []}
+
     def get_seen_devices(self):
         # "kismet.device.base.type": "Wi-Fi Client",
         fields_of_interest = [
@@ -256,7 +270,7 @@ class KismetControl:
                 seen_by.append(new_seer)
             if 'kismet.device.base.signal' in device:
                 signal = {re.sub(r"^kismet\.common\.signal\.", "", key): value for key, value in
-                      device['kismet.device.base.signal'].items()}
+                          device['kismet.device.base.signal'].items()}
             else:
                 signal = None
 
@@ -281,7 +295,6 @@ class KismetControl:
                 else:
                     prepared_device['last_bssid'] = None
 
-
             try:
                 res[base_type].append(prepared_device)
             except KeyError:
@@ -290,35 +303,95 @@ class KismetControl:
             #     res[device['kismet.device.base.key']] = device['kismet.device.base.seenby']
 
         return res
-
-
-
-    def test_method(self):
-        res = {"Wi-Fi Client": [], "Wi-Fi AP": [], "Wi-Fi Ad-Hoc": [], "Wi-Fi Bridged": [], "Wi-Fi Device": []}
-
-        # Clients,Bridges, and Devices have client maps
-        for device in self.kismet_devices.all():
-            print(device["kismet.device.base.commonname"])
-            base_type = device['kismet.device.base.type']
-            try:
-                res[base_type].append(device)
-            except KeyError:
-                res[base_type]=[device]
-            # if device['kismet.device.base.type'] == 'Wi-Fi Client':
-            #     res[device['kismet.device.base.key']] = device['kismet.device.base.seenby']
-
-        return res
+    #
+    # def test_method(self):
+    #     res = {"Wi-Fi Client": [], "Wi-Fi AP": [], "Wi-Fi Ad-Hoc": [], "Wi-Fi Bridged": [], "Wi-Fi Device": []}
+    #
+    #     # Clients,Bridges, and Devices have client maps
+    #     for device in self.kismet_devices.all():
+    #         print(device["kismet.device.base.commonname"])
+    #         base_type = device['kismet.device.base.type']
+    #         try:
+    #             res[base_type].append(device)
+    #         except KeyError:
+    #             res[base_type] = [device]
+    #         # if device['kismet.device.base.type'] == 'Wi-Fi Client':
+    #         #     res[device['kismet.device.base.key']] = device['kismet.device.base.seenby']
+    #
+    #     return res
+    #
+    # def capture_from_datasource(self, datasource_uuid, timeout:Optional[int]=None, max_packets:Optional[int]=None):
+    #     # 5FE308BD-0000-0000-0000-E0E1A9389BC7
+    #     # http://{{device}}:{{kismet_port}}/datasource/pcap/by-uuid/{{datasource_uuid}}/packets.pcapng
+    #     self.logger.info(f"Capturing from datasource {datasource_uuid}")
+    #     response = self.kismet_capture.capture_by_uuid(datasource_uuid)
+    #
+    #     self.logger.debug("Starting capture generator.")
+    #     start_time = time.monotonic()
+    #     packet_count = 0
+    #     # d = PcapReader(response.raw)
+    #
+    #     with PcapReader(response.raw) as pcap_fd:
+    #         # self.logger.debug(f"reader link type: {pcap_fd.dlt}")
+    #         for ts, packet in pcap_fd:
+    #             self.logger.debug(f"New packet! Summary: {packet.summary()}")
+    #             packet_count+=1
+    #             yield ts, packet
+    #             elapsed_time = time.monotonic() - start_time  # calculate how much time has passed
+    #             if timeout is not None and elapsed_time >= timeout:  # 5 second timeout
+    #                 self.logger.debug("Timeout reached. Stopping capture.")
+    #                 response.close()
+    #                 break
+    #
+    #             if max_packets is not None and packet_count >= max_packets:
+    #                 self.logger.debug(f"Max packets reached ({max_packets}). Stopping capture.")
+    #                 response.close()
+    #                 break
+    #
+    # def capture_from_datasource_dpkt(self, datasource_uuid, timeout:Optional[int]=None, max_packets:Optional[int]=None):
+    #     # 5FE308BD-0000-0000-0000-E0E1A9389BC7
+    #     # http://{{device}}:{{kismet_port}}/datasource/pcap/by-uuid/{{datasource_uuid}}/packets.pcapng
+    #     self.logger.info(f"Capturing from datasource {datasource_uuid}")
+    #     response = self.kismet_capture.capture_by_uuid(datasource_uuid)
+    #
+    #     self.logger.debug("Starting capture generator.")
+    #     start_time = time.monotonic()
+    #     packet_count = 0
+    #     # d = PcapReader(response.raw)
+    #
+    #     with response.raw as pcap_fd:
+    #         reader = dpkt.pcapng.Reader(pcap_fd)
+    #         # self.logger.debug(f"reader link type: {pcap_fd.dlt}")
+    #         for ts, packet in reader:
+    #             self.logger.debug(f"New packet! Summary:")
+    #             packet_count+=1
+    #             yield ts, packet
+    #             elapsed_time = time.monotonic() - start_time  # calculate how much time has passed
+    #             if timeout is not None and elapsed_time >= timeout:  # 5 second timeout
+    #                 self.logger.debug("Timeout reached. Stopping capture.")
+    #                 response.close()
+    #                 break
+    #
+    #             if max_packets is not None and packet_count >= max_packets:
+    #                 self.logger.debug(f"Max packets reached ({max_packets}). Stopping capture.")
+    #                 response.close()
+    #                 break
 
 if __name__ == "__main__":
-    kc = KismetControl()
-    # print(kc.read_kismet_config())
-    # print(kc.find_kismet_pid())
-    # print(kc.is_kismet_running())
-    # kc.start_kismet(source="wlan1")
-    # print(kc.active_kismet_interfaces())
-    # # pprint.pp(kc.get_seen_aps())
-    # seen_aps = kc.get_seen_aps()
-    test_data = kc.get_seen_devices()
+    # logger = logging.getLogger(__name__)
+    # logging.basicConfig(encoding="utf-8", level=logging.INFO)
+    # kc = KismetControl()
+    #
+    # # with PcapWriter('/tmp/output.pcapng', linktype=DLT_EN10MB, append=False) as fd:
+    # # with PcapWriter('/tmp/output.pcapng', linktype=DLT_IEEE802_11, append=False) as fd:
+    # # with PcapWriter('/tmp/output.pcapng', append=False) as fd:
+    # with open('/tmp/output.pcapng', 'wb') as fd:
+    #     writer = dpkt.pcapng.Writer(fd)
+    #     for ts, packet in kc.capture_from_datasource_dpkt(datasource_uuid="5FE308BD-0000-0000-0000-E0E1A9389BC7",
+    #                                              max_packets=10):
+    #         # pprint.pp(packet.summary())
+    #         writer.writepkt(packet, ts)
+
     print("Done")
     # for device in kc.kismet_conn.device_summary():
     #     pprint.pprint(device)

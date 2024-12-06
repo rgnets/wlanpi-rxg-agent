@@ -22,6 +22,8 @@ dynamic=["version", "description", "license", "urls", "classifiers"]
 #version = "1.0.0-0"
 dependencies = [
     "requests",
+    "scapy",
+    "dpkt",
     "schedule",
     "pydantic-settings",
     "python-daemon",

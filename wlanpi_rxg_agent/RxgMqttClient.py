@@ -348,6 +348,12 @@ class RxgMqttClient:
             )
 
 
+    def tcpdump_on_interface(self, interface_name):
+
+        run_
+
+
+
     def default_callback(self, client, topic, message: Union[str, bytes]) -> None:
         """
         Default callback for sending a REST response on to the MQTT endpoint.
@@ -364,3 +370,10 @@ class RxgMqttClient:
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         self.stop()
+
+
+if __name__ == "__main__":
+    logger = logging.getLogger(__name__)
+    logging.basicConfig(encoding="utf-8", level=logging.INFO)
+
+    print("Done")
