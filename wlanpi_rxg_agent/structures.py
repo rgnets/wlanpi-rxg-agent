@@ -22,7 +22,7 @@ class MQTTResponse:
         data=None,
         errors: Optional[list] = None,
         status: Literal[
-            "success", "bridge_error", "rest_error", "other_error"
+            "success", "agent_error", "internal_error", "other_error", "validation_error"
         ] = "success",
         rest_status: Optional[int] = None,
         rest_reason: Optional[str] = None,
@@ -68,7 +68,6 @@ class MQTTResponse:
             # sort_keys=True,
             # indent=4,
         )
-        print(res)
         return res
 
 

@@ -1,9 +1,14 @@
 import re
+from os import unlink
 from ssl import SSLCertVerificationError
 from typing import Optional, Callable, Union
 
 import json
 import logging
+
+import random
+import string
+
 import socket
 import time
 import paho.mqtt.client as mqtt
@@ -201,126 +206,115 @@ class RxgMqttClient:
                         bridge_ident = payload.get("_bridge_ident", None)
                         if bridge_ident is not None:
                             del payload["_bridge_ident"]
-                        query_params = payload.get("_query_params", None)
-                        if query_params is not None:
-                            del payload["_query_params"]
                         if not payload:
                             payload = None
                     except json.decoder.JSONDecodeError as e:
-                        self.logger.error(
-                            f"Unable to decode payload as JSON: {str(e)}"
-                        )
+                        self.logger.error(f"Unable to decode payload as JSON: {str(e)}")
                         payload = msg.payload
-
-                        # client.publish(
-                        #     response_topic,
-                        #     MQTTResponse(
-                        #         status="rest_error",
-                        #         rest_status=400,
-                        #         rest_reason="Bad Request",
-                        #     )
-                        # )
-
                 else:
-                    query_params = None
                     payload = None
+                self.logger.warning(f"Received message on topic '{msg.topic}': {str(msg.payload)}")
+                self.logger.debug(f"Payload: {payload}")
 
-                self.logger.warning(
-                    f"Received message on topic '{msg.topic}': {str(msg.payload)}"
-                )
-                self.logger.debug(
-                    f"Payload: {payload}"
-                )
-
-                result = None
 
                 if subtopic == "get_clients":
-                    result = await self.exec_get_clients(self.mqtt_client)
+                    mqtt_response = await self.exec_get_clients(self.mqtt_client)
+                elif subtopic == "tcpdump_on_interface":
+                    mqtt_response = await self.handle_tcp_dump_on_interface(self.mqtt_client, payload)
+                else:
+                    mqtt_response = MQTTResponse(
+                        status="validation_error",
+                        errors=[
+                            [
+                                "RxgMqttClient.handle_message",
+                                f"No handler for topic '{msg.topic}'",
+                            ]
+                        ]
+                    )
 
-                mqtt_response = MQTTResponse(
-                    status="success",
-                    rest_status="200",
-                    rest_reason="OK",
-                    data=json.dumps(result),
-                    bridge_ident=bridge_ident,
-                )
+                mqtt_response._bridge_ident = bridge_ident
+                await self.default_callback(client=client,topic=response_topic,message=mqtt_response.to_json())
 
-                await self.default_callback(
-                    client=client,
-                    topic=response_topic,
-                    message=mqtt_response.to_json(),
-                )
-
-                # response = self.core_client.execute_request(
-                #     method=route.method,
-                #     path=route.route,
-                #     data=payload if route.method.lower() != "get" else None,
-                #     params=(
-                #         payload
-                #         if route.method.lower() == "get" and not query_params
-                #         else query_params
-                #     ),
-                # )
-
-                # mqtt_response = MQTTResponse(
-                #     status="success" if response.ok else "rest_error",
-                #     rest_status=response.status_code,
-                #     rest_reason=response.reason,
-                #     data=response.text,
-                #     bridge_ident=bridge_ident,
-                # )
-
-                # mqtt_response = MQTTResponse(
-                #     status="success" if True else "rest_error",
-                #     rest_status=200,
-                #     rest_reason="OK",
-                #     data="Dummy Payload",
-                #     bridge_ident=bridge_ident,
-                # )
-                # self.default_callback(
-                #     client=client,
-                #     topic=response_topic,
-                #     message=mqtt_response.to_json(),
-                # )
             except Exception as e:
-                self.logger.error(
-                    f"Exception while handling message on topic '{msg.topic}'",
-                    exc_info=e,
-                )
+                self.logger.error(f"Exception while handling message on topic '{msg.topic}'",exc_info=e)
                 await self.mqtt_client.publish(
                     response_topic,
                     MQTTResponse(
-                        status="bridge_error",
+                        status="agent_error",
                         errors=[[utils.get_full_class_name(e), str(e)]],
                         bridge_ident=bridge_ident,
                     ).to_json(),
                 )
 
         except Exception as e:
-            self.logger.error(
-                f"Big nasty thing while handling message on topic '{msg.topic}'",
-                exc_info=e,
-            )
+            self.logger.error(f"Big nasty thing while handling message on topic '{msg.topic}'",exc_info=e)
             await self.mqtt_client.publish(
                 self.my_base_topic + "/error",
                 MQTTResponse(
-                    status="bridge_error",
+                    status="agent_error",
                     errors=[[utils.get_full_class_name(e), str(e)]],
                 ).to_json(),
             )
 
     async def exec_get_clients(self, client):
         if self.kismet_control.is_kismet_running():
-            return self.kismet_control.get_seen_devices()
+            seen_clients = self.kismet_control.get_seen_devices()
         else:
-            return self.kismet_control.empty_seen_devices()
+            seen_clients = self.kismet_control.empty_seen_devices()
+        return MQTTResponse(
+            data=json.dumps(seen_clients),
+        )
+
+    async def handle_tcp_dump_on_interface(self,client,payload):
+        required_keys = ["interface", "upload_token"]
+        for key in required_keys:
+            if not key in payload:
+                return MQTTResponse(
+                    status= "validation_error",
+                    errors=[
+                        [
+                            "RxgMqttClient.handle_tcp_dump_on_interface",
+                            f"Missing required key '{key}' in payload",
+                        ]
+                    ])
+        result = await self.tcpdump_on_interface(payload["interface"], payload["upload_token"], payload.get("max_packets", None), payload.get("timeout", None))
+
+        return MQTTResponse(
+            data=result
+        )
 
 
+    async def tcpdump_on_interface(self, interface_name, upload_token, max_packets: Optional[int]=None, timeout: Optional[int]=None) -> str:
+        self.logger.info(f"Starting tcpdump on interface {interface_name}")
 
-    # async def tcpdump_on_interface(self, interface_name):
-    #     filename = '/tmp/output.pcap'
-    #     cmd = ["tcpdump", "-i", interface_name, '-w', filename]
-    #     await run_command_async(cmd)
+        if timeout is None and max_packets is None:
+            # Forcibly set a 1-minute timeout if no timeout is provided.
+            timeout = 60
+
+        # Query kismet control to see if the interface is one it has active, if so, append "mon"
+        if interface_name in self.kismet_control.active_kismet_interfaces().keys() and not interface_name.endswith("mon"):
+            interface_name += "mon"
+
+        random_str = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
+        filepath = f"/tmp/{random_str}.pcap"
+
+        cmd = ["tcpdump", "-i", interface_name, '-w', filepath]
+
+        result = ''
+        if max_packets:
+            cmd.extend(["-c", str(max_packets)])
+        if timeout:
+            cmd = ["timeout", "--preserve-status", str(timeout)] + cmd
+        try:
+            self.logger.info(f"Starting tcpdump with command: {cmd}")
+            c_res = await run_command_async(cmd)
+            result = c_res.stdout + c_res.stderr
+            self.logger.info(f"Finished tcpdump on interface {interface_name}")
+            # Then get a token and upload it
+        finally:
+            self.logger.info(f"Unlinking {filepath}")
+            # unlink(filepath)
+        return result
 
     async def default_callback(self, client, topic, message: Union[str, bytes]) -> None:
         """

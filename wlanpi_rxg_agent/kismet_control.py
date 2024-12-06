@@ -259,7 +259,7 @@ class KismetControl:
 
         # Clients,Bridges, and Devices have client maps
         for device in self.kismet_devices.all():
-            print(device["kismet.device.base.commonname"])
+            # print(device["kismet.device.base.commonname"])
             base_type = device['kismet.device.base.type']
             seen_by = []
 
