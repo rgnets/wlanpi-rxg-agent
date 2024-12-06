@@ -131,23 +131,27 @@ class KismetControl:
     # Methods to be used after Kismet is running
 
     # Source management
+    def all_kismet_sources(self) -> dict[str, dict[str, Any]]:
+        return {x['kismet.datasource.interface']: x for x in self.kismet_sources.all() if
+                not x['kismet.datasource.interface'].endswith('mon')}
+
     def available_kismet_interfaces(self) -> dict[str, dict[str, Any]]:
         return {x['kismet.datasource.probed.interface']: x for x in self.kismet_sources.interfaces() if
                 not x['kismet.datasource.probed.interface'].endswith('mon')}
 
     def active_kismet_interfaces(self) -> dict[str, str]:
-        return {x['kismet.datasource.probed.interface']: x['kismet.datasource.probed.in_use_uuid']
-                for x in self.kismet_sources.interfaces()
-                if x['kismet.datasource.probed.in_use_uuid'] != '00000000-0000-0000-0000-000000000000'
-                and not x['kismet.datasource.probed.interface'].endswith('mon')}
+        return {x['kismet.datasource.interface']: x['kismet.datasource.uuid']
+                for x in self.kismet_sources.all()
+                if x['kismet.datasource.running'] and x['kismet.datasource.uuid'] != '00000000-0000-0000-0000-000000000000'
+                and not x['kismet.datasource.interface'].endswith('mon')}
 
-    def source_uuid_to_name(self, source_uuid, interfaces: Optional[list[Any]] = None) -> Optional[str]:
-        if interfaces is None:
-            interfaces = list(self.available_kismet_interfaces().values())
-        for x in interfaces:
-            if x['kismet.datasource.probed.in_use_uuid'] == source_uuid and x[
-                'kismet.datasource.probed.in_use_uuid'] != '00000000-0000-0000-0000-000000000000':
-                return x['kismet.datasource.probed.interface']
+    def source_uuid_to_name(self, source_uuid, sources: Optional[list[Any]] = None) -> Optional[str]:
+        if sources is None:
+            sources = list(self.all_kismet_sources().values())
+        for x in sources:
+            if x['kismet.datasource.probed.uuid'] == source_uuid and x[
+                'kismet.datasource.probed.uuid'] != '00000000-0000-0000-0000-000000000000':
+                return x['kismet.datasource.interface']
         return None
 
     def get_kismet_interface_uuid(self, interface: str) -> Optional[str]:
@@ -166,6 +170,26 @@ class KismetControl:
         for x in self.kismet_sources.interfaces():
             if x['kismet.datasource.probed.interface'] == source_name:
                 return self.close_source(x['kismet.datasource.probed.in_use_uuid'])
+        return False
+
+    def open_source(self, source_uuid: str) -> bool:
+        return self.kismet_sources.open(source_uuid)
+
+    def open_source_by_name(self, source_name: str) -> bool:
+        for x in self.kismet_sources.interfaces():
+            if x['kismet.datasource.probed.interface'] == source_name and x[
+                'kismet.datasource.probed.in_use_uuid'] != '00000000-0000-0000-0000-000000000000':
+                return self.open_source(x['kismet.datasource.probed.in_use_uuid'])
+        return False
+
+    def resume_source(self, source_uuid: str) -> bool:
+        return self.kismet_sources.resume(source_uuid)
+
+    def resume_source_by_name(self, source_name: str) -> bool:
+        for x in self.kismet_sources.interfaces():
+            if x['kismet.datasource.probed.interface'] == source_name and x[
+                'kismet.datasource.probed.in_use_uuid'] != '00000000-0000-0000-0000-000000000000':
+                return self.resume_source(x['kismet.datasource.probed.in_use_uuid'])
         return False
 
     def set_sources_by_name(self, source_names: list[str]) -> list[tuple[str, str, bool]]:
@@ -200,7 +224,7 @@ class KismetControl:
             'kismet.device.base.type'
             # 'dot11.device'
         ]
-        current_avail_interfaces = list(self.available_kismet_interfaces().values())
+        current_sources = list(self.all_kismet_sources().values())
         results = []
         for ap in self.kismet_devices.dot11_access_points(fields=fields_of_interest):
 
@@ -208,7 +232,7 @@ class KismetControl:
             for seer in ap['kismet.device.base.seenby']:
                 # seen_by.append(self.source_uuid_to_name(seer, interfaces=current_avail_interfaces))
                 new_seer = {key.lstrip("kismet.common.seenby."): value for key, value in seer.items()}
-                new_seer['interface'] = self.source_uuid_to_name(new_seer['uuid'], interfaces=current_avail_interfaces)
+                new_seer['interface'] = self.source_uuid_to_name(new_seer['uuid'], sources=current_sources)
                 seen_by.append(new_seer)
             if 'kismet.device.base.signal' in ap:
                 signal = {key.lstrip("kismet.common.signal."): value for key, value in
@@ -255,7 +279,7 @@ class KismetControl:
         ]
 
         res = KismetControl.empty_seen_devices()
-        current_avail_interfaces = list(self.available_kismet_interfaces().values())
+        current_sources = list(self.all_kismet_sources().values())
 
         # Clients,Bridges, and Devices have client maps
         for device in self.kismet_devices.all():
@@ -266,7 +290,7 @@ class KismetControl:
             for seer in device['kismet.device.base.seenby']:
                 # seen_by.append(self.source_uuid_to_name(seer, interfaces=current_avail_interfaces))
                 new_seer = {key.lstrip("kismet.common.seenby."): value for key, value in seer.items()}
-                new_seer['interface'] = self.source_uuid_to_name(new_seer['uuid'], interfaces=current_avail_interfaces)
+                new_seer['interface'] = self.source_uuid_to_name(new_seer['uuid'], sources=current_sources)
                 seen_by.append(new_seer)
             if 'kismet.device.base.signal' in device:
                 signal = {re.sub(r"^kismet\.common\.signal\.", "", key): value for key, value in
@@ -377,10 +401,17 @@ class KismetControl:
     #                 response.close()
     #                 break
 
+    def ignore(self):
+
+        [{y: x[f"kismet.datasource.{y}"] for y in ['paused', 'running', 'error', 'interface', 'uuid'] } for x in kc.kismet_sources.all()]
+
 if __name__ == "__main__":
     # logger = logging.getLogger(__name__)
     # logging.basicConfig(encoding="utf-8", level=logging.INFO)
-    # kc = KismetControl()
+    kc = KismetControl()
+    res = kc.available_kismet_interfaces()
+
+    pprint.pp(res)
     #
     # # with PcapWriter('/tmp/output.pcapng', linktype=DLT_EN10MB, append=False) as fd:
     # # with PcapWriter('/tmp/output.pcapng', linktype=DLT_IEEE802_11, append=False) as fd:

@@ -221,6 +221,8 @@ class RxgMqttClient:
                     mqtt_response = await self.exec_get_clients(self.mqtt_client)
                 elif subtopic == "tcpdump_on_interface":
                     mqtt_response = await self.handle_tcp_dump_on_interface(self.mqtt_client, payload)
+                elif subtopic == "configure_radios":
+                    mqtt_response = await self.configure_radios(self.mqtt_client, payload)
                 else:
                     mqtt_response = MQTTResponse(
                         status="validation_error",
@@ -283,7 +285,6 @@ class RxgMqttClient:
             data=result
         )
 
-
     async def tcpdump_on_interface(self, interface_name, upload_token, max_packets: Optional[int]=None, timeout: Optional[int]=None) -> str:
         self.logger.info(f"Starting tcpdump on interface {interface_name}")
 
@@ -315,6 +316,50 @@ class RxgMqttClient:
             self.logger.info(f"Unlinking {filepath}")
             # unlink(filepath)
         return result
+
+    async def configure_radios(self, client, payload):
+        self.logger.info(f"Configuring radios: New payload: {payload}")
+        for interface_name, config in payload.get("interfaces", {}).items():
+            # if not interface_name in self.kismet_control.available_kismet_interfaces().keys():
+            #     return MQTTResponse(
+            #         status="validation_error",
+            #         errors=[
+            #             [
+            #                 "RxgMqttClient.configure_radios",
+            #                 f"Interface '{interface_name}' is not available",
+            #             ]
+            #         ],
+            #     )
+            new_mode = config.get("mode",'')
+            if new_mode == "monitor":
+                self.logger.debug(f"{interface_name} should be in monitor mode.")
+                if not self.kismet_control.is_kismet_running():
+                    self.logger.debug(f"Starting kismet on {interface_name}mon")
+                    self.kismet_control.start_kismet(interface_name)
+                else:
+                    if interface_name not in self.kismet_control.all_kismet_sources().keys():
+                        self.logger.debug(f"Adding {interface_name}")
+                        self.kismet_control.add_source(interface_name)
+                    if interface_name not in self.kismet_control.active_kismet_interfaces().keys():
+                        self.logger.debug(f"Enabling {interface_name}mon")
+                        self.kismet_control.open_source_by_name(interface_name)
+                        self.kismet_control.resume_source_by_name(interface_name)
+            else:
+                self.logger.debug(f"{interface_name} should be in {new_mode} mode.")
+                if self.kismet_control.is_kismet_running() and interface_name in self.kismet_control.active_kismet_interfaces().keys():
+                    self.kismet_control.close_source_by_name(interface_name)
+                await run_command_async(['iw', 'dev', interface_name + "mon", 'del'], raise_on_fail=False)
+                await run_command_async(['ip', 'link', 'set', interface_name, 'up'])
+                # TODO: Do full adapter config here.
+
+        if len(self.kismet_control.active_kismet_interfaces())==0:
+            self.logger.info("No monitor interfaces. Killing kismet.")
+            self.kismet_control.kill_kismet()
+        return MQTTResponse(
+            status="success",
+            data= (await run_command_async(['iwconfig'], raise_on_fail=False)).stdout
+        )
+
 
     async def default_callback(self, client, topic, message: Union[str, bytes]) -> None:
         """

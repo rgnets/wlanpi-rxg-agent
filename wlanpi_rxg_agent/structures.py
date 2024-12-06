@@ -29,6 +29,7 @@ class MQTTResponse:
         bridge_ident: Optional[Any] = None,
     ):
         self.logger = logging.getLogger(__name__)
+        self.errors = errors
         if errors is None:
             self.errors: list = []
         self.status = status
