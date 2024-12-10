@@ -14,6 +14,7 @@ from requests import ConnectionError, ConnectTimeout, ReadTimeout
 import wlanpi_rxg_agent.utils as utils
 from RxgMqttClient import RxgMqttClient
 from kismet_control import KismetControl
+from lib.configuration.config_file import BridgeConfigFile
 from structures import TLSConfig
 from wlanpi_rxg_agent.api_client import ApiClient
 from wlanpi_rxg_agent.bridge_control import BridgeControl
@@ -42,6 +43,8 @@ class RXGAgent:
     ):
         self.logger = logging.getLogger(__name__)
         self.logger.info("Initializing RXGAgent")
+
+        self.bridge_config_file = BridgeConfigFile()
 
         self.async_loop = asyncio.get_event_loop()
 
@@ -285,30 +288,23 @@ class RXGAgent:
     async def configure_mqtt_bridge(self):
         self.logger.info("Reconfiguring Bridge")
         # Try to load existing toml and preserve. If we fail, it doesn't matter that much.
-        data = defaultdict(dict)
-        try:
-            data = toml.load(BRIDGE_CONFIG_FILE)
-            self.logger.info("Existing config loaded. Updating.")
-        except toml.decoder.TomlDecodeError as e:
-            self.logger.warning(
-                f"Unable to decode existing bridge config, overwriting. Error: {e.msg}"
-            )
+
+        self.bridge_config_file.load_or_create_defaults()
+
         # Rewrite Bridge's config.toml
-        data["MQTT"]["server"] = self.active_server
-        data["MQTT"]["port"] = self.active_port
-        data["MQTT_TLS"]["use_tls"] = True
-        data["MQTT_TLS"]["ca_certs"] = self.cert_tool.ca_file
-        data["MQTT_TLS"]["certfile"] = self.cert_tool.cert_file
-        data["MQTT_TLS"]["keyfile"] = self.cert_tool.key_file
-        data["MQTT_TLS"]["cert_reqs"] = 2
+        self.bridge_config_file.data["MQTT"]["server"] = self.active_server
+        self.bridge_config_file.data["MQTT"]["port"] = self.active_port
+        self.bridge_config_file.data["MQTT_TLS"]["use_tls"] = True
+        self.bridge_config_file.data["MQTT_TLS"]["ca_certs"] = self.cert_tool.ca_file
+        self.bridge_config_file.data["MQTT_TLS"]["certfile"] = self.cert_tool.cert_file
+        self.bridge_config_file.data["MQTT_TLS"]["keyfile"] = self.cert_tool.key_file
 
         # Configure the internal client as well, as we transition to using it.
         await self.reconfigure_mqtt_client(self.active_server, self.active_port, True, self.cert_tool.ca_file, self.cert_tool.cert_file, self.cert_tool.key_file, 2)
 
         self.logger.info("Bridge config written. Restarting service.")
 
-        with open(BRIDGE_CONFIG_FILE, "w") as f:
-            toml.dump(data, f)
+        self.bridge_config_file.save()
 
         self.bridge_control.restart()
 
