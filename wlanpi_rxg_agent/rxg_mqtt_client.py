@@ -19,6 +19,9 @@ from aiomqtt import TLSParameters
 
 from api_client import ApiClient
 from kismet_control import KismetControl
+from lib.configuration.agent_config_file import AgentConfigFile
+from lib.configuration.bootloader_config_file import BootloaderConfigFile
+from lib.configuration.bridge_config_file import BridgeConfigFile
 from structures import TLSConfig, MQTTResponse
 import utils
 from utils import run_command_async
@@ -90,6 +93,10 @@ class RxgMqttClient:
         self.scheduled_jobs: list[schedule.Job] = []
 
         self.kismet_control = KismetControl()
+
+        self.bootloader_config = BootloaderConfigFile()
+        self.agent_config = AgentConfigFile()
+        self.bridge_config = BridgeConfigFile()
 
     async def go(self):
         """
@@ -226,6 +233,14 @@ class RxgMqttClient:
                     mqtt_response = await self.handle_tcp_dump_on_interface(self.mqtt_client, payload)
                 elif subtopic == "configure_radios":
                     mqtt_response = await self.configure_radios(self.mqtt_client, payload)
+                elif subtopic == "override_rxg/set":
+                    mqtt_response = await self.set_override_rxg(self.mqtt_client, payload)
+                elif subtopic == "fallback_rxg/set":
+                    mqtt_response = await self.set_fallback_rxg(self.mqtt_client, payload)
+                elif subtopic == "password/set":
+                    mqtt_response = await self.set_password(payload)
+                elif subtopic == "reboot":
+                    mqtt_response = await self.reboot()
                 else:
                     mqtt_response = MQTTResponse(
                         status="validation_error",
@@ -375,6 +390,26 @@ class RxgMqttClient:
             data= (await run_command_async(['iwconfig'], raise_on_fail=False)).stdout
         )
 
+    async def reboot(self):
+        self.logger.info(f"Rebooting")
+        utils.run_command("reboot", raise_on_fail=False)
+
+    async def set_override_rxg(self, client, payload):
+        self.logger.info(f"Setting override_rxg: {payload}")
+        self.agent_config.data["General"]["override_rxg"] = payload["value"]
+        self.bootloader_config.data["boot_server_override"] = payload["value"]
+        return MQTTResponse(status="success", data=json.dumps(self.bootloader_config.data))
+
+    async def set_fallback_rxg(self, client, payload):
+        self.logger.info(f"Setting fallback_rxg: {payload}")
+        self.agent_config.data["General"]["fallback_rxg"] = payload["value"]
+        self.bootloader_config.data["boot_server_fallback"] = payload["value"]
+        return MQTTResponse(status="success", data=json.dumps(self.bootloader_config.data))
+
+    async def set_password(self, payload):
+        self.logger.info(f"Setting new password.")
+        await utils.run_command_async("chpasswd", input=f"wlanpi:{payload['value']}" )
+        return MQTTResponse(status="success", data=json.dumps(True))
 
     async def default_callback(self, client, topic, message: Union[str, bytes]) -> None:
         """
@@ -397,5 +432,7 @@ class RxgMqttClient:
 if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     logging.basicConfig(encoding="utf-8", level=logging.INFO)
+
+
 
     print("Done")

@@ -49,10 +49,8 @@ class ApiClient:
         )
 
     def register(self, model: str, csr: str, ) -> Response:
-        if not ip:
-            ip = self.ip
         return requests.post(
-            url=f"https://{ip}/{self.api_base}/apcert/register",
+            url=f"https://{self.ip}/{self.api_base}/apcert/register",
             json={
                 "device_type": "wlanpi",
                 "mac": self.mac,

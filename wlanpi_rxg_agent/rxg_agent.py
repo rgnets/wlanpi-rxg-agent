@@ -12,9 +12,9 @@ import toml
 from requests import ConnectionError, ConnectTimeout, ReadTimeout
 
 import wlanpi_rxg_agent.utils as utils
-from RxgMqttClient import RxgMqttClient
+from rxg_mqtt_client import RxgMqttClient
 from kismet_control import KismetControl
-from lib.configuration.config_file import BridgeConfigFile
+from lib.configuration.bridge_config_file import BridgeConfigFile
 from structures import TLSConfig
 from wlanpi_rxg_agent.api_client import ApiClient
 from wlanpi_rxg_agent.bridge_control import BridgeControl

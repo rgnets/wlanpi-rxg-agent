@@ -1,15 +1,10 @@
 import logging
-import os
 from collections import defaultdict
 from os import PathLike
 from typing import Union
 
 import toml
 
-from utils import run_command
-
-AGENT_CONFIG_DIR = "/etc/wlanpi-rxg-agent"
-BRIDGE_CONFIG_DIR = "/etc/wlanpi-mqtt-bridge"
 
 class ConfigFile():
 
@@ -44,101 +39,3 @@ class ConfigFile():
             self.logger.warning(
                 f"Unable to decode existing config, using defaults. Error: {e.msg}"
             )
-
-class BridgeConfigFile(ConfigFile):
-
-    def __init__(self):
-        super().__init__(os.path.join(BRIDGE_CONFIG_DIR, "config.toml"))
-
-    def create_defaults(self):
-        self.data = {
-            "MQTT": {
-                "server": "192.168.6.1",
-                "port": 1883,
-            },
-            "MQTT_TLS": {
-                "use_tls": False,
-                "ca_certs": None,
-                "certfile": None,
-                "keyfile": None,
-                "cert_reqs": 2
-            }
-        }
-
-class AgentConfigFile(ConfigFile):
-    def __init__(self):
-        super().__init__(os.path.join(AGENT_CONFIG_DIR, "config.toml"))
-
-    def create_defaults(self):
-        self.data = {
-            "General": {
-                "override_rxg": "",
-                "fallback_rxg": "",
-            }
-        }
-
-
-class BootloaderConfigFile(ConfigFile):
-    def __init__(self):
-        self.data_part_path = "/dev/mmcblk0p1"
-        super().__init__("/mnt/bldata.json")
-
-
-    def load(self):
-        if self.count_partitions() < 3:
-            self.logger.warning("Insufficient partitions--simulating instead.")
-            self.data = self.simulate_config()
-        else:
-            run_command(f"mount {self.data_part_path} /mnt", shell=True, use_shlex=False)
-            super().load()
-            run_command(f"umount {self.data_part_path}", shell=True, use_shlex=False)
-
-
-    def save(self):
-        if self.count_partitions() < 3:
-            self.logger.warning("Insufficient partitions--simulating instead.")
-            self.data = self.simulate_config()
-        else:
-            run_command(f"mount {self.data_part_path} /mnt", shell=True, use_shlex=False)
-            super().save()
-            run_command(f"umount {self.data_part_path}", shell=True, use_shlex=False)
-
-    def load_or_create_defaults(self):
-        if self.count_partitions() < 3:
-            self.logger.warning("Insufficient partitions--simulating instead.")
-            self.data = self.simulate_config()
-        else:
-            run_command(f"mount {self.data_part_path} /mnt", shell=True, use_shlex=False)
-            super().load_or_create_defaults()
-            run_command(f"umount {self.data_part_path}", shell=True, use_shlex=False)
-
-    def create_defaults(self):
-        self.data = {
-            "current_image_md5": "2c84fecee801b51cedea18015e9abfea",
-            "last_flash_success": True,
-            "boot_exec_times": [],
-            "first_boot": True,
-            "remote_log": True,
-            "boot_server_override": None,
-            "boot_server_fallback": "piglet.rgnets.com",
-            "device_type": "wlanpi",
-        }
-
-    @staticmethod
-    def simulate_config() -> object:
-        return {
-            "current_image_md5": "2c84fecee801b51cedea18015e9abfea",
-            "last_flash_success": True,
-            "boot_exec_times": [],
-            "first_boot": True,
-            "remote_log": True,
-            "boot_server_override": None,
-            "boot_server_fallback": "piglet.rgnets.com",
-            "device_type": "wlanpi",
-        }
-
-    @staticmethod
-    def count_partitions() -> int:
-        return int(run_command("ls -l /dev/mmcblk0p* | wc -l", shell=True, use_shlex=False).stdout.strip())
-
-
