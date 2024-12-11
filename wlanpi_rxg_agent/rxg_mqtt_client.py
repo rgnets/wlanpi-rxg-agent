@@ -395,15 +395,23 @@ class RxgMqttClient:
         utils.run_command("reboot", raise_on_fail=False)
 
     async def set_override_rxg(self, client, payload):
+        self.agent_config.load()
+        self.bootloader_config.load()
         self.logger.info(f"Setting override_rxg: {payload}")
         self.agent_config.data["General"]["override_rxg"] = payload["value"]
         self.bootloader_config.data["boot_server_override"] = payload["value"]
+        self.agent_config.save()
+        self.bootloader_config.save()
         return MQTTResponse(status="success", data=json.dumps(self.bootloader_config.data))
 
     async def set_fallback_rxg(self, client, payload):
+        self.agent_config.load()
+        self.bootloader_config.load()
         self.logger.info(f"Setting fallback_rxg: {payload}")
         self.agent_config.data["General"]["fallback_rxg"] = payload["value"]
         self.bootloader_config.data["boot_server_fallback"] = payload["value"]
+        self.agent_config.save()
+        self.bootloader_config.save()
         return MQTTResponse(status="success", data=json.dumps(self.bootloader_config.data))
 
     async def set_password(self, payload):
