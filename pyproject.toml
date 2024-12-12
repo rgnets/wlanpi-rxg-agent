@@ -32,7 +32,8 @@ dependencies = [
     "paho_mqtt",
     "dbus-python",
     "PyGObject",
-    "kismet-rest"
+    "kismet-rest",
+    "wpa_supplicant"
 ]
 
 [project.optional-dependencies]

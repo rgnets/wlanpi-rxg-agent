@@ -22,6 +22,7 @@ from kismet_control import KismetControl
 from lib.configuration.agent_config_file import AgentConfigFile
 from lib.configuration.bootloader_config_file import BootloaderConfigFile
 from lib.configuration.bridge_config_file import BridgeConfigFile
+from lib.wifi_control.wifi_control_wpa_supplicant import WiFiControlWpaSupplicant
 from structures import TLSConfig, MQTTResponse
 import utils
 from utils import run_command_async
@@ -54,6 +55,8 @@ class RxgMqttClient:
 
         self.agent_reconfig_callback = agent_reconfig_callback
         self.api_client = ApiClient(server_ip=mqtt_server, verify_ssl=False, timeout=None)
+
+        self.wifi_control = WiFiControlWpaSupplicant()
 
         self.my_base_topic = f"wlan-pi/{identifier}/agent"
         # self.mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
@@ -379,11 +382,28 @@ class RxgMqttClient:
                         self.kismet_control.resume_source_by_name(interface_name)
             else:
                 self.logger.debug(f"{interface_name} should be in {new_mode} mode.")
+                # Teardown kismet monitor control
                 if self.kismet_control.is_kismet_running() and interface_name in self.kismet_control.active_kismet_interfaces().keys():
                     self.kismet_control.close_source_by_name(interface_name)
                 await run_command_async(['iw', 'dev', interface_name + "mon", 'del'], raise_on_fail=False)
                 await run_command_async(['ip', 'link', 'set', interface_name, 'up'])
                 # TODO: Do full adapter config here.
+
+                wlan_if = self.wifi_control.get_or_create_interface(interface_name=interface_name)
+
+                wlan_data = config.get('wlan')
+                if wlan_data is None or len(wlan_data) == 0:
+                    if wlan_if.connected:
+                        wlan_if.disconnect()
+                else:
+                    if isinstance(wlan_data, list):
+                        wlan_data = wlan_data[0]
+                    if not (wlan_if.connected and wlan_if.ssid == wlan_data.get('ssid') and wlan_if.psk == wlan_data.get('psk')):
+                        await wlan_if.connect(ssid=wlan_data.get('ssid'), psk=wlan_data.get('psk'))
+                        await wlan_if.renew_dhcp()
+                        await asyncio.sleep(5)
+                        await wlan_if.add_default_route()
+
 
         if len(self.kismet_control.active_kismet_interfaces())==0:
             self.logger.info("No monitor interfaces. Killing kismet.")
