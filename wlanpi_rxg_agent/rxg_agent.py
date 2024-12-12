@@ -5,7 +5,9 @@ import os
 import ssl
 import subprocess
 import time
+from asyncio import Task
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from typing import Optional, Any
 
 import toml
@@ -75,6 +77,8 @@ class RXGAgent:
         self.rxg_mqtt_client = RxgMqttClient(agent_reconfig_callback = self.handle_remote_agent_reconfiguration)
         self.bridge_control = BridgeControl()
 
+        self.mqtt_task:Optional[Task] = None
+
         # Initialize certificates
         self.cert_dir = os.path.join(CONFIG_DIR, "certs")
         os.makedirs(self.cert_dir, exist_ok=True)
@@ -83,6 +87,9 @@ class RXGAgent:
         self.csr = self.cert_tool.get_csr(node_name=utils.get_hostname())
         self.current_ca = ""
         self.current_cert = ""
+
+        self.executor  = ThreadPoolExecutor(1)
+        self.background_tasks: set[Task] = set()
 
     def reinitialize_cert_tool(self, partner_id: Optional[str] = None):
         self.cert_tool = CertificateTool(
@@ -269,7 +276,6 @@ class RXGAgent:
             self.logger.info("Stopping Internal MQTT Client")
             await self.rxg_mqtt_client.stop()
 
-
         eth0_res = subprocess.run(
             "jc ifconfig eth0", capture_output=True, text=True, shell=True
         )
@@ -283,7 +289,10 @@ class RXGAgent:
         )
         self.rxg_mqtt_client = RxgMqttClient(mqtt_server=server, mqtt_port=port, tls_config=tls_config, identifier=eth0_mac, agent_reconfig_callback = self.handle_remote_agent_reconfiguration)
         self.logger.info("Starting Internal MQTT Client")
-        self.async_loop.create_task(self.rxg_mqtt_client.go())
+
+        self.mqtt_task = self.async_loop.create_task(self.rxg_mqtt_client.go())
+        self.background_tasks.add(self.mqtt_task)
+        self.mqtt_task.add_done_callback(self.background_tasks.remove)
 
     async def configure_mqtt_bridge(self):
         self.logger.info("Reconfiguring Bridge")
@@ -449,10 +458,14 @@ class RXGAgent:
 
     async def go(self):
         await self.check_for_new_server()
-        self.async_loop.create_task(self.aevery(1, self.do_periodic_checks))
+        periodic_task = self.async_loop.create_task(self.aevery(1, self.do_periodic_checks))
+        self.background_tasks.add(periodic_task)
+        periodic_task.add_done_callback(self.background_tasks.remove)
         # self.async_loop.run_forever()
         while True:
-            await asyncio.sleep(1)
+            if self.mqtt_task is not None and self.mqtt_task.done():
+                self.logger.warning("Mqtt task may have died:", exc_info=self.mqtt_task.exception())
+            await asyncio.sleep(0.5)
 
 
 

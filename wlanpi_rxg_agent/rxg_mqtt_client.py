@@ -139,14 +139,16 @@ class RxgMqttClient:
                         await self.handle_message(self.mqtt_client, message)
 
 
-            except aiomqtt.MqttError:
-
+            except aiomqtt.MqttError as e:
                 self.connected = False
                 if not self.run:
                     self.logger.warning("Run is false--not attempting to reconnect.")
                     break
-                self.logger.warning(f"Connection lost; Reconnecting in {reconnect_interval} seconds ...")
+                self.logger.warning(f"Connection lost; Reconnecting in {reconnect_interval} seconds ... ", exc_info=e)
                 await asyncio.sleep(reconnect_interval)
+            except Exception as e:
+                self.logger.error("Something really nasty happened in the MQTT Client: ", exc_info=e)
+
 
         self.logger.info("Stopping MQTTBridge")
 
@@ -227,7 +229,6 @@ class RxgMqttClient:
                     payload = None
                 self.logger.warning(f"Received message on topic '{msg.topic}': {str(msg.payload)}")
                 self.logger.debug(f"Payload: {payload}")
-
 
                 if subtopic == "get_clients":
                     mqtt_response = await self.exec_get_clients(self.mqtt_client)
