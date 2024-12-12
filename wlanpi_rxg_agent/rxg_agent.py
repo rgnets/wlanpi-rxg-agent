@@ -413,7 +413,10 @@ class RXGAgent:
         registration_status = False
         if self.active_server:
             registration_status, reg_status_response = self.check_registration_status()
-            if not reg_status_response.lower() == "approved":
+            self.registered = registration_status
+            if not registration_status:
+                self.handle_registration()
+            elif not reg_status_response.lower() == "approved":
                 self.logger.warning(
                     "Device has not been approved, decertifying and stopping bridge if it's running."
                 )
