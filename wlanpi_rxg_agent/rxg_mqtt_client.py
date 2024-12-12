@@ -411,7 +411,7 @@ class RxgMqttClient:
         self.bootloader_config.data["boot_server_fallback"] = payload["value"]
         self.bootloader_config.save()
         if self.agent_reconfig_callback is not None:
-            await self.agent_reconfig_callback({"override_rxg": payload["value"]})
+            await self.agent_reconfig_callback({"fallback_rxg": payload["value"]})
         return MQTTResponse(status="success", data=json.dumps(self.bootloader_config.data))
 
     async def set_password(self, payload):

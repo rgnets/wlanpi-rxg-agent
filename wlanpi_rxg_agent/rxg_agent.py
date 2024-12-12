@@ -95,10 +95,10 @@ class RXGAgent:
         Loads configuration from the defined config file
         """
         self.logger.info(f"Loading config file from {self.bridge_config_file.config_file}")
-        async with self.agent_config_lock:
-            self.agent_config_file.load_or_create_defaults(allow_empty=False)
-            self.override_server = self.agent_config_file.data.get('General').get("override_rxg", None)
-            self.fallback_server = self.agent_config_file.data.get('General').get("fallback_rxg", None)
+        # async with self.agent_config_lock:
+        self.agent_config_file.load_or_create_defaults(allow_empty=False)
+        self.override_server = self.agent_config_file.data.get('General').get("override_rxg", None)
+        self.fallback_server = self.agent_config_file.data.get('General').get("fallback_rxg", None)
 
     def test_address_for_rxg(self, ip: str) -> bool:
         """
