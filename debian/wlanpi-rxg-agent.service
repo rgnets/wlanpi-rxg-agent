@@ -6,7 +6,7 @@
 Description=The rXg Agent communicates, authenticates with, and configures the WLAN Pi MQTT Bridge to communicate with the RG Nets rXg.
 After=network.target
 StartLimitIntervalSec=30
-StartLimitBurst=4
+StartLimitBurst=10
 
 [Service]
 Type=exec
@@ -21,7 +21,7 @@ KillMode=mixed
 TimeoutStopSec=60
 PrivateTmp=true
 
-Restart=on-failure
+Restart=always
 
 [Install]
 WantedBy=multi-user.target

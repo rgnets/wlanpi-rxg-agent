@@ -1,11 +1,12 @@
-wlanpi-rxg-agent (1.0.0-1+deb12u24) UNRELEASED; urgency=medium
+wlanpi-rxg-agent (1.0.0-1+deb12u25) UNRELEASED; urgency=medium
 
   * Reformat, fix ip behavior
   * Beta release!
   * Beta release for real!
   * Fix bluetooth model parsing issue
+  * Improve resiliency
 
- -- Michael Ketchel <michael.ketchel@gmail.com>  Wed, 11 Dec 2024 06:27:47 +0000
+ -- Michael Ketchel <michael.ketchel@gmail.com>  Thu, 12 Dec 2024 04:02:11 +0000
 
 wlanpi-rxg-agent (1.0.0-1+deb12u20) unstable; urgency=medium
 
