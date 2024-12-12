@@ -405,7 +405,7 @@ class RxgMqttClient:
                         await wlan_if.add_default_route()
 
 
-        if len(self.kismet_control.active_kismet_interfaces())==0:
+        if self.kismet_control.is_kismet_running() and len(self.kismet_control.active_kismet_interfaces())==0:
             self.logger.info("No monitor interfaces. Killing kismet.")
             self.kismet_control.kill_kismet()
         return MQTTResponse(
