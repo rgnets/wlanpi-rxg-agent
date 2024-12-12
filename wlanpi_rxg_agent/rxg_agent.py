@@ -6,12 +6,13 @@ import ssl
 import subprocess
 import time
 from collections import defaultdict
-from typing import Optional
+from typing import Optional, Any
 
 import toml
 from requests import ConnectionError, ConnectTimeout, ReadTimeout
 
 import wlanpi_rxg_agent.utils as utils
+from lib.configuration.agent_config_file import AgentConfigFile
 from rxg_mqtt_client import RxgMqttClient
 from kismet_control import KismetControl
 from lib.configuration.bridge_config_file import BridgeConfigFile
@@ -45,6 +46,11 @@ class RXGAgent:
         self.logger.info("Initializing RXGAgent")
 
         self.bridge_config_file = BridgeConfigFile()
+        self.bridge_config_file.load_or_create_defaults()
+        self.bridge_config_lock = asyncio.Lock()
+        self.agent_config_file = AgentConfigFile()
+        self.agent_config_file.load_or_create_defaults()
+        self.agent_config_lock = asyncio.Lock()
 
         self.async_loop = asyncio.get_event_loop()
 
@@ -66,7 +72,7 @@ class RXGAgent:
 
         self.api_verify_ssl = False
 
-        self.rxg_mqtt_client = RxgMqttClient()
+        self.rxg_mqtt_client = RxgMqttClient(agent_reconfig_callback = self.handle_remote_agent_reconfiguration)
         self.bridge_control = BridgeControl()
 
         # Initialize certificates
@@ -88,17 +94,11 @@ class RXGAgent:
         """
         Loads configuration from the defined config file
         """
-        self.logger.info(f"Loading config file from {self.config_path}")
-        if os.path.exists(self.config_path):
-            config = toml.load(self.config_path)
-        else:
-            self.logger.error(f"Cannot find config file! Check {self.config_path}")
-            raise RXGAgentException(
-                f"Cannot find config file! Check {self.config_path}"
-            )
-        general_config = config["General"]
-        self.override_server = general_config.get("override_rxg", None)
-        self.fallback_server = general_config.get("fallback_rxg", None)
+        self.logger.info(f"Loading config file from {self.bridge_config_file.config_file}")
+        async with self.agent_config_lock:
+            self.agent_config_file.load_or_create_defaults(allow_empty=False)
+            self.override_server = self.agent_config_file.data.get('General').get("override_rxg", None)
+            self.fallback_server = self.agent_config_file.data.get('General').get("fallback_rxg", None)
 
     def test_address_for_rxg(self, ip: str) -> bool:
         """
@@ -281,32 +281,30 @@ class RXGAgent:
         self.logger.info(
             f"Reconfiguring MQTT client with server: {server}, port: {port}, tls: {use_tls}, ca_file: {ca_file}, cert_file: {cert_file}, key_file: {key_file}, cert_reqs: {cert_reqs}"
         )
-        self.rxg_mqtt_client = RxgMqttClient(mqtt_server=server, mqtt_port=port, tls_config=tls_config, identifier=eth0_mac)
+        self.rxg_mqtt_client = RxgMqttClient(mqtt_server=server, mqtt_port=port, tls_config=tls_config, identifier=eth0_mac, agent_reconfig_callback = self.handle_remote_agent_reconfiguration)
         self.logger.info("Starting Internal MQTT Client")
         self.async_loop.create_task(self.rxg_mqtt_client.go())
 
     async def configure_mqtt_bridge(self):
         self.logger.info("Reconfiguring Bridge")
         # Try to load existing toml and preserve. If we fail, it doesn't matter that much.
+        async with self.bridge_config_lock:
+            self.bridge_config_file.load_or_create_defaults()
 
-        self.bridge_config_file.load_or_create_defaults()
+            # Rewrite Bridge's config.toml
+            self.bridge_config_file.data["MQTT"]["server"] = self.active_server
+            self.bridge_config_file.data["MQTT"]["port"] = self.active_port
+            self.bridge_config_file.data["MQTT_TLS"]["use_tls"] = True
+            self.bridge_config_file.data["MQTT_TLS"]["ca_certs"] = self.cert_tool.ca_file
+            self.bridge_config_file.data["MQTT_TLS"]["certfile"] = self.cert_tool.cert_file
+            self.bridge_config_file.data["MQTT_TLS"]["keyfile"] = self.cert_tool.key_file
+            self.bridge_config_file.save()
 
-        # Rewrite Bridge's config.toml
-        self.bridge_config_file.data["MQTT"]["server"] = self.active_server
-        self.bridge_config_file.data["MQTT"]["port"] = self.active_port
-        self.bridge_config_file.data["MQTT_TLS"]["use_tls"] = True
-        self.bridge_config_file.data["MQTT_TLS"]["ca_certs"] = self.cert_tool.ca_file
-        self.bridge_config_file.data["MQTT_TLS"]["certfile"] = self.cert_tool.cert_file
-        self.bridge_config_file.data["MQTT_TLS"]["keyfile"] = self.cert_tool.key_file
+            # Configure the internal client as well, as we transition to using it.
+            await self.reconfigure_mqtt_client(self.active_server, self.active_port, True, self.cert_tool.ca_file, self.cert_tool.cert_file, self.cert_tool.key_file, 2)
 
-        # Configure the internal client as well, as we transition to using it.
-        await self.reconfigure_mqtt_client(self.active_server, self.active_port, True, self.cert_tool.ca_file, self.cert_tool.cert_file, self.cert_tool.key_file, 2)
-
-        self.logger.info("Bridge config written. Restarting service.")
-
-        self.bridge_config_file.save()
-
-        self.bridge_control.restart()
+            self.logger.info("Bridge config written. Restarting service.")
+            self.bridge_control.restart()
 
     async def check_for_new_server(self) -> bool:
         # if not self.active_server:
@@ -419,6 +417,21 @@ class RXGAgent:
 
         if not await self.check_for_new_server() and registration_status:
             await self.check_for_new_certs()
+
+
+    async def handle_remote_agent_reconfiguration(self, new_config:dict[str, Any]):
+
+        async with self.agent_config_lock:
+            if "override_rxg" in new_config:
+                self.override_server = new_config["override_rxg"]
+            if "fallback_rxg" in new_config:
+                self.fallback_server = new_config["fallback_rxg"]
+
+            self.agent_config_file.data["General"] = {
+                "override_rxg": self.override_server,
+                "fallback_rxg": self.fallback_server,
+            }
+            self.agent_config_file.save()
 
 
     @staticmethod

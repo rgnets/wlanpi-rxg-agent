@@ -1,7 +1,7 @@
 import re
 from os import unlink
 from ssl import SSLCertVerificationError
-from typing import Optional, Callable, Union
+from typing import Optional, Callable, Union, Any, Coroutine
 
 import json
 import logging
@@ -38,6 +38,7 @@ class RxgMqttClient:
             wlan_pi_core_base_url: str = "http://127.0.0.1:31415",
             kismet_base_url: str = "http://127.0.0.1:2501",
             identifier: Optional[str] = None,
+            agent_reconfig_callback: Optional[Callable[[dict[str,Any]], Coroutine[Any,Any,None]]] = None,
     ):
         self.logger = logging.getLogger(__name__)
         self.logger.info("Initializing RxgMqttClient")
@@ -51,6 +52,7 @@ class RxgMqttClient:
         self.core_base_url = wlan_pi_core_base_url
         self.kismet_base_url = kismet_base_url
 
+        self.agent_reconfig_callback = agent_reconfig_callback
         self.api_client = ApiClient(server_ip=mqtt_server, verify_ssl=False, timeout=None)
 
         self.my_base_topic = f"wlan-pi/{identifier}/agent"
@@ -395,23 +397,21 @@ class RxgMqttClient:
         utils.run_command("reboot", raise_on_fail=False)
 
     async def set_override_rxg(self, client, payload):
-        self.agent_config.load()
         self.bootloader_config.load()
         self.logger.info(f"Setting override_rxg: {payload}")
-        self.agent_config.data["General"]["override_rxg"] = payload["value"]
         self.bootloader_config.data["boot_server_override"] = payload["value"]
-        self.agent_config.save()
         self.bootloader_config.save()
+        if self.agent_reconfig_callback is not None:
+            await self.agent_reconfig_callback({"override_rxg": payload["value"]})
         return MQTTResponse(status="success", data=json.dumps(self.bootloader_config.data))
 
     async def set_fallback_rxg(self, client, payload):
-        self.agent_config.load()
         self.bootloader_config.load()
         self.logger.info(f"Setting fallback_rxg: {payload}")
-        self.agent_config.data["General"]["fallback_rxg"] = payload["value"]
         self.bootloader_config.data["boot_server_fallback"] = payload["value"]
-        self.agent_config.save()
         self.bootloader_config.save()
+        if self.agent_reconfig_callback is not None:
+            await self.agent_reconfig_callback({"override_rxg": payload["value"]})
         return MQTTResponse(status="success", data=json.dumps(self.bootloader_config.data))
 
     async def set_password(self, payload):
