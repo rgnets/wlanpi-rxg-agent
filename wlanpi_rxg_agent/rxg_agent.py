@@ -472,7 +472,7 @@ class RXGAgent:
             await asyncio.sleep(__seconds)
 
     async def go(self):
-        await self.check_for_new_server()
+        # await self.check_for_new_server()
         periodic_task = self.async_loop.create_task(self.aevery(1, self.do_periodic_checks))
         self.background_tasks.add(periodic_task)
         periodic_task.add_done_callback(self.background_tasks.remove)
