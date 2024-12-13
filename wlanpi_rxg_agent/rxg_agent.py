@@ -272,9 +272,10 @@ class RXGAgent:
         # Configure the internal client
 
         # Shut down the existing client if it's running
-        if self.rxg_mqtt_client.connected or self.rxg_mqtt_client.run:
+        if self.rxg_mqtt_client is not None and (self.rxg_mqtt_client.connected or self.rxg_mqtt_client.run):
             self.logger.info("Stopping Internal MQTT Client")
             await self.rxg_mqtt_client.stop()
+            del self.rxg_mqtt_client
 
         eth0_res = subprocess.run(
             "jc ifconfig eth0", capture_output=True, text=True, shell=True
@@ -410,25 +411,29 @@ class RXGAgent:
         return False, "unknown"
 
     async def do_periodic_checks(self):
-        registration_status = False
-        if self.active_server:
-            registration_status, reg_status_response = self.check_registration_status()
-            self.registered = registration_status
-            if not registration_status:
-                self.handle_registration()
-            elif not reg_status_response.lower() == "approved":
-                self.logger.warning(
-                    "Device has not been approved, decertifying and stopping bridge if it's running."
-                )
-                self.certification_complete = False
-                self.registered = False
-                self.bridge_control.stop()
-            else:
-                if not self.certification_complete or not self.registered:
+        try:
+            self.logger.debug("Running periodic checks")
+            registration_status = False
+            if self.active_server:
+                registration_status, reg_status_response = self.check_registration_status()
+                self.registered = registration_status
+                if not registration_status:
                     self.handle_registration()
+                elif not reg_status_response.lower() == "approved":
+                    self.logger.warning(
+                        "Device has not been approved, decertifying and stopping bridge if it's running."
+                    )
+                    self.certification_complete = False
+                    self.registered = False
+                    self.bridge_control.stop()
+                else:
+                    if not self.certification_complete or not self.registered:
+                        self.handle_registration()
 
-        if not await self.check_for_new_server() and registration_status:
-            await self.check_for_new_certs()
+            if not await self.check_for_new_server() and registration_status:
+                await self.check_for_new_certs()
+        except Exception as e:
+            self.logger.error(f"Something went wrong during periodic checks: {e}", exc_info=e)
 
 
     async def handle_remote_agent_reconfiguration(self, new_config:dict[str, Any]):
