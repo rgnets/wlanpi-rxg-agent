@@ -430,6 +430,13 @@ class RXGAgent:
                     if not self.certification_complete or not self.registered:
                         self.handle_registration()
 
+                # Check MQTT
+                if self.registered and (not self.rxg_mqtt_client or self.rxg_mqtt_client.run == False or (self.mqtt_task is not None and self.mqtt_task.done())):
+                    self.logger.warning("Mqtt task has died and should be running. Triggering reconfiguration of MQTT")
+                    await self.reconfigure_mqtt_client(self.active_server, self.active_port, True,
+                                                       self.cert_tool.ca_file, self.cert_tool.cert_file,
+                                                       self.cert_tool.key_file, 2)
+
             if not await self.check_for_new_server() and registration_status:
                 await self.check_for_new_certs()
         except Exception as e:
@@ -473,6 +480,9 @@ class RXGAgent:
         while True:
             if self.mqtt_task is not None and self.mqtt_task.done():
                 self.logger.warning("Mqtt task may have died:", exc_info=self.mqtt_task.exception())
+
+
+
             await asyncio.sleep(0.5)
 
 

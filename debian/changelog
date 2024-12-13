@@ -1,4 +1,4 @@
-wlanpi-rxg-agent (1.0.0-1+deb12u29) UNRELEASED; urgency=medium
+wlanpi-rxg-agent (1.0.0-1+deb12u30) UNRELEASED; urgency=medium
 
   * Reformat, fix ip behavior
   * Beta release!
@@ -9,8 +9,9 @@ wlanpi-rxg-agent (1.0.0-1+deb12u29) UNRELEASED; urgency=medium
   * patch broken behavior after deregistration
   * Armor up periodic checks
   * Fix route addition...again..
+  * Fixing edge case wehre mqttd can die
 
- -- Michael Ketchel <michael.ketchel@gmail.com>  Fri, 13 Dec 2024 03:01:56 +0000
+ -- Michael Ketchel <michael.ketchel@gmail.com>  Fri, 13 Dec 2024 03:48:50 +0000
 
 wlanpi-rxg-agent (1.0.0-1+deb12u20) unstable; urgency=medium
 
