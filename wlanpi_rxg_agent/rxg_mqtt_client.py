@@ -390,19 +390,29 @@ class RxgMqttClient:
                 # TODO: Do full adapter config here.
 
                 wlan_if = self.wifi_control.get_or_create_interface(interface_name=interface_name)
-
+                self.logger.info(
+                    f"Checking managed state of {interface_name}")
                 wlan_data = config.get('wlan')
                 if wlan_data is None or len(wlan_data) == 0:
+                    self.logger.info(
+                        f"{interface_name} should be disconnected.")
                     if wlan_if.connected:
+                        self.logger.info(
+                            f"{interface_name} is connected to a network. Disconnecting.")
                         wlan_if.disconnect()
                 else:
                     if isinstance(wlan_data, list):
                         wlan_data = wlan_data[0]
+                    self.logger.info(f"{interface_name} should be connected to {wlan_data.get('ssid')}. (Auth hidden) Currently connected to {wlan_if.ssid}")
                     if not (wlan_if.connected and wlan_if.ssid == wlan_data.get('ssid') and wlan_if.psk == wlan_data.get('psk')):
+                        self.logger.info(f"Connection state of {interface_name} is incorrect. Reconnecting.")
                         await wlan_if.connect(ssid=wlan_data.get('ssid'), psk=wlan_data.get('psk'))
+                        self.logger.info(f"Connection state of {interface_name} is complete. Renewing dhcp.")
                         await wlan_if.renew_dhcp()
-                        await asyncio.sleep(5)
-                        await wlan_if.add_default_route()
+                        # self.logger.info(f"Waiting for dhcp to settle.")
+                        # await asyncio.sleep(5)
+                        self.logger.info(f"Adding default routes for {interface_name}.")
+                        await wlan_if.add_default_routes()
 
 
         if self.kismet_control.is_kismet_running() and len(self.kismet_control.active_kismet_interfaces())==0:
