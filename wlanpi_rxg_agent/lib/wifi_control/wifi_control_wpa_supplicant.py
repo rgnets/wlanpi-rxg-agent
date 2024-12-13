@@ -1,9 +1,9 @@
 import asyncio
 import logging
+import re
 from asyncio import AbstractEventLoop
 from pprint import pprint
-from typing import Optional
-
+from typing import Optional, Any
 
 import wpa_supplicant
 from twisted.internet.asyncioreactor import AsyncioSelectorReactor
@@ -113,11 +113,37 @@ class WifiInterface():
             if route["dev"] == self.name and route["dst"] == "default":
                 await run_command_async(["ip", "route", "del", "default", "dev", self.name])
 
+    @staticmethod
+    def parse_lease_file(file_path: str) -> list[dict[str, Any]]:
+        body_pattern=re.compile(r"lease\s+\{(?P<body>.*?)\}", re.MULTILINE | re.DOTALL)
+        leases = []
+        with open(file_path) as f:
+            for match in body_pattern.finditer(f.read()):
+                lease: dict[str,dict[str,str]] = {"option":{}}
+                for line in match.group("body").split("\n"):
+                    data = line.strip().rstrip(";").split(' ', 1)
+                    if len(data) > 0:
+                        if len(data) == 1 and data[0] == "":
+                            continue
+                        if data[0] == "option":
+                            opt_key, opt_val = data[1].split(' ', 1)
+                            lease["option"][opt_key] = opt_val
+                        else:
+                            if len(data) > 1:
+                                lease[data[0]] = data[1]
+                            else:
+                                lease[data[0]] = ''
+                leases.append(lease)
+        return leases
 
-    async def add_default_route(self,
-        router_address: Optional[str] = None,
-        metric: Optional[int] = None,
-    ) -> str:
+
+
+
+
+    async def add_default_routes(self,
+                                 router_addresses: Optional[list[str]] = None,
+                                 metric: Optional[int] = None,
+                                 ) -> list[str]:
         """
         Adds a default route to an interface
         @param router_address: Optionally specify which IP this route is via. If left blank, it will be grabbed from the dhclient lease file.
@@ -127,37 +153,54 @@ class WifiInterface():
         interface=self.name
 
         # Obtain the router address if not manually provided
-        if router_address is None:
-            with open(f"/var/lib/dhcp/dhclient.{interface}.leases", "r") as lease_file:
-                lease_data = lease_file.readlines()
-                router_address = (
-                    next((s for s in lease_data if "option routers" in s))
-                    .strip()
-                    .strip(";")
-                    .split(" ", 2)[-1]
-                )
+        self.logger.info(f"Checking lease files for routes for {interface}")
+        if router_addresses is None:
+            my_lease = None
+            base_leases = self.parse_lease_file(f"/var/lib/dhcp/dhclient.leases")
+            self.logger.debug("Base leases: " + str(base_leases))
+            for lease in sorted([x for x in base_leases if "interface" in x and x["interface"].strip('"') == interface ], key=lambda d: d['expire'].split(' ', 1)[1]):
+                if "interface" in lease and lease["interface"].strip('"') == interface:
+                    my_lease = lease
+                    break
 
-        # Calculate a new metric if needed
-        if metric is None:
-            routes: list[dict[str, Any]] = (await run_command_async(  # type: ignore
-                ["ip", "--json", "route"]
-            )).output_from_json()
-            default_routes = [x.get("metric", 0) for x in routes if x["dst"] == "default"]
-            if len(default_routes):
-                metric = max(default_routes)
-                if metric < 200:
-                    metric = 200
-                else:
-                    metric += 1
+            if not my_lease:
+                subfile_leases = self.parse_lease_file(f"/var/lib/dhcp/dhclient.{interface}.leases")
+                self.logger.debug("Subfile leases: " + str(subfile_leases))
+                for lease in sorted([x for x in subfile_leases if "interface" in x and x["interface"].strip('"') == interface ], key=lambda d: d['expire'].split(' ', 1)[1]):
+                    if "interface" in lease and lease["interface"].strip('"') == interface:
+                        my_lease = lease
+                        break
+            if not my_lease or "routers" not in my_lease["option"]:
+                self.logger.error(f"Unable to obtain router address for {interface}")
+                raise WifiInterfaceException(f"Unable to obtain router address for {interface}")
+            else:
+                router_addresses = my_lease["option"]["routers"].split(" ")
+                self.logger.info(f"Using router addresses {router_addresses} from lease file")
 
-        # Generate and set new default route
-        new_route = f"default via {router_address} dev {interface}"
-        if metric:
-            new_route += f" metric {metric}"
+        new_routes = []
+        for router_address in router_addresses:
+            # Calculate a new metric if needed
+            if metric is None:
+                routes: list[dict[str, Any]] = (await run_command_async(  # type: ignore
+                    ["ip", "--json", "route"]
+                )).output_from_json()
+                default_routes = [x.get("metric", 0) for x in routes if x["dst"] == "default"]
+                if len(default_routes):
+                    metric = max(default_routes)
+                    if metric < 200:
+                        metric = 200
+                    else:
+                        metric += 1
 
-        command = ["ip", "route", "add", *new_route.split(" ")]
-        await run_command_async(command)
-        return new_route
+            # Generate and set new default route
+            new_route = f"default via {router_address} dev {interface}"
+            if metric:
+                new_route += f" metric {metric}"
+
+            command = ["ip", "route", "add", *new_route.split(" ")]
+            await run_command_async(command)
+            new_routes.append(new_route)
+        return new_routes
 
 
     def blocking_scan(self):
@@ -280,8 +323,8 @@ if __name__ == "__main__":
 
     async def main():
         wc = WiFiControlWpaSupplicant()
-
-        wlan_if = wc.get_or_create_interface("wlan0")
+        interface_name ="wlan2"
+        wlan_if = wc.get_or_create_interface(interface_name)
         # wlan_if.blocking_scan()
         # pprint(wlan_if.interface.get_networks())
         # pprint(wlan_if.interface.get_current_network())
@@ -294,8 +337,15 @@ if __name__ == "__main__":
         # except WifiInterfaceTimeoutError as e:
         #     logger.error("Timeout connecting")
         # # wlan_if.blocking_scan()
-        pprint(wlan_if.interface.get_current_network())
+        # pprint(wlan_if.interface.get_current_network())
 
+        await wlan_if.connect(ssid="Kronos-5", psk="***REMOVED***")
+        logger.info(f"Connection state of {interface_name} is complete. Renewing dhcp.")
+        await wlan_if.renew_dhcp()
+        # self.logger.info(f"Waiting for dhcp to settle.")
+        # await asyncio.sleep(5)
+        logger.info(f"Adding default routes for {interface_name}.")
+        await wlan_if.add_default_routes()
         print("Done")
 
         del wc
