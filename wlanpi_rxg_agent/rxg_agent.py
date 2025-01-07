@@ -183,18 +183,19 @@ class RXGAgent:
                 response_data["status"],
                 response_data["ca"],
                 response_data["certificate"],
+                response_data.get("host"),
                 response_data["port"],
             )
         else:
             self.logger.warning(
                 f"get_client_cert failed: {get_cert_resp.status_code}: {get_cert_resp.reason} "
             )
-            return False, None, None, None, None
+            return False, None, None, None, None, None
 
     def renew_client_cert(self, server_ip: Optional[str] = None):
         if not server_ip:
             server_ip = self.active_server
-        get_cert_success, status, ca_str, cert_str, port = self.get_client_cert(
+        get_cert_success, status, ca_str, cert_str, host, port = self.get_client_cert(
             server_ip=server_ip
         )
         if get_cert_success:
@@ -213,6 +214,8 @@ class RXGAgent:
             self.cert_tool.save_cert(cert_str)
             self.current_ca = ca_str
             self.cert_tool.save_ca(ca_str)
+            if host is not None:
+                self.active_server = host
             self.active_port = port
             return True
         return False
@@ -366,7 +369,7 @@ class RXGAgent:
     async def check_for_new_certs(self, server_ip: Optional[str] = None):
         if not server_ip:
             server_ip = self.active_server
-        get_cert_success, status, ca_str, cert_str, port = self.get_client_cert(
+        get_cert_success, status, ca_str, cert_str, host, port = self.get_client_cert(
             server_ip=server_ip
         )
 
@@ -384,6 +387,10 @@ class RXGAgent:
                 # self.cert_tool.save_cert(cert_str)
             if port and port != self.active_port:
                 self.logger.info("Cert has changed! We need to reload.")
+                need_to_reload = True
+                # self.active_port = port
+            if host and host != self.active_server:
+                self.logger.info("Server has changed! We need to reload.")
                 need_to_reload = True
                 # self.active_port = port
 
