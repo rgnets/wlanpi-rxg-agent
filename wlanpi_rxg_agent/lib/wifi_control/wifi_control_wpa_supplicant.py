@@ -239,9 +239,9 @@ class WifiInterface():
 
         net_cfg = {
             "ssid": ssid,
-            # "scan_ssid": 1,
+            "scan_ssid": 1,
             # "disabled":0,
-            "ieee80211w": 0 # Default to no protected mgmt frames
+            "ieee80211w": 1 # Default to no protected mgmt frames
         }
         if psk:
             net_cfg["psk"] = psk
