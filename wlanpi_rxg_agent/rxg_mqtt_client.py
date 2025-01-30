@@ -450,6 +450,7 @@ class RxgMqttClient:
         await utils.run_command_async("chpasswd", input=f"wlanpi:{payload['value']}" )
         return MQTTResponse(status="success", data=json.dumps(True))
 
+
     async def default_callback(self, client, topic, message: Union[str, bytes]) -> None:
         """
         Default callback for sending a REST response on to the MQTT endpoint.
