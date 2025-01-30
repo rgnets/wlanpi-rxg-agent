@@ -33,7 +33,10 @@ dependencies = [
     "dbus-python",
     "PyGObject",
     "kismet-rest",
-    "wpa_supplicant"
+    "wpa_supplicant",
+    "jinja2",
+    "fastapi",
+    "uvicorn",
 ]
 
 [project.optional-dependencies]

@@ -2,6 +2,7 @@ import asyncio
 import datetime
 import json
 import logging
+import pprint
 import shlex
 import subprocess
 import time
@@ -323,4 +324,5 @@ def get_eth0_mac() -> str:
 
 
 if __name__ == "__main__":
-    print(get_interface_ip_addr("eth0"))
+    # print(get_interface_ip_addr("eth0"))
+    pprint.pp(get_default_gateways())

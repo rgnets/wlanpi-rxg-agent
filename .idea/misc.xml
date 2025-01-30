@@ -3,5 +3,5 @@
   <component name="Black">
     <option name="sdkName" value="Remote Python 3.9.2 (sftp://wlanpi@dev-wlanpi:22/usr/bin/python3) (2)" />
   </component>
-  <component name="ProjectRootManager" version="2" project-jdk-name="Dev WLANPI Remote rXg Agent Python 3.9.2" project-jdk-type="Python SDK" />
+  <component name="ProjectRootManager" version="2" project-jdk-name="Remote Python 3.9.2 (sftp://wlanpi@dev-wlanpi:22/home/wlanpi/.virtualenvs/wlanpi-rxg-agent/bin/python)" project-jdk-type="Python SDK" />
 </project>
