@@ -1,4 +1,4 @@
-wlanpi-rxg-agent (1.0.0-1+deb12u32) UNRELEASED; urgency=medium
+wlanpi-rxg-agent (1.0.0-1+deb12u33) UNRELEASED; urgency=medium
 
   * Reformat, fix ip behavior
   * Beta release!
@@ -12,8 +12,9 @@ wlanpi-rxg-agent (1.0.0-1+deb12u32) UNRELEASED; urgency=medium
   * Fixing edge case wehre mqttd can die
   * Fix crashing if reconnecting to a server after reboot after update
   * Add support for rXg overriding connection host
+  * Fixed PMF connection issues
 
- -- Michael Ketchel <michael.ketchel@gmail.com>  Tue, 07 Jan 2025 00:18:57 +0000
+ -- Michael Ketchel <michael.ketchel@gmail.com>  Thu, 30 Jan 2025 18:20:02 +0000
 
 wlanpi-rxg-agent (1.0.0-1+deb12u20) unstable; urgency=medium
 
