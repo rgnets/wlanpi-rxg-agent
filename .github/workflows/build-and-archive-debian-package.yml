@@ -33,20 +33,8 @@ jobs:
           arch: ${{ matrix.arch }}
 
       - name: Archive artifacts and upload to GitHub
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: wlanpi-rxg-agent-${{ matrix.distro }}-${{ matrix.arch }}
           path: ${{ steps.build-debian-package.outputs.deb-package }}
-        
-  slack-workflow-status:
-    if:  ${{ always() && (vars.SKIP_SLACK != 'true') }}
-    name: Post Workflow Status to Slack
-    needs:
-      - sbuild
-    runs-on: "${{ vars.RUNS_ON || 'ubuntu-22.04' }}"
-    steps:
-      - name: Slack Workflow Notification
-        uses: Gamesight/slack-workflow-status@master
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+
