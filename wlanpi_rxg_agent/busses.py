@@ -1,4 +1,4 @@
-from pymessagebus import CommandBus, MessageBus
+from lib.event_bus import CommandBus, MessageBus
 
 command_bus = CommandBus()
 message_bus = MessageBus()

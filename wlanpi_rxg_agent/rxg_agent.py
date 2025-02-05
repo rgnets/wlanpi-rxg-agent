@@ -1,32 +1,23 @@
 import asyncio
 import json
+import subprocess
+
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
 import logging
 import os
-import ssl
-import subprocess
-import time
 from asyncio import Task
-from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional, Any
 
-import toml
-from requests import ConnectionError, ConnectTimeout, ReadTimeout
-
 import wlanpi_rxg_agent.utils as utils
-from lib.configuration.agent_config_file import AgentConfigFile
-from lib.event_bus import EventBus
-from lib.domain import RxgAgentEvents
-from lib.rxg_supplicant.domain import RxgSupplicantEvents
+from busses import message_bus
+import lib.domain as agent_domain
 from lib.rxg_supplicant.supplicant import RxgSupplicant
 from rxg_mqtt_client import RxgMqttClient
-from kismet_control import KismetControl
 from lib.configuration.bridge_config_file import BridgeConfigFile
-from structures import TLSConfig
-from wlanpi_rxg_agent.api_client import ApiClient
 from wlanpi_rxg_agent.bridge_control import BridgeControl
 from wlanpi_rxg_agent.certificate_tool import CertificateTool
-from wlanpi_rxg_agent.models.exceptions import RXGAgentException
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(encoding="utf-8", level=logging.DEBUG)
@@ -45,7 +36,7 @@ class RXGAgent:
 
     def __init__(
         self,
-        event_bus: EventBus,
+        # event_bus: EventBus,
         verify_ssl: bool = True,
         config_path: str = CONFIG_FILE,
     ):
@@ -55,11 +46,8 @@ class RXGAgent:
         self.bridge_config_file = BridgeConfigFile()
         self.bridge_config_file.load_or_create_defaults()
         self.bridge_config_lock = asyncio.Lock()
-        self.agent_config_file = AgentConfigFile()
-        self.agent_config_file.load_or_create_defaults()
-        self.agent_config_lock = asyncio.Lock()
 
-        self.event_bus = event_bus
+        # self.event_bus = event_bus
 
 
         self.async_loop = asyncio.get_event_loop()
@@ -67,8 +55,8 @@ class RXGAgent:
         self.verify_ssl = verify_ssl
         self.config_path = config_path
 
-        self.override_server: Optional[str] = None
-        self.fallback_server: Optional[str] = None
+        # self.override_server: Optional[str] = None
+        # self.fallback_server: Optional[str] = None
         self.active_server: Optional[str] = None
         self.new_server: Optional[str] = None
 
@@ -82,7 +70,6 @@ class RXGAgent:
 
         self.api_verify_ssl = False
 
-        self.rxg_mqtt_client = RxgMqttClient(agent_reconfig_callback = self.handle_remote_agent_reconfiguration)
         self.bridge_control = BridgeControl()
 
         self.mqtt_task:Optional[Task] = None
@@ -105,18 +92,7 @@ class RXGAgent:
     #     )
     #     self.csr = self.cert_tool.get_csr(node_name=utils.get_hostname())
 
-    def load_config(self) -> None:
-        """
-        Loads configuration from the defined config file
-        """
-        self.logger.info(f"Loading config file from {self.bridge_config_file.config_file}")
-        # async with self.agent_config_lock:
-        self.agent_config_file.load_or_create_defaults(allow_empty=False)
-        self.override_server = self.agent_config_file.data.get('General').get("override_rxg", None)
-        self.fallback_server = self.agent_config_file.data.get('General').get("fallback_rxg", None)
 
-
-    #
     # # /etc/wlanpi-rxg-agent/
     #
     #
@@ -364,28 +340,28 @@ async def async_wrapper(sync_task, *args):
 async def main():
     # Todo: load override
     # Todo: Test behavior on ssl failure
-
-    event_bus = EventBus()
+    #
+    # event_bus = EventBus()
 
     agent = RXGAgent(
         verify_ssl=False,
-        event_bus = event_bus,
+        # event_bus = event_bus,
     )
-    supplicant = RxgSupplicant(event_bus=event_bus)
+    # supplicant = RxgSupplicant(event_bus=event_bus)
 
     # await asyncio.gather(event_bus.run(), agent.connect())
     await agent.go()
 
 
 
+eth0_res = subprocess.run(
+    "jc ifconfig eth0", capture_output=True, text=True, shell=True
+)
 
-import asyncio
-from contextlib import asynccontextmanager
+eth0_data = json.loads(eth0_res.stdout)[0]
+eth0_mac = eth0_data["mac_addr"]
 
-import fastapi
-from fastapi import FastAPI
 
-event_bus = EventBus()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -397,13 +373,14 @@ async def lifespan(app: FastAPI):
     #     verify_ssl=False,
     #     event_bus=event_bus,
     # )
-    supplicant = RxgSupplicant(event_bus=event_bus)
-
-    event_bus.emit(RxgAgentEvents.STARTUP_COMPLETE, None)
+    supplicant = RxgSupplicant()
+    rxg_mqtt_client = RxgMqttClient(identifier=eth0_mac)
+    message_bus.handle(agent_domain.Messages.StartupComplete())
     # asyncio.create_task(every(2, lambda : print("Ping")))
     # asyncio.create_task(every(3, lambda : print("Pong")))
     yield
-    event_bus.emit("shutdown_started", None)
+    message_bus.handle(agent_domain.Messages.ShutdownStarted())
+    await rxg_mqtt_client.stop_two()
     # Clean up the ML models and release the resources
     # ml_models.clear()
 
@@ -416,7 +393,7 @@ async def root():
 
 @app.get("/reload_agent")
 async def reload_agent():
-    event_bus.emit('agent_config_updated', None)
+    message_bus.handle(agent_domain.Messages.AgentConfigUpdated())
 
 #
 # def startup():

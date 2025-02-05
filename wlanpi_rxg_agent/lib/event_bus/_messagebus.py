@@ -1,3 +1,5 @@
+import asyncio
+import logging
 from collections import defaultdict
 import typing as t
 
@@ -10,6 +12,8 @@ class MessageBus(api.MessageBus):
             *,
             middlewares: t.List[api.Middleware] = None
     ) -> None:
+        self.logger = logging.getLogger(__name__)
+        self.logger.info(f"Initializing {__name__}")
         self._handlers: t.Dict[type, t.List[t.Callable]] = defaultdict(list)
         self._middlewares_chain = self._get_middlewares_callables_chain(
             middlewares,
@@ -17,6 +21,7 @@ class MessageBus(api.MessageBus):
         )
 
     def add_handler(self, message_class: type, message_handler: t.Callable) -> None:
+        self.logger.info(f"Adding handler for {message_class}")
         if not isinstance(message_class, type):
             raise api.MessageHandlerMappingRequiresAType(
                 f"add_handler() first argument must be a type, got '{type(message_class)}"
@@ -33,6 +38,7 @@ class MessageBus(api.MessageBus):
         Returns `True` if a handler was found for this message class and caller and removed,
         `False` otherwise
         """
+        self.logger.info(f"Removing handler for {message_class}")
         if not isinstance(message_class, type):
             raise api.MessageHandlerMappingRequiresAType(
                 f"add_handler() first argument must be a type, got '{type(message_class)}"
@@ -54,9 +60,11 @@ class MessageBus(api.MessageBus):
         return True
 
     def handle(self, message: object) -> t.List[t.Any]:
+        self.logger.debug(f"Handling: {message}")
         if not self.has_handler_for(message.__class__):
             return []
         result = self._middlewares_chain(message)
+        self.logger.debug(f"Result {result}")
         return result
 
     def has_handler_for(self, message_class: type) -> bool:
@@ -101,4 +109,4 @@ class MessageBus(api.MessageBus):
 
     @staticmethod
     def _trigger_handler(message: object, handler: t.Callable) -> t.Any:
-        return handler(message)
+        return asyncio.create_task(handler(message))
