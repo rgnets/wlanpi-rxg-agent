@@ -7,14 +7,14 @@ from typing import Optional
 import wlanpi_rxg_agent.utils as utils
 
 from requests import ConnectTimeout, ReadTimeout
-
+from busses import message_bus, command_bus
 from api_client import ApiClient
 from certificate_tool import CertificateTool
 from constants import CONFIG_DIR
 from lib.configuration.agent_config_file import AgentConfigFile
-from lib.event_bus import EventBus
-from lib.domain import RxgAgentEvents
-from lib.rxg_supplicant.domain import  Messages as RxgSupplicantMessages, RxgSupplicantEvents
+
+import lib.domain as agent_domain
+import lib.rxg_supplicant.domain as supplicant_domain
 from models.exceptions import RXGAgentException
 
 from busses import command_bus,message_bus
@@ -35,7 +35,6 @@ class RxgSupplicant:
 
     def __init__(
             self,
-            event_bus: EventBus,
             verify_ssl: bool = True,
     ):
         self.logger = logging.getLogger(__name__)
@@ -43,7 +42,6 @@ class RxgSupplicant:
         self.supplicant_state: RxgSupplicantState = RxgSupplicantState.UNASSOCIATED
         self.verify_ssl = verify_ssl
         self.api_verify_ssl = False
-        self.event_bus = event_bus
 
         # Config Files
         self.agent_config_file = AgentConfigFile()
@@ -67,35 +65,138 @@ class RxgSupplicant:
         # self.current_ca = ""
         # self.current_cert = ""
 
+        self.last_certified_connection: Optional[supplicant_domain.Messages.NewCertifiedConnection] = None
+
         self.setup_listeners()
 
 
     def setup_listeners(self):
-        self.event_bus.add_listener(RxgAgentEvents.STARTUP_COMPLETE, self.startup_complete_handler)
-        self.event_bus.add_listener('agent_config_updated', self.reload_handler)
+        message_bus.add_handler(agent_domain.Messages.StartupComplete, self.startup_complete_handler)
+        message_bus.add_handler(agent_domain.Messages.AgentConfigUpdated, self.reload_handler)
+        message_bus.add_handler(agent_domain.Messages.AgentConfigUpdate, self.config_update_handler)
+        message_bus.add_handler(supplicant_domain.Messages.Certified, self.re_emit_certified_if_new)
+
+
+    async def re_emit_certified_if_new(self, event:supplicant_domain.Messages.Certified):
+        if event != self.last_certified_connection:
+            self.last_certified_connection = event
+            message_bus.handle(supplicant_domain.Messages.NewCertifiedConnection(**event.__dict__))
 
     async def startup_complete_handler(self, event):
-        self.load_config()
-        server_ip = self.find_rxg()
-        await self.configure_server(server_ip=server_ip)
+        await self.load_config()
+
+        while True:
+            try:
+                server_ip = self.find_rxg()
+                res = await self.configure_server(server_ip=server_ip)
+                if not res:
+                    raise RXGAgentException("Unable to configure server.")
+                self.active_server = server_ip
+                break
+            # Generally, catching "Exception" is bad. However, this is *not* allowed to die
+            # or else we lose contact with the agent.
+            except Exception as e:
+                msg = "Error finding rXg Waiting 10 seconds and trying again. "
+                self.logger.warning(msg, exc_info=e)
+                message_bus.handle(supplicant_domain.Messages.Error(msg, e))
+                await asyncio.sleep(10)
+        await asyncio.sleep(30)
+        asyncio.create_task(self.monitor_for_new_rxg(),name="monitor_for_new_rxg")
+
+    async def monitor_for_new_rxg(self, wait_period=60):
+        while True:
+            try:
+                server_ip = self.find_rxg()
+                res = await self.configure_server(server_ip=server_ip)
+                if not res:
+                    raise RXGAgentException("Unable to configure server.")
+                self.active_server = server_ip
+            # Generally, catching "Exception" is bad. However, this is *not* allowed to die
+            # or else we lose contact with the agent.
+            except Exception as e:
+                msg = "Error finding rXg Waiting 10 seconds and trying again. "
+                self.logger.warning(msg, exc_info=e)
+                message_bus.handle(supplicant_domain.Messages.Error(msg,e))
+            await asyncio.sleep(wait_period)
+
+
 
     async def reload_handler(self, event):
-        # Emit commands to trigger connnection shutdowns for reload, or whatever is appropriate
+        # Emit commands to trigger connection shutdowns for reload, or whatever is appropriate
 
         # For now, calling the startup handler should handle things just fine
         await self.startup_complete_handler(event)
 
 
 
-    def load_config(self) -> None:
+    async def config_update_handler(self, update: agent_domain.Messages.AgentConfigUpdate) -> None:
+        """
+        Updates the configuration and emits any necessary signals afterwards
+        :param update:agent_domain.Messages.AgentConfigUpdate
+        :return: None
+        """
+
+        changed = False
+        async with self.agent_config_lock:
+            if update.safe:
+                if update.fallback_rxg is not None:
+                    if self.fallback_server != update.fallback_rxg:
+                        changed = True
+                    if not len(update.fallback_rxg):
+                        update.fallback_rxg=None
+                    elif self.test_address_for_rxg(update.fallback_rxg):
+                        self.fallback_server = update.fallback_rxg
+                if update.override_rxg is not None:
+                    if self.override_server != update.override_rxg:
+                        changed = True
+                    if not len(update.override_rxg):
+                        update.override_rxg = None
+                    elif self.test_address_for_rxg(update.override_rxg):
+                        self.override_server = update.override_rxg
+
+            else:
+                if update.fallback_rxg is not None:
+                    if self.fallback_server != update.fallback_rxg:
+                        changed = True
+                    if len(update.fallback_rxg):
+                        self.fallback_server = update.fallback_rxg
+                    else:
+                        update.fallback_rxg = None
+                if update.override_rxg is not None:
+                    if self.override_server != update.override_rxg:
+                        changed = True
+                    if len(update.override_rxg):
+                        self.override_server = update.override_rxg
+                    else:
+                        update.override_rxg = None
+
+            if changed:
+                await self.save_config()
+        if changed:
+            message_bus.handle(agent_domain.Messages.AgentConfigUpdated)
+
+
+    async def load_config(self) -> None:
         """
         Loads configuration from the defined config file
         """
         # self.logger.info(f"Loading config file from {self.bridge_config_file.config_file}")
-        # async with self.agent_config_lock:
-        self.agent_config_file.load_or_create_defaults(allow_empty=False)
-        self.override_server = self.agent_config_file.data.get('General').get("override_rxg", None)
-        self.fallback_server = self.agent_config_file.data.get('General').get("fallback_rxg", None)
+        async with self.agent_config_lock:
+            self.agent_config_file.load_or_create_defaults(allow_empty=False)
+            self.override_server = self.agent_config_file.data.get('General').get("override_rxg", None)
+            self.fallback_server = self.agent_config_file.data.get('General').get("fallback_rxg", None)
+
+
+    async def save_config(self) -> None:
+        async with self.agent_config_lock:
+            # if "override_rxg" in new_config:
+            #     self.override_server = new_config["override_rxg"]
+            # if "fallback_rxg" in new_config:
+            #     self.fallback_server = new_config["fallback_rxg"]
+            self.agent_config_file.data["General"]["override_rxg"] =  self.override_server
+            self.agent_config_file.data["General"]["fallback_rxg"] =  self.fallback_server
+            self.agent_config_file.save()
+
 
 
     def test_address_for_rxg(self, ip: str) -> bool:
@@ -220,7 +321,7 @@ class RxgSupplicant:
             return False
 
 
-    def renew_client_cert(self, server_ip):
+    def renew_client_cert(self, server_ip) -> tuple[bool, Optional[supplicant_domain.Messages.Certified]]:
         get_cert_success, status, ca_str, cert_str, host, port = self.get_client_cert(
             server_ip=server_ip
         )
@@ -229,12 +330,12 @@ class RxgSupplicant:
                 self.logger.warning(
                     "Server has not approved registration yet."
                 )
-                return False
+                return False, None
             if not cert_str:
                 self.logger.warning(
                     "Server has not provided a certificate."
                 )
-                return False
+                return False, None
 
             # TODO: Emit this data for use by other parts of the system.
             # self.current_cert = cert_str
@@ -244,8 +345,18 @@ class RxgSupplicant:
             # if host is not None:
             #     self.active_server = host
             # self.active_port = port
-            return True
-        return False
+            return True, supplicant_domain.Messages.Certified(
+                host=host,
+                port=port,
+                ca=ca_str,
+                certificate=cert_str,
+                status=status,
+                ca_file = self.cert_tool.ca_file,
+                certificate_file = self.cert_tool.cert_file,
+                key_file = self.cert_tool.key_file,
+                cert_reqs = 2
+            )
+        return False, None
 
 
     # async def handle_registration(self, server_ip: Optional[str] = None) -> bool:
@@ -254,43 +365,44 @@ class RxgSupplicant:
             registered = await self.check_registration(server_ip=server_ip)
             if registered:
                 self.supplicant_state = RxgSupplicantState.REGISTERED
-                self.event_bus.emit(RxgSupplicantEvents.REGISTERED, server_ip)
+                message_bus.handle(supplicant_domain.Messages.Registered())
             else:
                 self.supplicant_state = RxgSupplicantState.UNREGISTERED
-                self.event_bus.emit(RxgSupplicantEvents.UNREGISTERED, server_ip)
+                message_bus.handle(supplicant_domain.Messages.Unregistered())
 
                 self.logger.info(f"Not registered with {server_ip}. Registering...")
                 # Reinitialize the certificate tool with the active server
                 self.cert_tool = CertificateTool(cert_directory=self.cert_dir)
                 self.csr = self.cert_tool.get_csr(node_name=utils.get_hostname())
-                self.event_bus.emit(RxgSupplicantEvents.REGISTERING, server_ip)
+                message_bus.handle(supplicant_domain.Messages.Registering())
                 registered = await self.register_with_server(server_ip=server_ip)
 
             # By now, the client should be registered. If not, we're waiting for a successful attempt.
             # Attempt to get our cert and CA
             if registered:
-                self.event_bus.emit(RxgSupplicantEvents.REGISTERED, server_ip)
+                message_bus.handle(supplicant_domain.Messages.Registered())
                 self.supplicant_state = RxgSupplicantState.REGISTERED
                 self.logger.debug(
                     f"Registered with {server_ip}. Attempting to get cert info."
                 )
                 # self.supplicant_state = RxgSupplicantState.CERTIFYING
-                self.event_bus.emit(RxgSupplicantEvents.CERTIFYING, server_ip)
-                cert_result = self.renew_client_cert(server_ip=server_ip)
+                message_bus.handle(supplicant_domain.Messages.Certifying())
+                cert_result, certified = self.renew_client_cert(server_ip=server_ip)
                 if cert_result:
                     self.supplicant_state = RxgSupplicantState.CERTIFIED
-                    self.event_bus.emit(RxgSupplicantEvents.CERTIFIED, server_ip)
+                    if certified:
+                        message_bus.handle(certified)
                     return True
                 else:
-                    self.event_bus.emit(RxgSupplicantEvents.CERTIFICATION_FAILED, server_ip)
+                    message_bus.handle(supplicant_domain.Messages.CertificationFailed())
                     return False
             else:
-                self.event_bus.emit(RxgSupplicantEvents.REGISTRATION_FAILED, server_ip)
+                message_bus.handle(supplicant_domain.Messages.RegistrationFailed())
                 return False
             return False
         except (ConnectTimeout, ConnectionError) as e:
             self.logger.warning(f"Configuring {self.active_server} failed: {e}")
-            self.event_bus.emit(RxgSupplicantEvents.ERROR, e)
+            message_bus.handle(supplicant_domain.Messages.Error(e))
             return False
 
 

@@ -7,7 +7,7 @@ class CommandBus(api.CommandBus):
     def __init__(
         self,
         *,
-        middlewares: t.List[api.Middleware] = None,
+        middlewares: t.Optional[t.List[api.Middleware]] = None,
         allow_result: bool = True,
         locking: bool = True,
     ) -> None:
@@ -19,7 +19,7 @@ class CommandBus(api.CommandBus):
     def add_handler(self, message_class: type, message_handler: t.Callable) -> None:
         if self._messagebus.has_handler_for(message_class):
             raise api.CommandHandlerAlreadyRegisteredForAType(
-                f"A command handler is already registed for message class '{message_class}'."
+                f"A command handler is already registered for message class '{message_class}'."
             )
         self._messagebus.add_handler(message_class, message_handler)
 
