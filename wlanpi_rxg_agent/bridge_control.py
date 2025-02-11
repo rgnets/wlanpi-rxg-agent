@@ -17,12 +17,14 @@ class BridgeControl:
         )
         self.manager = dbus.Interface(systemd1, "org.freedesktop.systemd1.Manager")
 
-    def setup_listeners(self):
-        # message_bus.add_handler(agent_domain.Messages.StartupComplete, self.startup_complete_handler)
-        message_bus.add_handler(supplicant_domain.Messages.NewCertifiedConnection, self.certified_handler)
-        message_bus.add_handler(supplicant_domain.Messages.RestartInternalMqtt, self.certified_handler)
-        message_bus.add_handler(agent_domain.Messages.ShutdownStarted, self.shutdown_handler)
-        # message_bus.add_handler(agent_domain.Messages.AgentConfigUpdate, self.config_update_handler)
+    #     self.setup_listeners()
+    #
+    # def setup_listeners(self):
+    #     # message_bus.add_handler(agent_domain.Messages.StartupComplete, self.startup_complete_handler)
+    #     message_bus.add_handler(supplicant_domain.Messages.NewCertifiedConnection, self.certified_handler)
+    #     message_bus.add_handler(supplicant_domain.Messages.RestartInternalMqtt, self.certified_handler)
+    #     message_bus.add_handler(agent_domain.Messages.ShutdownStarted, self.shutdown_handler)
+    #     # message_bus.add_handler(agent_domain.Messages.AgentConfigUpdate, self.config_update_handler)
 
 
 

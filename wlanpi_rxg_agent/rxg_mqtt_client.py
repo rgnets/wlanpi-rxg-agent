@@ -21,6 +21,8 @@ from aiomqtt import TLSParameters
 from busses import message_bus, command_bus
 import lib.domain as agent_domain
 import lib.rxg_supplicant.domain as supplicant_domain
+import lib.agent_actions.domain as actions_domain
+import lib.wifi_control.domain as wifi_domain
 from api_client import ApiClient
 from kismet_control import KismetControl
 from lib.configuration.agent_config_file import AgentConfigFile
@@ -43,7 +45,7 @@ class RxgMqttClient:
             identifier: Optional[str] = None
     ):
         self.logger = logging.getLogger(__name__)
-        self.logger.info("Initializing RxgMqttClient")
+        self.logger.info(f"Initializing {__name__}")
 
         self.use_tls = True
         self.run = False
@@ -53,7 +55,7 @@ class RxgMqttClient:
         self.mqtt_port = None
         self.core_base_url = wlan_pi_core_base_url
         self.kismet_base_url = kismet_base_url
-        self.wifi_control = WiFiControlWpaSupplicant()
+        # self.wifi_control = WiFiControlWpaSupplicant()
 
         self.my_base_topic = f"wlan-pi/{identifier}/agent"
 
@@ -92,7 +94,6 @@ class RxgMqttClient:
 
         self.kismet_control = KismetControl()
 
-        self.bootloader_config = BootloaderConfigFile()
         self.agent_config = AgentConfigFile()
         self.bridge_config = BridgeConfigFile()
 
@@ -339,14 +340,24 @@ class RxgMqttClient:
                     mqtt_response = await self.handle_tcp_dump_on_interface(self.mqtt_client, payload)
                 elif subtopic == "configure_radios":
                     mqtt_response = await self.configure_radios(self.mqtt_client, payload)
+
                 elif subtopic == "override_rxg/set":
-                    mqtt_response = await self.set_override_rxg(self.mqtt_client, payload)
+                    res = await command_bus.handle(actions_domain.Commands.SetRxgs(
+                        override=payload["value"]
+                    ))
+                    mqtt_response = MQTTResponse(status="success", data=json.dumps(res))
                 elif subtopic == "fallback_rxg/set":
-                    mqtt_response = await self.set_fallback_rxg(self.mqtt_client, payload)
+                    res = await command_bus.handle(actions_domain.Commands.SetRxgs(
+                        fallback=payload["value"]
+                    ))
+                    mqtt_response = MQTTResponse(status="success", data=json.dumps(res))
+
                 elif subtopic == "password/set":
-                    mqtt_response = await self.set_password(payload)
+                    res = await command_bus.handle(actions_domain.Commands.SetCredentials(user="wlanpi", password=payload['value']))
+                    mqtt_response = MQTTResponse(status="success", data=json.dumps(True))
                 elif subtopic == "reboot":
-                    mqtt_response = await self.reboot()
+                    res = await command_bus.handle(actions_domain.Commands.Reboot())
+                    mqtt_response = MQTTResponse(status="success", data=json.dumps(res))
                 else:
                     mqtt_response = MQTTResponse(
                         status="validation_error",
@@ -491,7 +502,9 @@ class RxgMqttClient:
                 await run_command_async(['ip', 'link', 'set', interface_name, 'up'])
                 # TODO: Do full adapter config here.
 
-                wlan_if = self.wifi_control.get_or_create_interface(interface_name=interface_name)
+
+                wlan_if = command_bus.handle(wifi_domain.Commands.GetOrCreateInterface(if_name=interface_name))
+                # wlan_if = self.wifi_control.get_or_create_interface(interface_name=interface_name)
                 self.logger.info(
                     f"Checking managed state of {interface_name}")
                 wlan_data = config.get('wlan')
@@ -524,35 +537,6 @@ class RxgMqttClient:
             status="success",
             data= (await run_command_async(['iwconfig'], raise_on_fail=False)).stdout
         )
-
-    async def reboot(self):
-        self.logger.info(f"Rebooting")
-        utils.run_command("reboot", raise_on_fail=False)
-
-    async def set_override_rxg(self, client, payload):
-        self.bootloader_config.load()
-        self.logger.info(f"Setting override_rxg: {payload}")
-        self.bootloader_config.data["boot_server_override"] = payload["value"]
-        self.bootloader_config.save()
-        message_bus.handle(agent_domain.Messages.AgentConfigUpdate(override_rxg=payload["value"]))
-        # if self.agent_reconfig_callback is not None:
-        #     await self.agent_reconfig_callback({"override_rxg": payload["value"]})
-        return MQTTResponse(status="success", data=json.dumps(self.bootloader_config.data))
-
-    async def set_fallback_rxg(self, client, payload):
-        self.bootloader_config.load()
-        self.logger.info(f"Setting fallback_rxg: {payload}")
-        self.bootloader_config.data["boot_server_fallback"] = payload["value"]
-        self.bootloader_config.save()
-        message_bus.handle(agent_domain.Messages.AgentConfigUpdate(fallback_rxg=payload["value"]))
-        # if self.agent_reconfig_callback is not None:
-        #     await self.agent_reconfig_callback({"fallback_rxg": payload["value"]})
-        return MQTTResponse(status="success", data=json.dumps(self.bootloader_config.data))
-
-    async def set_password(self, payload):
-        self.logger.info(f"Setting new password.")
-        await utils.run_command_async("chpasswd", input=f"wlanpi:{payload['value']}" )
-        return MQTTResponse(status="success", data=json.dumps(True))
 
 
     async def default_callback(self, client, topic, message: Union[str, bytes]) -> None:
