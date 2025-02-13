@@ -1,3 +1,4 @@
+import inspect
 import re
 from asyncio import AbstractEventLoop
 from os import unlink
@@ -353,6 +354,12 @@ class RxgMqttClient:
 
                 if subtopic in topic_handlers:
                     res = topic_handlers[subtopic]()
+
+                    if isinstance(res, asyncio.Task):
+                        res = await res
+                    # The promise returned from the task will then be handled here
+                    if inspect.iscoroutine(res):
+                        res = await res
                     mqtt_response = MQTTResponse(status="success", data=json.dumps(res))
 
                 else:
