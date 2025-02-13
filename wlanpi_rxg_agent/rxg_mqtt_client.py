@@ -334,30 +334,27 @@ class RxgMqttClient:
                 self.logger.warning(f"Received message on topic '{msg.topic}': {str(msg.payload)}")
                 self.logger.debug(f"Payload: {payload}")
 
-                if subtopic == "get_clients":
-                    mqtt_response = await self.exec_get_clients(self.mqtt_client)
-                elif subtopic == "tcpdump_on_interface":
-                    mqtt_response = await self.handle_tcp_dump_on_interface(self.mqtt_client, payload)
-                elif subtopic == "configure_radios":
-                    mqtt_response = await self.configure_radios(self.mqtt_client, payload)
+                topic_handlers = {
+                    "get_clients":
+                        lambda : self.exec_get_clients(self.mqtt_client),
+                    "tcpdump_on_interface":
+                        lambda : self.handle_tcp_dump_on_interface(self.mqtt_client, payload) ,
+                    "configure_radios":
+                        lambda : self.configure_radios(self.mqtt_client, payload),
+                    "override_rxg/set":
+                        lambda : command_bus.handle(actions_domain.Commands.SetRxgs(override=payload["value"])),
+                    "fallback_rxg/set":
+                        lambda : command_bus.handle(actions_domain.Commands.SetRxgs( fallback=payload["value"])),
+                    "password/set":
+                        lambda : command_bus.handle(actions_domain.Commands.SetCredentials(user="wlanpi", password=payload['value'])),
+                    "reboot":
+                        lambda : command_bus.handle(actions_domain.Commands.Reboot()),
+                }
 
-                elif subtopic == "override_rxg/set":
-                    res = await command_bus.handle(actions_domain.Commands.SetRxgs(
-                        override=payload["value"]
-                    ))
-                    mqtt_response = MQTTResponse(status="success", data=json.dumps(res))
-                elif subtopic == "fallback_rxg/set":
-                    res = await command_bus.handle(actions_domain.Commands.SetRxgs(
-                        fallback=payload["value"]
-                    ))
+                if subtopic in topic_handlers:
+                    res = topic_handlers[subtopic]()
                     mqtt_response = MQTTResponse(status="success", data=json.dumps(res))
 
-                elif subtopic == "password/set":
-                    res = await command_bus.handle(actions_domain.Commands.SetCredentials(user="wlanpi", password=payload['value']))
-                    mqtt_response = MQTTResponse(status="success", data=json.dumps(True))
-                elif subtopic == "reboot":
-                    res = await command_bus.handle(actions_domain.Commands.Reboot())
-                    mqtt_response = MQTTResponse(status="success", data=json.dumps(res))
                 else:
                     mqtt_response = MQTTResponse(
                         status="validation_error",
@@ -547,7 +544,13 @@ class RxgMqttClient:
         :param message:
         :return:
         """
-        self.logger.info(f"Default callback. Topic: {topic} Message: {str(message)}")
+        info_msg_max_size = 100 #max chars for info logging
+        stringified_message = str(message)
+        if len(stringified_message) > info_msg_max_size:
+            self.logger.info(f"Default callback. Topic: {topic} Message: {stringified_message[:info_msg_max_size]}... <truncated>")
+        else:
+            self.logger.info(f"Default callback. Topic: {topic} Message: {stringified_message[:info_msg_max_size]}... <truncated>")
+        self.logger.debug(f"Default callback. Topic: {topic} Message: {stringified_message}")
         await client.publish(topic, message)
 
     async def __aenter__(self) -> object:

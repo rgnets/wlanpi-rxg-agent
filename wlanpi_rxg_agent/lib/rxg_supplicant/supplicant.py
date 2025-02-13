@@ -283,7 +283,7 @@ class RxgSupplicant:
 
     async def check_registration(self, server_ip:str):
         api_client = ApiClient(server_ip=server_ip, verify_ssl=self.api_verify_ssl)
-        self.logger.debug(f"Checking if we need to register with {api_client.ip}")
+        self.logger.info(f"Checking if we need to register with {api_client.ip}")
         resp = api_client.check_device()
         if resp.status_code == 200:
             response_data = resp.json()
@@ -382,7 +382,7 @@ class RxgSupplicant:
             if registered:
                 message_bus.handle(supplicant_domain.Messages.Registered())
                 self.supplicant_state = RxgSupplicantState.REGISTERED
-                self.logger.debug(
+                self.logger.info(
                     f"Registered with {server_ip}. Attempting to get cert info."
                 )
                 # self.supplicant_state = RxgSupplicantState.CERTIFYING

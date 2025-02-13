@@ -5,20 +5,18 @@ import subprocess
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 import logging
-import os
-from asyncio import Task
 from concurrent.futures import ThreadPoolExecutor
-from typing import Optional, Any
 
-import wlanpi_rxg_agent.utils as utils
+# import wlanpi_rxg_agent.utils as utils
 from busses import message_bus, command_bus
 import lib.domain as agent_domain
 import lib.rxg_supplicant.domain as supplicant_domain
+from lib.agent_actions.actions import AgentActions
 from lib.rxg_supplicant.supplicant import RxgSupplicant
+from lib.wifi_control.wifi_control_wpa_supplicant import WiFiControlWpaSupplicant
 from rxg_mqtt_client import RxgMqttClient
 from lib.configuration.bridge_config_file import BridgeConfigFile
 from wlanpi_rxg_agent.bridge_control import BridgeControl
-from wlanpi_rxg_agent.certificate_tool import CertificateTool
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(encoding="utf-8", level=logging.DEBUG)
@@ -26,11 +24,10 @@ logging.basicConfig(encoding="utf-8", level=logging.DEBUG)
 logging.getLogger("requests").setLevel(logging.WARNING)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 logging.getLogger("wlanpi_rxg_agent.rxg_agent").setLevel(logging.INFO)
-
-# CONFIG_DIR = "/etc/wlanpi-rxg-agent"
-# CONFIG_FILE = os.path.join(CONFIG_DIR, "config.toml")
-# BRIDGE_CONFIG_DIR = "/etc/wlanpi-mqtt-bridge"
-# BRIDGE_CONFIG_FILE = os.path.join(BRIDGE_CONFIG_DIR, "config.toml")
+logging.getLogger("lib.event_bus._messagebus").setLevel(logging.INFO)
+logging.getLogger("lib.event_bus._commandbus").setLevel(logging.INFO)
+logging.getLogger("lib.rxg_supplicant.supplicant").setLevel(logging.INFO)
+logging.getLogger("rxg_mqtt_client").setLevel(logging.INFO)
 
 
 class RXGAgent:
@@ -129,14 +126,25 @@ async def lifespan(app: FastAPI):
     #     verify_ssl=False,
     #     event_bus=event_bus,
     # )
+
+    # Wifi control currently has no dependencies
+    wifi_control = WiFiControlWpaSupplicant()
+    agent_actions = AgentActions()
     supplicant = RxgSupplicant()
     rxg_mqtt_client = RxgMqttClient(identifier=eth0_mac)
+
+    async def heartbeat_task():
+        logger.info("Heartbeat!")
+        # await asyncio.sleep(10)
+
+
     message_bus.handle(agent_domain.Messages.StartupComplete())
     # asyncio.create_task(every(2, lambda : print("Ping")))
-    # asyncio.create_task(every(3, lambda : print("Pong")))
+    asyncio.create_task(aevery(3, heartbeat_task))
     yield
     message_bus.handle(agent_domain.Messages.ShutdownStarted())
     await rxg_mqtt_client.stop_two()
+    wifi_control.shutdown()
     # Clean up the ML models and release the resources
     # ml_models.clear()
 

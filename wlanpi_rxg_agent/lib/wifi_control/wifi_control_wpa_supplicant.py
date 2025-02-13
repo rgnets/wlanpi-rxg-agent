@@ -2,11 +2,14 @@ import asyncio
 import logging
 import re
 from asyncio import AbstractEventLoop
-from pprint import pprint
 from typing import Optional, Any
 
 import wpa_supplicant
 from twisted.internet.asyncioreactor import AsyncioSelectorReactor
+
+from busses import message_bus, command_bus
+from lib.wifi_control import domain as wifi_domain
+
 
 from core_client import CoreClient
 from lib.wifi_control.wifi_control import WifiControl
@@ -36,38 +39,49 @@ class WifiInterface():
         self.logger = logging.getLogger(f"{__name__}:")
         self.logger.info(f"Initializing {__name__}")
         self.name = name
-        self.supplicant =supplicant
+        self.supplicant = supplicant
         self.interface = interface
 
         self.ssid = None
         self.psk = None
-        # self.encryption = None
-        # self.authentication = None
-
-        # self.connected = False
 
         if event_loop is None:
             self.event_loop = asyncio.get_event_loop()
         else:
             self.event_loop = event_loop
 
-    #     def prop_change_callback(result):
-    #         # self.logger.debug(f"{self.name}: {result}")
-    #         if "State" in result:
-    #             if result["State"] == "completed":
-    #                 self.connected = True
-    #         if "DisconnectReason" in result:
-    #             self.connected = False
-    #
-    #
-    #     self.prop_signal = self.interface.register_signal('PropertiesChanged', prop_change_callback)
-    #
-    # def __del__(self):
-    #     try:
-    #         self.prop_signal.cancel()
-    #     except RuntimeError as e:
-    #         self.logger.warning(f"Unable to cancel prop_signal on exit: {e}", exc_info=e)
-    #
+        def prop_change_callback(result):
+            self.logger.debug(f"MSR: {self.name}: {result}")
+            if "State" in result:
+                message_bus.handle(wifi_domain.Messages.WpaSupplicantStateChanged(interface=self.name, state = result["State"], details=result))
+                # message_bus.handle(wifi_domain.Messages.WifiControlEvent(interface=self.name, details=result))
+                if result["State"] == "completed":
+                    # message_bus.handle(wifi_domain.Messages.WifiControlEvent(interface=self.name, details=result))
+                    self.logger.debug(f"Connection of {self.name} to {self.ssid} with {self.psk} completed")
+                    # message_bus.handle(wifi_domain.Messages.Completed(interface=self.name, details=result))
+
+            elif "DisconnectReason" in result:
+                message_bus.handle(
+                    wifi_domain.Messages.Disconnection(interface=self.name, details=result))
+                if result["DisconnectReason"] == 15:
+                    self.logger.debug(f"Disconnecting: {result['DisconnectReason']}")
+                if result["DisconnectReason"] == 13:
+                    self.logger.debug(f"Disconnecting: {result['DisconnectReason']}")
+            elif "Scanning" in result:
+                message_bus.handle(wifi_domain.Messages.ScanningStateChanged(interface=self.name, scanning=result["Scanning"], details=result))
+            else:
+                self.logger.debug(f"Unhandled event on {self.name}: {result}")
+                message_bus.handle(wifi_domain.Messages.WpaSupplicantEvent(interface=self.name, details=result))
+
+        self.prop_signal = self.interface.register_signal('PropertiesChanged', prop_change_callback)
+
+
+    def __del__(self):
+        try:
+            self.prop_signal.cancel()
+        except RuntimeError as e:
+            self.logger.warning(f"Unable to cancel prop_signal on exit: {e}", exc_info=e)
+
 
     @property
     def connected(self):
@@ -87,16 +101,24 @@ class WifiInterface():
 
 
     async def renew_dhcp(self):
+
         try:
+            message_bus.handle(wifi_domain.Messages.DhcpRenewing(interface=self.name))
+            self.logger.debug("Renewing DHCP lease on interface %s", self.name)
             # Release the current DHCP lease
+            self.logger.debug(f"Releasing current DHCP lease on interface {self.name}")
             await run_command_async(["dhclient", "-r", self.name], raise_on_fail=True)
             time.sleep(3)
             # Obtain a new DHCP lease
+            self.logger.debug(f"Requesting new DHCP lease on interface {self.name}")
             await run_command_async(["dhclient", self.name], raise_on_fail=True)
+            self.logger.debug(f"New DHCP lease obtained on interface {self.name}")
+            message_bus.handle(wifi_domain.Messages.DhcpRenewed(interface=self.name))
         except RunCommandError as err:
             logging.warning(
                 f"Failed to renew DHCP. Code:{err.return_code}, Error: {err.error_msg}"
             )
+            message_bus.handle(wifi_domain.Messages.DhcpRenewalFailed(interface=self.name, message=err.error_msg, exc=err))
             return None
 
     async def remove_default_routes(self):
@@ -104,7 +126,7 @@ class WifiInterface():
         Removes the default route for the interface. Primarily used if you used add_default_route for the interface.
         @return: None
         """
-
+        self.logger.debug(f"Removing default routes on {self.name}")
         # Get existing routes for this adapter
         routes: list[dict[str, Any]] = (await run_command_async(  # type: ignore
             ["ip", "--json", "route"]
@@ -137,9 +159,6 @@ class WifiInterface():
         return leases
 
 
-
-
-
     async def add_default_routes(self,
                                  router_addresses: Optional[list[str]] = None,
                                  metric: Optional[int] = None,
@@ -150,6 +169,8 @@ class WifiInterface():
         @param metric: Optional metric for the route. If left as none, a lowest-priority metric starting at 200 will be calculated unless there are no other default routes.
         @return: A string representing the new default route.
         """
+        self.logger.debug(f"Adding default routes on {self.name}")
+
         interface=self.name
 
         # Obtain the router address if not manually provided
@@ -200,10 +221,13 @@ class WifiInterface():
             command = ["ip", "route", "add", *new_route.split(" ")]
             await run_command_async(command)
             new_routes.append(new_route)
+        self.logger.debug(f"Added default routes on {self.name}: {new_routes}")
         return new_routes
 
 
     def blocking_scan(self):
+        self.logger.debug(f"Performing blocking scan on {self.name}")
+
         scan_results = self.interface.scan(block=True)
         for bss in scan_results:
             print(bss.get_ssid())
@@ -221,7 +245,7 @@ class WifiInterface():
         signal = None
         states = []
         def prop_change_callback(result):
-            self.logger.debug(f"{self.name}: {result}")
+            # self.logger.debug(f"{self.name}: {result}")
             if "State" in result:
                 states.append(result)
                 if result["State"] == "completed":
@@ -229,10 +253,10 @@ class WifiInterface():
                     add_network_future.set_result(states)
             if "DisconnectReason" in result:
                 if result["DisconnectReason"] == 15:
-                    self.logger.debug(f"Disconnecting: {result['DisconnectReason']}")
+                    # self.logger.debug(f"Disconnecting: {result['DisconnectReason']}")
                     add_network_future.set_exception(WifiInterfaceAuthenticationError(f"An authentication error occurred: {states}"))
                 if result["DisconnectReason"] == 13:
-                    self.logger.debug(f"Disconnecting: {result['DisconnectReason']}")
+                    # self.logger.debug(f"Disconnecting: {result['DisconnectReason']}")
                     add_network_future.set_exception(WifiInterfaceDisconnectedError(f"A disconnection occurred: {states}"))
 
         self.remove_all_networks()
@@ -241,7 +265,7 @@ class WifiInterface():
             "ssid": ssid,
             "scan_ssid": 1,
             # "disabled":0,
-            "ieee80211w": 1 # Default to no protected mgmt frames
+            "ieee80211w": 1 # Default to optional protected mgmt frames
         }
         if psk:
             net_cfg["psk"] = psk
@@ -284,7 +308,9 @@ class WiFiControlWpaSupplicant(WifiControl):
         # self.reactor = AsyncioSelectorReactor(eventloop=self.event_loop)
         self.logger.debug("Setting up reactor")
         self.reactor = AsyncioSelectorReactor(eventloop=asyncio.new_event_loop())
+        # self.reactor = AsyncioSelectorReactor()
         # self.reactor.install()
+        self.logger.debug("Starting reactor")
         self.reactor_thread = threading.Thread(target=self.reactor.run, kwargs={'installSignalHandlers': 0})
         self.reactor_thread.start()
         self.reactor._justStopped = False
@@ -292,20 +318,39 @@ class WiFiControlWpaSupplicant(WifiControl):
         time.sleep(0.1)
         self.current_adapter_config = {}
 
+        self.logger.debug("Starting Driver")
         # Start Driver
         self.driver = WpaSupplicantDriver(self.reactor)
+        self.logger.debug("Connecting to driver")
 
         # Connect to the supplicant, which returns the "root" D-Bus object for wpa_supplicant
         self.supplicant = self.driver.connect()
 
         self.interfaces = {}
 
-    def __del__(self):
+        self.logger.debug("Setting up listeners")
+        self.setup_listeners()
+
+
+
+    def setup_listeners(self):
+        # TODO: Surely we can implement this as some sort of decorator function?
+        pairs = (
+            (wifi_domain.Commands.GetOrCreateInterface, lambda event: self.get_or_create_interface(event.if_name)),
+        )
+
+        for command, handler in pairs:
+            command_bus.add_handler(command, handler)
+
+    # def __del__(self):
+    #     self.reactor.stop()
+    #     self.reactor_thread.join(timeout=4)
+
+    def shutdown(self):
         self.reactor.stop()
         self.reactor_thread.join(timeout=4)
 
     def get_or_create_interface(self, interface_name):
-
 
         if interface_name not in self.interfaces:
             try:
@@ -348,5 +393,11 @@ if __name__ == "__main__":
         await wlan_if.add_default_routes()
         print("Done")
 
-        del wc
-    asyncio.get_event_loop().run_until_complete(main())
+
+
+        print("stop here?")
+
+
+    global mainproc
+    mainproc = main()
+    asyncio.get_event_loop().run_until_complete(mainproc)
