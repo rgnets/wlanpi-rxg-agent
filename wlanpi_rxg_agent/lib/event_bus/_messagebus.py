@@ -21,7 +21,7 @@ class MessageBus(api.MessageBus):
         )
 
     def add_handler(self, message_class: type, message_handler: t.Callable) -> None:
-        self.logger.info(f"Adding handler for {message_class}")
+        self.logger.debug(f"Adding handler for {message_class}")
         if not isinstance(message_class, type):
             raise api.MessageHandlerMappingRequiresAType(
                 f"add_handler() first argument must be a type, got '{type(message_class)}"
@@ -30,7 +30,6 @@ class MessageBus(api.MessageBus):
             raise api.MessageHandlerMappingRequiresACallable(
                 f"add_handler() second argument must be a callable, got '{type(message_handler)}"
             )
-
         self._handlers[message_class].append(message_handler)
 
     def remove_handler(self, message_class: type, message_handler: t.Callable) -> bool:
@@ -38,7 +37,7 @@ class MessageBus(api.MessageBus):
         Returns `True` if a handler was found for this message class and caller and removed,
         `False` otherwise
         """
-        self.logger.info(f"Removing handler for {message_class}")
+        self.logger.debug(f"Removing handler for {message_class}")
         if not isinstance(message_class, type):
             raise api.MessageHandlerMappingRequiresAType(
                 f"add_handler() first argument must be a type, got '{type(message_class)}"
@@ -109,4 +108,9 @@ class MessageBus(api.MessageBus):
 
     @staticmethod
     def _trigger_handler(message: object, handler: t.Callable) -> t.Any:
-        return asyncio.create_task(handler(message))
+        # Check if it's a coroutine function, and execute it with create_task() if so
+        if asyncio.iscoroutinefunction(handler):
+            return asyncio.create_task(handler(message))
+        else:
+            return handler(message)
+
