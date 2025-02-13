@@ -16,6 +16,7 @@ from lib.rxg_supplicant.supplicant import RxgSupplicant
 from lib.wifi_control.wifi_control_wpa_supplicant import WiFiControlWpaSupplicant
 from rxg_mqtt_client import RxgMqttClient
 from lib.configuration.bridge_config_file import BridgeConfigFile
+from utils import aevery
 from wlanpi_rxg_agent.bridge_control import BridgeControl
 
 logger = logging.getLogger(__name__)
@@ -51,7 +52,9 @@ class RXGAgent:
         message_bus.add_handler(supplicant_domain.Messages.NewCertifiedConnection, self.certified_handler)
         message_bus.add_handler(agent_domain.Messages.ShutdownStarted, self.shutdown_handler)
 
-    async def certified_handler(self, event: supplicant_domain.Messages.Certified) -> None:
+
+    async def certified_handler(self, event: supplicant_domain.Messages.NewCertifiedConnection) -> None:
+        ''' Reconfigures the MQTT Bridge service whenever a new Certified event hits.'''
         # Reconfigure MQTT Bridge
         self.logger.info("Reconfiguring Bridge")
         # Try to load existing toml and preserve. If we fail, it doesn't matter that much.
@@ -88,23 +91,6 @@ class RXGAgent:
             await func(*args, **kwargs)
             await asyncio.sleep(__seconds)
 
-
-async def every(__seconds: float, func, *args, **kwargs):
-    while True:
-        func(*args, **kwargs)
-        await asyncio.sleep(__seconds)
-
-
-
-async def aevery(__seconds: float, func, *args, **kwargs):
-    while True:
-        await func(*args, **kwargs)
-        await asyncio.sleep(__seconds)
-
-
-async def async_wrapper(sync_task, *args):
-    loop = asyncio.get_running_loop()
-    await loop.run_in_executor(None, sync_task, *args)
 
 
 eth0_res = subprocess.run(
