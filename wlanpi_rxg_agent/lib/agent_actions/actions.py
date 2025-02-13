@@ -41,7 +41,7 @@ class AgentActions():
 
         if data.fallback is not None:
             self.logger.info(f"Setting fallback_rxg: {data.fallback}")
-            self.bootloader_config.data["boot_server_fallback"] = data.fallback["value"]
+            self.bootloader_config.data["boot_server_fallback"] = data.fallback
         self.bootloader_config.save()
         message_bus.handle(agent_domain.Messages.AgentConfigUpdate(
             override_rxg=data.override,
@@ -51,7 +51,7 @@ class AgentActions():
         #     await self.agent_reconfig_callback({"override_rxg": value})
         return self.bootloader_config.data
 
-    async def set_password(self, payload):
+    async def set_password(self, event:actions_domain.Commands.SetCredentials):
         self.logger.info(f"Setting new password.")
-        return await utils.run_command_async("chpasswd", input=f"wlanpi:{payload['value']}")
+        return await utils.run_command_async("chpasswd", input=f"{event.user}:{event.password}")
 
