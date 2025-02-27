@@ -37,6 +37,7 @@ dependencies = [
     "jinja2",
     "fastapi",
     "uvicorn",
+    "aiocron",
 ]
 
 [project.optional-dependencies]
