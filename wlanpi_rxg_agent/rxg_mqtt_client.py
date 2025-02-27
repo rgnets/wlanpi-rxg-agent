@@ -350,6 +350,12 @@ class RxgMqttClient:
                         lambda : command_bus.handle(actions_domain.Commands.SetCredentials(user="wlanpi", password=payload['value'])),
                     "reboot":
                         lambda : command_bus.handle(actions_domain.Commands.Reboot()),
+                    "configure/traceroutes":
+                        lambda: command_bus.handle(actions_domain.Commands.ConfigureTraceroutes()),
+                    "configure/ping_targets":
+                        lambda: command_bus.handle(actions_domain.Commands.ConfigurePingTargets(targets=payload)),
+                    "configure/agent":
+                        lambda: command_bus.handle(actions_domain.Commands.ConfigureAgent(**payload)),
                 }
 
                 if subtopic in topic_handlers:

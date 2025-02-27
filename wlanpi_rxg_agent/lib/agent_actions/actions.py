@@ -23,6 +23,7 @@ class AgentActions():
             (actions_domain.Commands.SetRxgs, self.set_rxgs),
             (actions_domain.Commands.SetCredentials, self.set_password),
             (actions_domain.Commands.Reboot, self.reboot),
+            (actions_domain.Commands.ConfigureAgent, self.configure_agent),
         )
 
         for command, handler in pairs:
@@ -55,3 +56,7 @@ class AgentActions():
         self.logger.info(f"Setting new password.")
         return await utils.run_command_async("chpasswd", input=f"{event.user}:{event.password}")
 
+
+
+    async def configure_agent(self, event:actions_domain.Commands.ConfigureAgent):
+        self.logger.info(f"Configuring agent: {event}", )
