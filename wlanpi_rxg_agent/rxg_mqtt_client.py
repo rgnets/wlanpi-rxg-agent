@@ -98,34 +98,31 @@ class RxgMqttClient:
         self.agent_config = AgentConfigFile()
         self.bridge_config = BridgeConfigFile()
 
+
+        self.message_handler_pairs = [
+            (supplicant_domain.Messages.NewCertifiedConnection, self.certified_handler),
+            (supplicant_domain.Messages.RestartInternalMqtt, self.certified_handler),
+            (agent_domain.Messages.ShutdownStarted, self.shutdown_handler),
+            # (agent_domain.Messages.StartupComplete, self.startup_complete_handler),
+            # (agent_domain.Messages.AgentConfigUpdate, self.config_update_handler),
+        ]
+
         self.setup_listeners()
         self.mqtt_listener_task: Any = None
 
 
     def setup_listeners(self):
-        # message_bus.add_handler(agent_domain.Messages.StartupComplete, self.startup_complete_handler)
-        message_bus.add_handler(supplicant_domain.Messages.NewCertifiedConnection, self.certified_handler)
-        message_bus.add_handler(supplicant_domain.Messages.RestartInternalMqtt, self.certified_handler)
-        message_bus.add_handler(agent_domain.Messages.ShutdownStarted, self.shutdown_handler)
-        # message_bus.add_handler(agent_domain.Messages.AgentConfigUpdate, self.config_update_handler)
+        for message, handler in self.message_handler_pairs:
+            message_bus.add_handler(message, handler)
 
-    async def certified_handler_old(self, event:supplicant_domain.Messages.Certified) -> None:
+    def teardown_listeners(self):
+        for message, handler in self.message_handler_pairs:
+            message_bus.remove_handler(message, handler)
+
+    def __del__(self):
+        self.teardown_listeners()
         if self.run:
-            await self.stop()
-
-        tls_config = TLSConfig(ca_certs=event.ca_file, certfile=event.certificate_file, keyfile=event.key_file,
-                               cert_reqs=ssl.VerifyMode(event.cert_reqs), tls_version=ssl.PROTOCOL_TLSv1_2,
-                               ciphers=None) if self.use_tls else None
-        self.mqtt_server = event.host
-        self.mqtt_port = event.port
-        self.mqtt_client = aiomqtt.Client(
-            event.host,
-            port=event.port,
-            tls_params=TLSParameters(**tls_config.__dict__) if tls_config else None,
-            will=aiomqtt.Will(f"{self.my_base_topic}/status", "Abnormally Disconnected", 1, True)
-        )
-        loop = asyncio.get_event_loop()
-        loop.create_task(self.go(), name="MQTT Loop")
+            self.stop()
 
     async def shutdown_handler(self, event: agent_domain.Messages.ShutdownStarted) -> None:
         if self.run:
