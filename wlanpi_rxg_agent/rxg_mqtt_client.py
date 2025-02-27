@@ -23,7 +23,6 @@ from busses import message_bus, command_bus
 import lib.domain as agent_domain
 import lib.rxg_supplicant.domain as supplicant_domain
 import lib.agent_actions.domain as actions_domain
-import lib.wifi_control.domain as wifi_domain
 from api_client import ApiClient
 from kismet_control import KismetControl
 from lib.configuration.agent_config_file import AgentConfigFile
@@ -41,8 +40,6 @@ class RxgMqttClient:
 
     def __init__(
             self,
-            wlan_pi_core_base_url: str = "http://127.0.0.1:31415",
-            kismet_base_url: str = "http://127.0.0.1:2501",
             identifier: Optional[str] = None
     ):
         self.logger = logging.getLogger(__name__)
@@ -54,8 +51,6 @@ class RxgMqttClient:
 
         self.mqtt_server = None
         self.mqtt_port = None
-        self.core_base_url = wlan_pi_core_base_url
-        self.kismet_base_url = kismet_base_url
         # self.wifi_control = WiFiControlWpaSupplicant()
 
         self.my_base_topic = f"wlan-pi/{identifier}/agent"
@@ -92,8 +87,6 @@ class RxgMqttClient:
         # Holds scheduled jobs from `scheduler` so we can clean them up
         # on exit.
         self.scheduled_jobs: list[schedule.Job] = []
-
-        self.kismet_control = KismetControl()
 
         self.agent_config = AgentConfigFile()
         self.bridge_config = BridgeConfigFile()
@@ -251,15 +244,15 @@ class RxgMqttClient:
 
                 topic_handlers = {
                     "get_clients":
-                        lambda : self.exec_get_clients(self.mqtt_client),
+                        lambda: command_bus.handle(actions_domain.Commands.GetClients()),
                     "tcpdump_on_interface":
-                        lambda : self.handle_tcp_dump_on_interface(self.mqtt_client, payload) ,
+                        lambda: command_bus.handle(actions_domain.Commands.TCPDump(**payload, upload_ip=self.mqtt_server)),
                     "configure_radios":
-                        lambda : self.configure_radios(self.mqtt_client, payload),
+                        lambda: command_bus.handle(actions_domain.Commands.ConfigureRadios(**payload)),
                     "override_rxg/set":
                         lambda : command_bus.handle(actions_domain.Commands.SetRxgs(override=payload["value"])),
                     "fallback_rxg/set":
-                        lambda : command_bus.handle(actions_domain.Commands.SetRxgs( fallback=payload["value"])),
+                        lambda : command_bus.handle(actions_domain.Commands.SetRxgs(fallback=payload["value"])),
                     "password/set":
                         lambda : command_bus.handle(actions_domain.Commands.SetCredentials(user="wlanpi", password=payload['value'])),
                     "reboot":
@@ -324,152 +317,6 @@ class RxgMqttClient:
                     errors=[[utils.get_full_class_name(e), str(e)]],
                 ).to_json(),
             )
-
-    async def exec_get_clients(self, client):
-        if self.kismet_control.is_kismet_running():
-            seen_clients = self.kismet_control.get_seen_devices()
-        else:
-            seen_clients = self.kismet_control.empty_seen_devices()
-        return MQTTResponse(
-            data=json.dumps(seen_clients),
-        )
-
-    async def handle_tcp_dump_on_interface(self,client,payload):
-        required_keys = ["interface", "upload_token"]
-        for key in required_keys:
-            if not key in payload:
-                return MQTTResponse(
-                    status= "validation_error",
-                    errors=[
-                        [
-                            "RxgMqttClient.handle_tcp_dump_on_interface",
-                            f"Missing required key '{key}' in payload",
-                        ]
-                    ])
-        result = await self.tcpdump_on_interface(
-            interface_name=payload["interface"],
-            upload_token=payload["upload_token"],
-            max_packets=payload.get("max_packets", None),
-            timeout=payload.get("timeout", None),
-            filter=payload.get("filter", None),
-        )
-
-        return MQTTResponse(
-            data=result
-        )
-
-    async def tcpdump_on_interface(self, interface_name, upload_token, filter:Optional[str], max_packets: Optional[int]=None, timeout: Optional[int]=None) -> str:
-        self.logger.info(f"Starting tcpdump on interface {interface_name}")
-
-        if timeout is None and max_packets is None:
-            # Forcibly set a 1-minute timeout if no timeout is provided.
-            timeout = 60
-
-        # Query kismet control to see if the interface is one it has active, if so, append "mon"
-        if self.kismet_control.is_kismet_running() and interface_name in self.kismet_control.active_kismet_interfaces().keys() and not interface_name.endswith("mon"):
-            interface_name += "mon"
-
-        random_str = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
-        filepath = f"/tmp/{random_str}.pcap"
-
-        cmd = ["tcpdump", "-i", interface_name, '-w', filepath]
-
-        if max_packets:
-            cmd.extend(["-c", str(max_packets)])
-        if timeout:
-            cmd = ["timeout", "--preserve-status", str(timeout)] + cmd
-        if filter:
-            cmd.extend(filter.split(' '))
-
-        result = ''
-        try:
-            self.logger.info(f"Starting tcpdump with command: {cmd}")
-            c_res = await run_command_async(cmd, use_shlex=False)
-            result = c_res.stdout + c_res.stderr
-            self.logger.info(f"Finished tcpdump on interface {interface_name}")
-
-            api_client = ApiClient(server_ip=self.mqtt_server, verify_ssl=False, timeout=None)
-            # Then get a token and upload it
-            self.logger.info(f"Uploading dump file to {api_client.ip}")
-            ul_result = await api_client.upload_tcpdump(file_path=filepath, submit_token=upload_token)
-            self.logger.info(f"Finished upload. Result: {ul_result.status_code} { ul_result.reason} {ul_result.text}")
-        finally:
-            self.logger.info(f"Unlinking {filepath}")
-            unlink(filepath)
-        return result
-
-    async def configure_radios(self, client, payload):
-        self.logger.info(f"Configuring radios: New payload: {payload}")
-        for interface_name, config in payload.get("interfaces", {}).items():
-            # if not interface_name in self.kismet_control.available_kismet_interfaces().keys():
-            #     return MQTTResponse(
-            #         status="validation_error",
-            #         errors=[
-            #             [
-            #                 "RxgMqttClient.configure_radios",
-            #                 f"Interface '{interface_name}' is not available",
-            #             ]
-            #         ],
-            #     )
-            new_mode = config.get("mode",'')
-            if new_mode == "monitor":
-                self.logger.debug(f"{interface_name} should be in monitor mode.")
-                if not self.kismet_control.is_kismet_running():
-                    self.logger.debug(f"Starting kismet on {interface_name}mon")
-                    self.kismet_control.start_kismet(interface_name)
-                else:
-                    if interface_name not in self.kismet_control.all_kismet_sources().keys():
-                        self.logger.debug(f"Adding {interface_name}")
-                        self.kismet_control.add_source(interface_name)
-                    if interface_name not in self.kismet_control.active_kismet_interfaces().keys():
-                        self.logger.debug(f"Enabling {interface_name}mon")
-                        self.kismet_control.open_source_by_name(interface_name)
-                        self.kismet_control.resume_source_by_name(interface_name)
-            else:
-                self.logger.debug(f"{interface_name} should be in {new_mode} mode.")
-                # Teardown kismet monitor control
-                if self.kismet_control.is_kismet_running() and interface_name in self.kismet_control.active_kismet_interfaces().keys():
-                    self.kismet_control.close_source_by_name(interface_name)
-                await run_command_async(['iw', 'dev', interface_name + "mon", 'del'], raise_on_fail=False)
-                await run_command_async(['ip', 'link', 'set', interface_name, 'up'])
-                # TODO: Do full adapter config here.
-
-
-                wlan_if = command_bus.handle(wifi_domain.Commands.GetOrCreateInterface(if_name=interface_name))
-                # wlan_if = self.wifi_control.get_or_create_interface(interface_name=interface_name)
-                self.logger.info(
-                    f"Checking managed state of {interface_name}")
-                wlan_data = config.get('wlan')
-                if wlan_data is None or len(wlan_data) == 0:
-                    self.logger.info(
-                        f"{interface_name} should be disconnected.")
-                    if wlan_if.connected:
-                        self.logger.info(
-                            f"{interface_name} is connected to a network. Disconnecting.")
-                        wlan_if.disconnect()
-                else:
-                    if isinstance(wlan_data, list):
-                        wlan_data = wlan_data[0]
-                    self.logger.info(f"{interface_name} should be connected to {wlan_data.get('ssid')}. (Auth hidden) Currently connected to {wlan_if.ssid}")
-                    if not (wlan_if.connected and wlan_if.ssid == wlan_data.get('ssid') and wlan_if.psk == wlan_data.get('psk')):
-                        self.logger.info(f"Connection state of {interface_name} is incorrect. Reconnecting.")
-                        await wlan_if.connect(ssid=wlan_data.get('ssid'), psk=wlan_data.get('psk'))
-                        self.logger.info(f"Connection state of {interface_name} is complete. Renewing dhcp.")
-                        await wlan_if.renew_dhcp()
-                        # self.logger.info(f"Waiting for dhcp to settle.")
-                        # await asyncio.sleep(5)
-                        self.logger.info(f"Adding default routes for {interface_name}.")
-                        await wlan_if.add_default_routes()
-
-
-        if self.kismet_control.is_kismet_running() and len(self.kismet_control.active_kismet_interfaces())==0:
-            self.logger.info("No monitor interfaces. Killing kismet.")
-            self.kismet_control.kill_kismet()
-        return MQTTResponse(
-            status="success",
-            data= (await run_command_async(['iwconfig'], raise_on_fail=False)).stdout
-        )
-
 
     async def default_callback(self, client, topic, message: Union[str, bytes]) -> None:
         """

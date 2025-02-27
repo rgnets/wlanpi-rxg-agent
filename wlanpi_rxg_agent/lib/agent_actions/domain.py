@@ -7,17 +7,17 @@ from pydantic import BaseModel, Field
 
 class Data:
 
-    class WifiConfigElement(BaseModel):
+    class WifiConfiguration(BaseModel):
         id: t.Optional[int] = Field() #
         ssid: str = Field() #
         psk: str = Field() #
         encryption: t.Optional[str] = Field(default=None)
         authentication: t.Optional[str] = Field(default=None)
 
-    class WifiConfiguration(BaseModel):
+    class RadioConfiguration(BaseModel):
         interface: t.Optional[str] = Field(default=None)
         mode: str = Field()
-        wlan: t.Optional[Data.WifiConfigElement] = Field()
+        wlan: t.Optional[Data.WifiConfiguration] = Field()
 
     class PingTarget(BaseModel):
         id: int = Field() #                    :integer          not null, primary key
@@ -76,6 +76,20 @@ class Commands:
         password: str = Field()
         user: str = Field(default="wlanpi")
 
+    class GetClients(BaseModel):
+        pass
+
+    class TCPDump(BaseModel):
+        interface: str = Field()
+        upload_token: str = Field()
+        upload_ip: str = Field()
+        max_packets: t.Optional[int] = Field(default=None)
+        timeout: t.Optional[int] = Field(default=None)
+        filter: t.Optional[str] = Field(default=None)
+
+    class ConfigureRadios(BaseModel):
+        interfaces: dict[str, Data.RadioConfiguration] = Field(default={})
+
     class ConfigureTraceroutes(BaseModel):
         pass
 
@@ -83,7 +97,7 @@ class Commands:
         targets: list[Data.PingTarget] = Field()
 
     class ConfigureAgent(BaseModel):
-        wifi: dict[str, Data.WifiConfiguration] = Field(default={})
+        wifi: dict[str, Data.RadioConfiguration] = Field(default={})
         ping_targets: list[Data.PingTarget] = Field(default=[])
         traceroute_targets: list[Data.Traceroute] = Field(default=[])
         speed_tests: list[Data.SpeedTest] = Field(default=[])
