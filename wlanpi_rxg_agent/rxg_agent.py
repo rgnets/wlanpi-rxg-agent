@@ -129,7 +129,7 @@ async def lifespan(app: FastAPI):
     asyncio.create_task(aevery(3, heartbeat_task))
     yield
     message_bus.handle(agent_domain.Messages.ShutdownStarted())
-    await rxg_mqtt_client.stop_two()
+    await rxg_mqtt_client.stop()
     wifi_control.shutdown()
     # Clean up the ML models and release the resources
     # ml_models.clear()

@@ -119,15 +119,9 @@ class RxgMqttClient:
         for message, handler in self.message_handler_pairs:
             message_bus.remove_handler(message, handler)
 
-    def __del__(self):
-        self.teardown_listeners()
-        if self.run:
-            self.stop()
-
     async def shutdown_handler(self, event: agent_domain.Messages.ShutdownStarted) -> None:
         if self.run:
             await self.stop()
-
 
     async def listen(self, client:aiomqtt.Client):
         async for message in self.mqtt_client.messages:
@@ -136,7 +130,7 @@ class RxgMqttClient:
 
     async def certified_handler(self, event:supplicant_domain.Messages.Certified) -> None:
         if self.run:
-            await self.stop_two()
+            await self.stop()
         self.run = True
         tls_config = TLSConfig(ca_certs=event.ca_file, certfile=event.certificate_file, keyfile=event.key_file,
                                cert_reqs=ssl.VerifyMode(event.cert_reqs), tls_version=ssl.PROTOCOL_TLSv1_2,
@@ -145,7 +139,6 @@ class RxgMqttClient:
         self.mqtt_port = event.port
 
         try:
-
             async with aiomqtt.Client(
                 event.host,
                 port=event.port,
@@ -172,23 +165,19 @@ class RxgMqttClient:
                 loop = asyncio.get_event_loop()
                 self.mqtt_listener_task = loop.create_task(self.listen(self.mqtt_client))
                 await self.mqtt_listener_task
-                # yield
-                # # Cancel the task
-                # task.cancel()
-                # # Wait for the task to be cancelled
-                # try:
-                #     await task
-                # except asyncio.CancelledError:
-                #     pass
+
         except (aiomqtt.exceptions.MqttError, aiomqtt.exceptions.MqttCodeError) as e:
             err_msg = "There was an error in the MQTT Listener"
             self.logger.error(err_msg, exc_info=e)
             message_bus.handle(agent_domain.Messages.MqttError(err_msg, e))
             message_bus.handle(supplicant_domain.Messages.RestartInternalMqtt(**event.__dict__))
 
-    async def stop_two(self):
+    async def stop(self):
         self.logger.info("Stopping MQTTBridge")
         self.run = False
+        await self.mqtt_client.publish(
+            f"{self.my_base_topic}/status", "Disconnected", 1, True
+        )
         if self.mqtt_listener_task is None:
             return
         # Cancel the task
@@ -201,78 +190,6 @@ class RxgMqttClient:
             self.logger.warn(err_msg, exc_info=e)
         except asyncio.CancelledError:
             pass
-
-    async def go(self):
-        """
-        Run the client. This calls the Paho client's `.loop_start()` method,
-        which runs in the background until the Paho client is disconnected.
-        :return:
-        """
-        self.logger.info("Starting RxgMqttClient")
-        self.run = True
-
-        reconnect_interval = 5
-
-        self.logger.info(
-            f"Connecting to MQTT server at {self.mqtt_server}:{self.mqtt_port}"
-        )
-        while True:
-            try:
-                async with self.mqtt_client:
-                    self.logger.info(
-                        f"Connected to MQTT server at {self.mqtt_server}:{self.mqtt_port}."
-                    )
-
-                    self.logger.info("Subscribing to topics of interest.")
-                    # Subscribe to the topics we're going to care about.
-                    for topic in self.topics_of_interest:
-                        self.logger.info(f"Subscribing to {topic}")
-                        await self.mqtt_client.subscribe(topic)
-
-                    # Once we're ready, announce that we're connected:
-                    await self.mqtt_client.publish(f"{self.my_base_topic}/status", "Connected", 1, True)
-
-                    self.connected = True
-                    # Now do the first round of periodic data:
-                    # self.publish_periodic_data()
-
-                    async for message in self.mqtt_client.messages:
-                        # self.logger.info(f"Got message {message}: {message.payload}")
-                        await self.handle_message(self.mqtt_client, message)
-
-
-            except aiomqtt.MqttError as e:
-                self.connected = False
-                if not self.run:
-                    self.logger.warning("Run is false--not attempting to reconnect.")
-                    break
-                self.logger.warning(f"Connection lost; Reconnecting in {reconnect_interval} seconds ... ", exc_info=e)
-                await asyncio.sleep(reconnect_interval)
-            except Exception as e:
-                self.logger.error("Something really nasty happened in the MQTT Client: ", exc_info=e)
-
-
-        self.logger.info("Stopping MQTTBridge")
-
-        # for job in self.scheduled_jobs:
-        #     schedule.cancel_job(job)
-        #     self.scheduled_jobs.remove(job)
-
-    async def stop(self) -> None:
-        """
-        Closes the MQTT connection and shuts down any scheduled tasks for a clean exit.
-        :return:
-        """
-        self.logger.info("Stopping MQTTBridge")
-        self.run = False
-        await self.mqtt_client.publish(
-            f"{self.my_base_topic}/status", "Disconnected", 1, True
-        )
-        self.mqtt_client._client.disconnect()
-
-        # for job in self.scheduled_jobs:
-        #     schedule.cancel_job(job)
-        #     self.scheduled_jobs.remove(job)
 
     async def add_subscription(self, topic) -> bool:
         """
@@ -576,6 +493,11 @@ class RxgMqttClient:
 
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
         await self.stop()
+
+    def __del__(self):
+        self.teardown_listeners()
+        if self.run:
+            self.stop()
 
 
 if __name__ == "__main__":
