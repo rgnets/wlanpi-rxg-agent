@@ -329,26 +329,33 @@ class WiFiControlWpaSupplicant(WifiControl):
         self.interfaces = {}
 
         self.logger.debug("Setting up listeners")
+        self.command_handler_pairs = (
+            (wifi_domain.Commands.GetOrCreateInterface, lambda event: self.get_or_create_interface(event.if_name)),
+        )
         self.setup_listeners()
 
 
 
     def setup_listeners(self):
         # TODO: Surely we can implement this as some sort of decorator function?
-        pairs = (
-            (wifi_domain.Commands.GetOrCreateInterface, lambda event: self.get_or_create_interface(event.if_name)),
-        )
-
-        for command, handler in pairs:
+        for command, handler in self.command_handler_pairs:
             command_bus.add_handler(command, handler)
+
+    def teardown_listeners(self):
+        # TODO: Surely we can implement this as some sort of decorator function?
+        for command, handler in self.command_handler_pairs:
+            command_bus.remove_handler(command)
 
     # def __del__(self):
     #     self.reactor.stop()
     #     self.reactor_thread.join(timeout=4)
 
     def shutdown(self):
+        self.logger.info(f"Shutting down {__name__}")
+        self.teardown_listeners()
         self.reactor.stop()
         self.reactor_thread.join(timeout=4)
+        self.logger.info(f"{__name__} shutdown complete.")
 
     def get_or_create_interface(self, interface_name):
 
