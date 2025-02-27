@@ -67,8 +67,8 @@ class CommandResult:
         """Custom JSON encoder to handle non-serializable types."""
         if isinstance(obj, (CommandResult,)):  # Include other custom types if needed
             dict_form = obj.__dict__
-            dict_form["output_from_json"] = obj.output_from_json
-            dict_form["error_from_json"] = obj.error_from_json
+            dict_form["output_from_json"] = obj.output_from_json()
+            dict_form["error_from_json"] = obj.error_from_json()
             return dict_form
         elif isinstance(obj, (re.Pattern, RegexFlag)):
            return str(obj)  # Or a more meaningful representation if available

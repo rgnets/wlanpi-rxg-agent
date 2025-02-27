@@ -366,7 +366,15 @@ class RxgMqttClient:
                     # The promise returned from the task will then be handled here
                     if inspect.iscoroutine(res):
                         res = await res
-                    mqtt_response = MQTTResponse(status="success", data=json.dumps(res))
+
+                    def custom_serializer(obj):
+                        if callable(getattr(obj, "_json_encoder", None)):
+                            return obj._json_encoder(obj)  # Convert to a dictionary
+                        if callable(getattr(obj, "to_json", None)):
+                            return obj.to_json()  # Convert to a dictionary
+                        raise TypeError(f"Object of type {obj.__class__.__name__} is not JSON serializable")
+
+                    mqtt_response = MQTTResponse(status="success", data=json.dumps(res, default=custom_serializer))
 
                 else:
                     mqtt_response = MQTTResponse(
