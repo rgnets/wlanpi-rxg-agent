@@ -61,8 +61,44 @@ class Data:
         ssid: t.Optional[str] = Field(default=None)
         psk: t.Optional[str] = Field(default=None)
 
+
+    class PingResponse(BaseModel):
+        type: str = Field()
+        timestamp: datetime = Field()
+        bytes: int = Field()
+        response_ip: str = Field()
+        icmp_seq: int = Field()
+        ttl: int = Field()
+        time_ms: float = Field()
+        duplicate: bool = Field()
+
+
+    class CompletedPing(BaseModel):
+        destination_ip: str = Field()
+        interface: str = Field()
+        data_bytes:  t.Any = Field(default=None)
+        pattern:  t.Any = Field(default=None)
+        destination: str = Field()
+        packets_transmitted: int = Field()
+        packets_received:  int = Field()
+        packet_loss_percent:  float = Field()
+        duplicates:  int = Field()
+        time_ms:  float = Field()
+        round_trip_ms_min:   float = Field()
+        round_trip_ms_avg:   float = Field()
+        round_trip_ms_max:    float = Field()
+        round_trip_ms_stddev:    float = Field()
+        jitter:  t.Optional[float] = Field(default=None)
+        responses: list[Data.PingResponse] = Field(default=[])
+
 class Messages:
-    pass
+
+    class PingBatchComplete(BaseModel):
+        id: int = Field()  #
+        result: Data.CompletedPing = Field()
+    class PingBatchFailure(BaseModel):
+        id: int = Field()  #
+        result: t.Any = Field()
 
 class Commands:
     class Reboot(BaseModel):

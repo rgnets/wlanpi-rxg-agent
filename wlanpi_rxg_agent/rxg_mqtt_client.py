@@ -15,10 +15,13 @@ import string
 import socket
 import time
 import paho.mqtt.client as mqtt
-import schedule
+# import schedule
 import asyncio
 import aiomqtt
-from aiomqtt import TLSParameters
+from aiomqtt import TLSParameters, MqttError
+from aiomqtt.types import PayloadType
+from paho.mqtt.properties import Properties
+
 from busses import message_bus, command_bus
 import lib.domain as agent_domain
 import lib.rxg_supplicant.domain as supplicant_domain
@@ -86,7 +89,7 @@ class RxgMqttClient:
 
         # Holds scheduled jobs from `scheduler` so we can clean them up
         # on exit.
-        self.scheduled_jobs: list[schedule.Job] = []
+        # self.scheduled_jobs: list[schedule.Job] = []
 
         self.agent_config = AgentConfigFile()
         self.bridge_config = BridgeConfigFile()
@@ -123,7 +126,10 @@ class RxgMqttClient:
 
     async def certified_handler(self, event:supplicant_domain.Messages.Certified) -> None:
         if self.run:
-            await self.stop()
+            try:
+                await self.stop()
+            except aiomqtt.exceptions.MqttCodeError as e:
+                self.logger.warning(f"Failed to stop Agent MQTT: {e}", exc_info=True)
         self.run = True
         tls_config = TLSConfig(ca_certs=event.ca_file, certfile=event.certificate_file, keyfile=event.key_file,
                                cert_reqs=ssl.VerifyMode(event.cert_reqs), tls_version=ssl.PROTOCOL_TLSv1_2,
@@ -161,9 +167,14 @@ class RxgMqttClient:
 
         except (aiomqtt.exceptions.MqttError, aiomqtt.exceptions.MqttCodeError) as e:
             err_msg = "There was an error in the MQTT Listener"
-            self.logger.error(err_msg, exc_info=e)
+            self.logger.error(err_msg, exc_info=True)
             message_bus.handle(agent_domain.Messages.MqttError(err_msg, e))
             message_bus.handle(supplicant_domain.Messages.RestartInternalMqtt(**event.__dict__))
+
+
+    async def ping_batch_handler(self, event:Union[actions_domain.Messages.PingBatchComplete, actions_domain.Messages.PingBatchFailure]):
+
+        await self.publish_with_retry(topic=f"{self.my_base_topic}/ingest/ping_batch", payload=event.to_json() )
 
     async def stop(self):
         self.logger.info("Stopping MQTTBridge")
@@ -180,7 +191,7 @@ class RxgMqttClient:
             await self.mqtt_listener_task
         except (aiomqtt.exceptions.MqttError, aiomqtt.exceptions.MqttCodeError) as e:
             err_msg = "There was an error in the MQTT Listener, but we were stopping it, so we don't care."
-            self.logger.warn(err_msg, exc_info=e)
+            self.logger.warn(err_msg, exc_info=True)
         except asyncio.CancelledError:
             pass
 
@@ -298,7 +309,7 @@ class RxgMqttClient:
                 await self.default_callback(client=client,topic=response_topic,message=mqtt_response.to_json())
 
             except Exception as e:
-                self.logger.error(f"Exception while handling message on topic '{msg.topic}'",exc_info=e)
+                self.logger.error(f"Exception while handling message on topic '{msg.topic}'",exc_info=True)
                 await self.mqtt_client.publish(
                     response_topic,
                     MQTTResponse(
@@ -309,7 +320,7 @@ class RxgMqttClient:
                 )
 
         except Exception as e:
-            self.logger.error(f"Big nasty thing while handling message on topic '{msg.topic}'",exc_info=e)
+            self.logger.error(f"Big nasty thing while handling message on topic '{msg.topic}'",exc_info=True)
             await self.mqtt_client.publish(
                 self.my_base_topic + "/error",
                 MQTTResponse(
@@ -317,6 +328,45 @@ class RxgMqttClient:
                     errors=[[utils.get_full_class_name(e), str(e)]],
                 ).to_json(),
             )
+
+    async def publish_with_retry(
+            self,
+            topic: str,
+            payload: PayloadType = None,
+            qos: int = 0,
+            retain: bool = False,
+            properties: Optional[Properties] = None,
+            *args: Any,
+            timeout: Optional[float] = None,
+            **kwargs: Any,
+    ) -> None:
+        """Publishes a message to the MQTT broker with retry logic.
+
+        Args:
+            topic: The topic to publish to.
+            payload: The message payload.
+            qos: The QoS level to use for publication.
+            retain: If set to ``True``, the message will be retained by the broker.
+            properties: (MQTT v5.0 only) Optional paho-mqtt properties.
+            *args: Additional positional arguments to pass to paho-mqtt's publish
+                method.
+            timeout: The maximum time in seconds to wait for publication to complete.
+                Use ``math.inf`` to wait indefinitely.
+            **kwargs: Additional keyword arguments to pass to paho-mqtt's publish
+                method.
+        """
+        attempts = 0
+        MAX_ATTEMPTS = 3
+        while attempts < MAX_ATTEMPTS:
+            try:
+                attempts += 1
+                result = await self.mqtt_client.publish(topic, payload, qos, retain, properties, *args, timeout, **kwargs)  # Capture result
+                return result  # Return the result if successful
+            except MqttError:
+                self.logger.exception(
+                    f"Exception sending MQTT Message to {topic}. Attempt #{attempts} of {MAX_ATTEMPTS}")
+                await asyncio.sleep(3)
+        return None  # Return None if all attempts failed
 
     async def default_callback(self, client, topic, message: Union[str, bytes]) -> None:
         """
@@ -333,18 +383,35 @@ class RxgMqttClient:
         else:
             self.logger.info(f"Default callback. Topic: {topic} Message: {stringified_message[:info_msg_max_size]}... <truncated>")
         self.logger.debug(f"Default callback. Topic: {topic} Message: {stringified_message}")
-        await client.publish(topic, message)
+
+        attempts=0
+        MAX_ATTEMPTS = 3
+        while attempts<MAX_ATTEMPTS:
+            try:
+                attempts+=1
+                await client.publish(topic, message)
+                break
+            except MqttError:
+                self.logger.exception(f"Exception in default MQTT callback. Attempt #{attempts} of {MAX_ATTEMPTS}")
+                await asyncio.sleep(3)
 
     async def __aenter__(self) -> object:
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
-        await self.stop()
+        if self.run:
+            try:
+                await self.stop()
+            except aiomqtt.exceptions.MqttCodeError as e:
+                self.logger.warning(f"Failed to stop Agent MQTT: {e}", exc_info=True)
 
     def __del__(self):
         self.teardown_listeners()
         if self.run:
-            self.stop()
+            try:
+                self.stop()
+            except aiomqtt.exceptions.MqttCodeError as e:
+                self.logger.warning(f"Failed to stop Agent MQTT: {e}", exc_info=True)
 
 
 if __name__ == "__main__":

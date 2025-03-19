@@ -80,7 +80,7 @@ class WifiInterface():
         try:
             self.prop_signal.cancel()
         except RuntimeError as e:
-            self.logger.warning(f"Unable to cancel prop_signal on exit: {e}", exc_info=e)
+            self.logger.warning(f"Unable to cancel prop_signal on exit: {e}", exc_info=True)
 
 
     @property

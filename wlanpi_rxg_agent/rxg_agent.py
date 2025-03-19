@@ -13,6 +13,7 @@ import lib.domain as agent_domain
 import lib.rxg_supplicant.domain as supplicant_domain
 from lib.agent_actions.actions import AgentActions
 from lib.rxg_supplicant.supplicant import RxgSupplicant
+from lib.tasker.tasker import Tasker
 from lib.wifi_control.wifi_control_wpa_supplicant import WiFiControlWpaSupplicant
 from rxg_mqtt_client import RxgMqttClient
 from lib.configuration.bridge_config_file import BridgeConfigFile
@@ -112,6 +113,8 @@ async def lifespan(app: FastAPI):
     #     verify_ssl=False,
     #     event_bus=event_bus,
     # )
+
+    tasker = Tasker()
 
     # Wifi control currently has no dependencies
     wifi_control = WiFiControlWpaSupplicant()

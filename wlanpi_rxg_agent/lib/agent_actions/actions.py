@@ -81,10 +81,11 @@ class AgentActions():
         self.logger.info(f"Configuring agent: {event}", )
 
         # Configure Radios first
-        await command_bus.handle(actions_domain.Commands.ConfigureRadios(interfaces=event.wifi))
+        # await command_bus.handle(actions_domain.Commands.ConfigureRadios(interfaces=event.wifi))
+        command_bus.handle(actions_domain.Commands.ConfigureRadios(interfaces=event.wifi))
 
         # Then ping targets
-
+        command_bus.handle(actions_domain.Commands.ConfigurePingTargets(targets=event.ping_targets))
         # Then traceroute targets
 
         # Then Speed Tests

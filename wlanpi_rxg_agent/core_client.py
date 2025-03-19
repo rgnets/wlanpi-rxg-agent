@@ -57,6 +57,26 @@ class CoreClient:
         )
         return response
 
+    async def execute_async_request(
+        self,
+        method: str,
+        path: str,
+        data: Optional[Any] = None,
+        params: Optional[Any] = None,
+    ):
+        self.logger.debug(
+            f"Executing {method.upper()} on path {path} with data: {str(data)}"
+        )
+        response = requests.request(
+            method=method,
+            params=params,
+            url=f"{self.base_url}/{path}",
+            json=data,
+            headers=self.base_headers,
+        )
+        return response
+
+
     def get_current_path_data(self, path):
         self.logger.debug(f"Getting current path data for {path}")
         response = self.execute_request("get", path)

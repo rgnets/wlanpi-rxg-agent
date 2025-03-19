@@ -24,7 +24,7 @@ dependencies = [
     "requests",
     "scapy",
     "dpkt",
-    "schedule",
+#    "schedule",
     "aiomqtt",
     "pydantic-settings",
     "python-daemon",
@@ -37,7 +37,7 @@ dependencies = [
     "jinja2",
     "fastapi",
     "uvicorn",
-    "aiocron",
+    "apscheduler"
 ]
 
 [project.optional-dependencies]

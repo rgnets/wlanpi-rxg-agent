@@ -97,7 +97,7 @@ class RxgSupplicant:
             # or else we lose contact with the agent.
             except Exception as e:
                 msg = "Error finding rXg Waiting 10 seconds and trying again. "
-                self.logger.warning(msg, exc_info=e)
+                self.logger.warning(msg, exc_info=True)
                 message_bus.handle(supplicant_domain.Messages.Error(msg, e))
                 await asyncio.sleep(10)
         await asyncio.sleep(30)
@@ -115,7 +115,7 @@ class RxgSupplicant:
             # or else we lose contact with the agent.
             except Exception as e:
                 msg = "Error finding rXg Waiting 10 seconds and trying again. "
-                self.logger.warning(msg, exc_info=e)
+                self.logger.warning(msg, exc_info=True)
                 message_bus.handle(supplicant_domain.Messages.Error(msg,e))
             await asyncio.sleep(wait_period)
 
