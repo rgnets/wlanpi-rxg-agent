@@ -1,7 +1,7 @@
 import os
 from typing import Optional
 
-import utils
+from wlanpi_rxg_agent import utils
 
 
 class CertificateTool:

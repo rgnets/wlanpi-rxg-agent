@@ -1,4 +1,4 @@
-from lib.event_bus import CommandBus, MessageBus
+from wlanpi_rxg_agent.lib.event_bus import CommandBus, MessageBus
 
 command_bus = CommandBus()
 message_bus = MessageBus()

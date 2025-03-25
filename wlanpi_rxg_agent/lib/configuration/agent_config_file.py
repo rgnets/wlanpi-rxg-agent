@@ -1,8 +1,8 @@
 import os
 
-from lib.configuration.config_file import ConfigFile
+from wlanpi_rxg_agent.lib.configuration.config_file import ConfigFile
 
-AGENT_CONFIG_DIR = "/etc/wlanpi-rxg-agent"
+AGENT_CONFIG_DIR = "/tmp/etc/wlanpi-rxg-agent"
 
 class AgentConfigFile(ConfigFile):
     def __init__(self):

@@ -267,7 +267,7 @@ def get_default_gateways() -> dict[str, str]:
     for line in output:
         if "default via" in line:  # This is the default gateway line
             res = line.split("via ")[1].split(" dev ")
-            gateways[res[1].strip()] = res[0].strip()
+            gateways[res[1].split(" ")[0].strip()] = res[0].strip()
     return gateways
 
 
@@ -278,7 +278,14 @@ def trace_route(target: str) -> dict[str, Any]:
 
 
 def get_model_info() -> dict[str, str]:
-    model_info = run_command(["wlanpi-model"]).stdout.split("\n")
+    model_info = """
+Model:                WLAN Pi R4
+Main board:           Raspberry Pi 4 Model B Rev 1.2
+USB Wi-Fi adapter:    3574:6211 MediaTek Inc. Wireless_Device
+USB Wi-Fi adapter:    3574:6211 MediaTek Inc. Wireless_Device
+Bluetooth adapter:    Built-in"""
+    model_info = model_info.split("\n")
+    # model_info = run_command(["wlanpi-model"]).stdout.split("\n")
     split_model_info = [a.split(":", 1) for a in model_info if (a.strip() != "" and ':' in a)]
     model_dict = {}
     for a, b in split_model_info:
@@ -292,7 +299,8 @@ def get_uptime() -> dict[str, str]:
 
 
 def get_hostname() -> str:
-    return run_command(["hostname"]).stdout.strip("\n ")
+    return 'OpenWifi'
+    # return run_command(["hostname"]).stdout.strip("\n ")
 
 
 def get_interface_ip_addrs(interface: Optional[str] = None) -> dict[str, Any]:

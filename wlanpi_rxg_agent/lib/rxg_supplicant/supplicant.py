@@ -7,17 +7,17 @@ from typing import Optional
 import wlanpi_rxg_agent.utils as utils
 
 from requests import ConnectTimeout, ReadTimeout
-from busses import message_bus, command_bus
-from api_client import ApiClient
-from certificate_tool import CertificateTool
-from constants import CONFIG_DIR
-from lib.configuration.agent_config_file import AgentConfigFile
+from wlanpi_rxg_agent.busses import message_bus, command_bus
+from wlanpi_rxg_agent.api_client import ApiClient
+from wlanpi_rxg_agent.certificate_tool import CertificateTool
+from wlanpi_rxg_agent.constants import CONFIG_DIR
+from wlanpi_rxg_agent.lib.configuration.agent_config_file import AgentConfigFile
 
-import lib.domain as agent_domain
-import lib.rxg_supplicant.domain as supplicant_domain
-from models.exceptions import RXGAgentException
+import wlanpi_rxg_agent.lib.domain as agent_domain
+import wlanpi_rxg_agent.lib.rxg_supplicant.domain as supplicant_domain
+from wlanpi_rxg_agent.models.exceptions import RXGAgentException
 
-from busses import command_bus,message_bus
+from wlanpi_rxg_agent.busses import command_bus,message_bus
 
 from enum import Enum
 from typing import Literal
@@ -229,8 +229,8 @@ class RxgSupplicant:
         if self.override_server and self.test_address_for_rxg(self.override_server):
             return self.override_server
 
-        first_gateway = utils.get_default_gateways().get("eth0", None)
-
+        first_gateway = utils.get_default_gateways().get("eth1", None)
+        self.logger.info(f"Gateway: {utils.get_default_gateways()}")
         if not first_gateway:
             raise RXGAgentException("Unable to find first gateway on eth0")
 

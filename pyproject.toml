@@ -30,14 +30,15 @@ dependencies = [
     "python-daemon",
     "toml",
     "paho_mqtt",
-    "dbus-python",
-    "PyGObject",
+#    "dbus-python",
+#    "PyGObject",
     "kismet-rest",
-    "wpa_supplicant",
+#    "wpa_supplicant",
     "jinja2",
     "fastapi",
     "uvicorn",
-    "apscheduler"
+    "apscheduler",
+    "jc"
 ]
 
 [project.optional-dependencies]

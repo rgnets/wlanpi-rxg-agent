@@ -1,8 +1,8 @@
 import logging
 
-import lib.agent_actions.domain as actions_domain
-from busses import message_bus, command_bus
-from core_client import CoreClient
+import wlanpi_rxg_agent.lib.agent_actions.domain as actions_domain
+from wlanpi_rxg_agent.busses import message_bus, command_bus
+from wlanpi_rxg_agent.core_client import CoreClient
 
 
 class Executor():

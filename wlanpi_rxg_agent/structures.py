@@ -5,7 +5,7 @@ from typing import Any, Callable, Literal, Optional
 
 from requests import JSONDecodeError
 
-from utils import get_current_unix_timestamp
+from wlanpi_rxg_agent.utils import get_current_unix_timestamp
 
 
 

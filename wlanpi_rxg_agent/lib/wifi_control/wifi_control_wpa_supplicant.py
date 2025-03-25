@@ -7,18 +7,18 @@ from typing import Optional, Any
 import wpa_supplicant
 from twisted.internet.asyncioreactor import AsyncioSelectorReactor
 
-from busses import message_bus, command_bus
-from lib.wifi_control import domain as wifi_domain
+from wlanpi_rxg_agent.busses import message_bus, command_bus
+from wlanpi_rxg_agent.lib.wifi_control import domain as wifi_domain
 
 
 from core_client import CoreClient
-from lib.wifi_control.wifi_control import WifiControl
+from wlanpi_rxg_agent.lib.wifi_control.wifi_control import WifiControl
 from wpa_supplicant.core import WpaSupplicantDriver, WpaSupplicant, Interface
 import threading
 import time
 
-from models.runcommand_error import RunCommandError
-from utils import run_command_async
+from wlanpi_rxg_agent.models.runcommand_error import RunCommandError
+from wlanpi_rxg_agent.utils import run_command_async
 
 
 class WifiInterfaceException(Exception):
