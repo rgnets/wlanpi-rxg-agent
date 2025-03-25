@@ -8,17 +8,17 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 
 # import wlanpi_rxg_agent.utils as utils
-from busses import message_bus, command_bus
-import lib.domain as agent_domain
-import lib.rxg_supplicant.domain as supplicant_domain
-from lib.agent_actions.actions import AgentActions
-from lib.rxg_supplicant.supplicant import RxgSupplicant
-from lib.tasker.tasker import Tasker
-from lib.wifi_control.wifi_control_wpa_supplicant import WiFiControlWpaSupplicant
-from rxg_mqtt_client import RxgMqttClient
-from lib.configuration.bridge_config_file import BridgeConfigFile
-from utils import aevery
-from wlanpi_rxg_agent.bridge_control import BridgeControl
+from wlanpi_rxg_agent.busses import message_bus, command_bus
+import wlanpi_rxg_agent.lib.domain as agent_domain
+import wlanpi_rxg_agent.lib.rxg_supplicant.domain as supplicant_domain
+from wlanpi_rxg_agent.lib.agent_actions.actions import AgentActions
+from wlanpi_rxg_agent.lib.rxg_supplicant.supplicant import RxgSupplicant
+from wlanpi_rxg_agent.lib.tasker.tasker import Tasker
+# from wlanpi_rxg_agent.lib.wifi_control.wifi_control_wpa_supplicant import WiFiControlWpaSupplicant
+from wlanpi_rxg_agent.rxg_mqtt_client import RxgMqttClient
+# from wlanpi_rxg_agent.lib.configuration.bridge_config_file import BridgeConfigFile
+from wlanpi_rxg_agent.utils import aevery
+# from wlanpi_rxg_agent.bridge_control import BridgeControl
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(encoding="utf-8", level=logging.DEBUG)
@@ -40,11 +40,11 @@ class RXGAgent:
         self.logger = logging.getLogger(__name__)
         self.logger.info(f"Initializing {__name__}")
 
-        self.bridge_config_file = BridgeConfigFile()
-        self.bridge_config_file.load_or_create_defaults()
-        self.bridge_config_lock = asyncio.Lock()
-
-        self.bridge_control = BridgeControl()
+        # self.bridge_config_file = BridgeConfigFile()
+        # self.bridge_config_file.load_or_create_defaults()
+        # self.bridge_config_lock = asyncio.Lock()
+        #
+        # self.bridge_control = BridgeControl()
 
         self.executor  = ThreadPoolExecutor(1)
 
@@ -59,24 +59,24 @@ class RXGAgent:
         # Reconfigure MQTT Bridge
         self.logger.info("Reconfiguring Bridge")
         # Try to load existing toml and preserve. If we fail, it doesn't matter that much.
-        async with self.bridge_config_lock:
-            self.bridge_config_file.load_or_create_defaults()
-
-            # Rewrite Bridge's config.toml
-            self.bridge_config_file.data["MQTT"]["server"] = event.host
-            self.bridge_config_file.data["MQTT"]["port"] = event.port
-            self.bridge_config_file.data["MQTT_TLS"]["use_tls"] = True
-            self.bridge_config_file.data["MQTT_TLS"]["ca_certs"] = event.ca_file
-            self.bridge_config_file.data["MQTT_TLS"]["certfile"] = event.certificate_file
-            self.bridge_config_file.data["MQTT_TLS"]["keyfile"] = event.key_file
-            self.bridge_config_file.save()
-
-            self.logger.info("Bridge config written. Restarting service.")
-            self.bridge_control.restart()
+        # async with self.bridge_config_lock:
+        #     self.bridge_config_file.load_or_create_defaults()
+        #
+        #     # Rewrite Bridge's config.toml
+        #     self.bridge_config_file.data["MQTT"]["server"] = event.host
+        #     self.bridge_config_file.data["MQTT"]["port"] = event.port
+        #     self.bridge_config_file.data["MQTT_TLS"]["use_tls"] = True
+        #     self.bridge_config_file.data["MQTT_TLS"]["ca_certs"] = event.ca_file
+        #     self.bridge_config_file.data["MQTT_TLS"]["certfile"] = event.certificate_file
+        #     self.bridge_config_file.data["MQTT_TLS"]["keyfile"] = event.key_file
+        #     self.bridge_config_file.save()
+        #
+        #     self.logger.info("Bridge config written. Restarting service.")
+        #     self.bridge_control.restart()
 
     async def shutdown_handler(self, event: agent_domain.Messages.ShutdownStarted) -> None:
         self.logger.info("Shutting down Bridge")
-        self.bridge_control.stop()
+        # self.bridge_control.stop()
 
 
     @staticmethod
@@ -95,7 +95,7 @@ class RXGAgent:
 
 
 eth0_res = subprocess.run(
-    "jc ifconfig eth0", capture_output=True, text=True, shell=True
+    "jc ifconfig eth1", capture_output=True, text=True, shell=True
 )
 
 eth0_data = json.loads(eth0_res.stdout)[0]
@@ -117,7 +117,7 @@ async def lifespan(app: FastAPI):
     tasker = Tasker()
 
     # Wifi control currently has no dependencies
-    wifi_control = WiFiControlWpaSupplicant()
+    # wifi_control = WiFiControlWpaSupplicant()
     agent_actions = AgentActions()
     supplicant = RxgSupplicant()
     rxg_mqtt_client = RxgMqttClient(identifier=eth0_mac)
@@ -133,7 +133,7 @@ async def lifespan(app: FastAPI):
     yield
     message_bus.handle(agent_domain.Messages.ShutdownStarted())
     await rxg_mqtt_client.stop()
-    wifi_control.shutdown()
+    # wifi_control.shutdown()
     # Clean up the ML models and release the resources
     # ml_models.clear()
 

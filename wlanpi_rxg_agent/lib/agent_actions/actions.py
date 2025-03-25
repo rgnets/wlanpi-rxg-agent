@@ -3,14 +3,14 @@ import os
 import random
 import string
 import typing as t
-import utils
-from api_client import ApiClient
-from busses import message_bus, command_bus
-import lib.domain as agent_domain
-import lib.rxg_supplicant.domain as supplicant_domain
-import lib.agent_actions.domain as actions_domain
-from kismet_control import KismetControl
-from lib.configuration.bootloader_config_file import BootloaderConfigFile
+from wlanpi_rxg_agent import utils
+from wlanpi_rxg_agent.api_client import ApiClient
+from wlanpi_rxg_agent.busses import message_bus, command_bus
+import wlanpi_rxg_agent.lib.domain as agent_domain
+import wlanpi_rxg_agent.lib.rxg_supplicant.domain as supplicant_domain
+import wlanpi_rxg_agent.lib.agent_actions.domain as actions_domain
+# from wlanpi_rxg_agent.kismet_control import KismetControl
+from wlanpi_rxg_agent.lib.configuration.bootloader_config_file import BootloaderConfigFile
 
 
 class AgentActions():
@@ -29,7 +29,7 @@ class AgentActions():
         self.core_base_url = wlan_pi_core_base_url
         # Kismet
         self.kismet_base_url = kismet_base_url
-        self.kismet_control = KismetControl()
+        # self.kismet_control = KismetControl()
 
         # Event/Command Bus
         self.setup_listeners()
@@ -96,7 +96,7 @@ class AgentActions():
 
 
     async def configure_radios(self, event:actions_domain.Commands.ConfigureRadios):
-        import lib.wifi_control.domain as wifi_domain # type: ignore
+        import wlanpi_rxg_agent.lib.wifi_control.domain as wifi_domain # type: ignore
 
         self.logger.info(f"Configuring radios: New payload: {event}")
         for interface_name, config in event.interfaces.items():
@@ -112,23 +112,24 @@ class AgentActions():
             #     )
             new_mode = config.mode
             if new_mode == "monitor":
-                self.logger.debug(f"{interface_name} should be in monitor mode.")
-                if not self.kismet_control.is_kismet_running():
-                    self.logger.debug(f"Starting kismet on {interface_name}mon")
-                    self.kismet_control.start_kismet(interface_name)
-                else:
-                    if interface_name not in self.kismet_control.all_kismet_sources().keys():
-                        self.logger.debug(f"Adding {interface_name}")
-                        self.kismet_control.add_source(interface_name)
-                    if interface_name not in self.kismet_control.active_kismet_interfaces().keys():
-                        self.logger.debug(f"Enabling {interface_name}mon")
-                        self.kismet_control.open_source_by_name(interface_name)
-                        self.kismet_control.resume_source_by_name(interface_name)
+                pass
+                # self.logger.debug(f"{interface_name} should be in monitor mode.")
+                # if not self.kismet_control.is_kismet_running():
+                #     self.logger.debug(f"Starting kismet on {interface_name}mon")
+                #     self.kismet_control.start_kismet(interface_name)
+                # else:
+                #     if interface_name not in self.kismet_control.all_kismet_sources().keys():
+                #         self.logger.debug(f"Adding {interface_name}")
+                #         self.kismet_control.add_source(interface_name)
+                #     if interface_name not in self.kismet_control.active_kismet_interfaces().keys():
+                #         self.logger.debug(f"Enabling {interface_name}mon")
+                #         self.kismet_control.open_source_by_name(interface_name)
+                #         self.kismet_control.resume_source_by_name(interface_name)
             else:
                 self.logger.debug(f"{interface_name} should be in {new_mode} mode.")
                 # Teardown kismet monitor control
-                if self.kismet_control.is_kismet_running() and interface_name in self.kismet_control.active_kismet_interfaces().keys():
-                    self.kismet_control.close_source_by_name(interface_name)
+                # if self.kismet_control.is_kismet_running() and interface_name in self.kismet_control.active_kismet_interfaces().keys():
+                #     self.kismet_control.close_source_by_name(interface_name)
                 await utils.run_command_async(['iw', 'dev', interface_name + "mon", 'del'], raise_on_fail=False)
                 await utils.run_command_async(['ip', 'link', 'set', interface_name, 'up'])
                 # TODO: Do full adapter config here.
@@ -161,16 +162,17 @@ class AgentActions():
                         await wlan_if.add_default_routes()
 
 
-        if self.kismet_control.is_kismet_running() and len(self.kismet_control.active_kismet_interfaces())==0:
-            self.logger.info("No monitor interfaces. Killing kismet.")
-            self.kismet_control.kill_kismet()
+        # if self.kismet_control.is_kismet_running() and len(self.kismet_control.active_kismet_interfaces())==0:
+        #     self.logger.info("No monitor interfaces. Killing kismet.")
+        #     self.kismet_control.kill_kismet()
         return (await utils.run_command_async(['iwconfig'], raise_on_fail=False)).stdout
 
     async def exec_get_clients(self, client):
-        if self.kismet_control.is_kismet_running():
-            return self.kismet_control.get_seen_devices()
-        else:
-            return self.kismet_control.empty_seen_devices()
+        # if self.kismet_control.is_kismet_running():
+        #     return self.kismet_control.get_seen_devices()
+        # else:
+        #     return self.kismet_control.empty_seen_devices()
+        return []
 
     async def handle_tcp_dump_on_interface(self, event:actions_domain.Commands.TCPDump):
         result = await self.tcpdump_on_interface(
@@ -191,8 +193,8 @@ class AgentActions():
             timeout = 60
 
         # Query kismet control to see if the interface is one it has active, if so, append "mon"
-        if self.kismet_control.is_kismet_running() and interface_name in self.kismet_control.active_kismet_interfaces().keys() and not interface_name.endswith("mon"):
-            interface_name += "mon"
+        # if self.kismet_control.is_kismet_running() and interface_name in self.kismet_control.active_kismet_interfaces().keys() and not interface_name.endswith("mon"):
+        #     interface_name += "mon"
 
         random_str = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
         filepath = f"/tmp/{random_str}.pcap"

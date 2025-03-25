@@ -2,7 +2,7 @@ from enum import Enum
 import typing as t
 from dataclasses import dataclass
 
-from lib import domain as agent_domain
+from wlanpi_rxg_agent.lib import domain as agent_domain
 
 PREFIX = "RXG_SUPPLICANT_"
 class RxgSupplicantEvents(Enum):

@@ -15,9 +15,9 @@ import time
 from scapy.data import DLT_IEEE802_11, DLT_EN10MB
 from scapy.layers.dot11 import Dot11
 from scapy.utils import PcapReader, PcapWriter, PcapNgReader, PcapNgWriter
-import kismet_capture
-from models.runcommand_error import RunCommandError
-from utils import run_command
+import wlanpi_rxg_agent.kismet_capture as kismet_capture
+from wlanpi_rxg_agent.models.runcommand_error import RunCommandError
+from wlanpi_rxg_agent.utils import run_command
 
 
 class KismetControlException(Exception):

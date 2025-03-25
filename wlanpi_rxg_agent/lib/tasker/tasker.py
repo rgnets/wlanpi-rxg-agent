@@ -5,12 +5,12 @@ from typing import TypeVar, Generic
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from pydantic import BaseModel, Field, ConfigDict
 
-from busses import message_bus, command_bus
-from lib.tasker.executor import PingExecutor
-from lib.tasker.repeating_task import RepeatingTask
-from lib.wifi_control import domain as wifi_domain
-from lib.agent_actions import domain as actions_domain
-import lib.domain as agent_domain
+from wlanpi_rxg_agent.busses import message_bus, command_bus
+from wlanpi_rxg_agent.lib.tasker.executor import PingExecutor
+from wlanpi_rxg_agent.lib.tasker.repeating_task import RepeatingTask
+from wlanpi_rxg_agent.lib.wifi_control import domain as wifi_domain
+from wlanpi_rxg_agent.lib.agent_actions import domain as actions_domain
+import wlanpi_rxg_agent.lib.domain as agent_domain
 
 TaskDefDataType = TypeVar('TaskDefDataType')
 

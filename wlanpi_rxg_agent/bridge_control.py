@@ -1,8 +1,8 @@
 import logging
 
-from busses import message_bus, command_bus
-import lib.domain as agent_domain
-import lib.rxg_supplicant.domain as supplicant_domain
+from wlanpi_rxg_agent.busses import message_bus, command_bus
+import wlanpi_rxg_agent.lib.domain as agent_domain
+import wlanpi_rxg_agent.lib.rxg_supplicant.domain as supplicant_domain
 import dbus
 
 
