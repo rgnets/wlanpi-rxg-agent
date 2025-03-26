@@ -7,18 +7,19 @@ from typing import Optional, Any
 import wpa_supplicant
 from twisted.internet.asyncioreactor import AsyncioSelectorReactor
 
-from wlanpi_rxg_agent.busses import message_bus, command_bus
-from wlanpi_rxg_agent.lib.wifi_control import domain as wifi_domain
+import utils
+from busses import message_bus, command_bus
+from lib.wifi_control import domain as wifi_domain
 
 
 from core_client import CoreClient
-from wlanpi_rxg_agent.lib.wifi_control.wifi_control import WifiControl
+from lib.wifi_control.wifi_control import WifiControl
 from wpa_supplicant.core import WpaSupplicantDriver, WpaSupplicant, Interface
 import threading
 import time
 
-from wlanpi_rxg_agent.models.runcommand_error import RunCommandError
-from wlanpi_rxg_agent.utils import run_command_async
+from models.runcommand_error import RunCommandError
+from utils import run_command_async
 
 
 class WifiInterfaceException(Exception):
@@ -323,8 +324,23 @@ class WiFiControlWpaSupplicant(WifiControl):
         self.driver = WpaSupplicantDriver(self.reactor)
         self.logger.debug("Connecting to driver")
 
+        # Start a timeout task--if connection fails, restart the supplicant and try again.
+
         # Connect to the supplicant, which returns the "root" D-Bus object for wpa_supplicant
-        self.supplicant = self.driver.connect()
+        # self.supplicant = self.driver.connect()
+        tries = 3
+        while tries > 0:
+            try:
+                self.supplicant = self._connect_with_timeout(timeout=10)
+                break
+            except Exception as e:
+                self.logger.exception("Failed to connect to wpa_supplicant:")
+                self.restart_wpa_supplicant()
+                time.sleep(10)
+                tries -= 1
+        if not self.supplicant:
+            raise Exception('Could not connect to wpa_supplicant after 3 attempts')
+
 
         self.interfaces = {}
 
@@ -345,6 +361,49 @@ class WiFiControlWpaSupplicant(WifiControl):
         # TODO: Surely we can implement this as some sort of decorator function?
         for command, handler in self.command_handler_pairs:
             command_bus.remove_handler(command)
+
+    def _connect_with_timeout(self, timeout=10):
+        """Connects to wpa_supplicant with a timeout, without reactor access."""
+
+        def connect_in_thread():
+            """The actual connection logic, running in a separate thread."""
+            try:
+                res = self.driver.connect()
+                self.logger.info("I did actually connect")
+                return res
+            except Exception as e:
+                self.logger.exception(f"Error in connect_in_thread:")
+                raise  # Re-raise to be caught by the caller
+
+        result = None  # This will hold the result
+        finished_event = threading.Event()
+
+        def threaded_connect():
+            nonlocal result  # Crucial: Access the outer scope's result
+            try:
+                result = connect_in_thread()
+            except Exception as e:  # Catch and log the exception, then re-raise to trigger the timeout handling
+                self.logger.exception("Failed to connect in thread:")
+            finally:  # Ensure the event is set even if an exception occurs.
+                finished_event.set()
+
+        connect_thread = threading.Thread(target=threaded_connect)
+        connect_thread.start()
+
+        if finished_event.wait(timeout):  # Check if the event was set within the timeout
+            return result
+        else:
+            raise TimeoutError("Connection timed out.")
+
+    def restart_wpa_supplicant(self):
+        """Restarts the wpa_supplicant service."""
+        try:
+            print("Restarting wpa_supplicant service...")
+            utils.run_command(["systemctl", "restart", "wpa_supplicant"])  # Or appropriate command for your system
+            print("wpa_supplicant restarted.")
+        except (utils.RunCommandError, utils.RunCommandTimeout) as e:
+            print(f"Error restarting wpa_supplicant: {e}")
+
 
     # def __del__(self):
     #     self.reactor.stop()
