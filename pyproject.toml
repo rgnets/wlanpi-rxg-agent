@@ -37,7 +37,8 @@ dependencies = [
     "jinja2",
     "fastapi",
     "uvicorn",
-    "apscheduler"
+    "apscheduler",
+    "jc"
 ]
 
 [project.optional-dependencies]

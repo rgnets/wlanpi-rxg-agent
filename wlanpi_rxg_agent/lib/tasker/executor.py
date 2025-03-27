@@ -27,6 +27,7 @@ class PingExecutor(Executor):
     def execute(self):
         # Check if wifi is correct
 
+        # TODO: Errors when no destination host are found are resolved in a newer version of the JC library. To fix this, core will need to include the new version instead of using the system version.
         res = self.core_client.execute_request('post', 'api/v1/utils/ping', data ={
                 "host": self.ping_target.host,
                 "count": self.ping_target.count,
