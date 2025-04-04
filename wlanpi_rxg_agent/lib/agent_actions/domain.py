@@ -3,7 +3,7 @@ import typing as t
 from dataclasses import dataclass
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, Extra
 
 class Data:
 
@@ -53,7 +53,7 @@ class Data:
         udp: bool = Field()
 
         period: t.Optional[int] = Field(default=None,
-                                    description="If specified, will schedule the traceroute to run periodically after the first attempt, in seconds.")
+                                    description="If specified, will schedule the speed test to run periodically after the first attempt, in seconds.")
         start_date: t.Optional[datetime] = Field(default_factory=datetime.now, description="The date and time when the speed test or test periods should start.")
 
 
@@ -91,14 +91,98 @@ class Data:
         jitter:  t.Optional[float] = Field(default=None)
         responses: list[Data.PingResponse] = Field(default=[])
 
+    class TracerouteProbes(BaseModel):
+        annotation: t.Any
+        asn: t.Any
+        ip: str = Field(examples=["8.8.4.4"])
+        name: str = Field(examples=["syn-098-123-060-049.biz.spectrum.com"])
+        rtt: float = Field(examples=["3.177"])
+
+    class TracerouteHops(BaseModel):
+        hop: int = Field(examples=[1], default=0)
+        probes: list[Data.TracerouteProbes] = Field()
+
+    class TracerouteResponse(BaseModel):
+        destination_ip: str = Field(examples=["8.8.4.4"])
+        destination_name: str = Field(examples=["dns.google.com"])
+        hops: list[Data.TracerouteHops] = Field()
+
+    class Iperf3ClientRequest(BaseModel):
+        host: str = Field(examples=["192.168.1.1"])
+        port: int = Field(examples=[5001], default=5001)
+        time: int = Field(examples=[10], default=10)
+        udp: bool = Field(default=False)
+        reverse: bool = Field(default=False)
+        interface: t.Optional[str] = Field(examples=["wlan0"], default=None)
+
+    # No Iperf3Result yet as it hasn't been fully modeled and I (MDK) don't know what all potential output forms are in JSON mode.
+
+    class Iperf2ClientRequest(BaseModel):
+        host: str = Field(examples=["192.168.1.1"])
+        port: int = Field(examples=[5001], default=5001)
+        time: int = Field(examples=[10], default=10)
+        udp: bool = Field(default=False)
+        reverse: bool = Field(default=False)
+        compatibility: bool = Field(default=False)
+        interface: t.Optional[str] = Field(examples=["wlan0"], default=None)
+        # version: int = Field(examples=[2, 3], default=3)
+        # interface: t.Optional[str] = Field(examples=["eth0, wlan0"], default=None)
+        # bind_address: t.Optional[str] = Field(examples=["192.168.1.12"], default=None)
+        #
+        # @model_validator(mode="after")
+        # def check_dynamic_condition(self) -> Self:
+        #     # print(self)
+        #     if self.version not in [2, 3]:
+        #         raise ValueError("iPerf version can be 2 or 3.")
+        #     if self.bind_address is not None and self.interface is not None:
+        #         raise ValueError("Only interface or bind_address can be specified.")
+        #     return self
+
+    class Iperf2Result(BaseModel, extra=Extra.allow):
+        timestamp: int = Field()
+        source_address: str = Field(examples=["192.168.1.5"])
+        source_port: int = Field(examples=[5001])
+        destination_address: str = Field(examples=["192.168.1.1"])
+        destination_port: int = Field(examples=[12345])
+        transfer_id: int = Field(examples=[3])
+        interval: list[float] = Field(examples=[0.0, 10.0])
+        transferred_bytes: int = Field()
+        transferred_mbytes: float = Field()
+        bps: int = Field()
+        mbps: float = Field()
+        jitter: t.Optional[float] = Field(default=None)
+        error_count: t.Optional[int] = Field(default=None)
+        datagrams: t.Optional[int] = Field(default=None)
+
+    class Iperf2Test(Iperf2ClientRequest):
+        id: int = Field()
+
+    class Iperf3Test(Iperf3ClientRequest):
+        id: int = Field()
+
+
 class Messages:
 
-    class PingBatchComplete(BaseModel):
-        id: int = Field()  #
-        result: Data.CompletedPing = Field()
-    class PingBatchFailure(BaseModel):
-        id: int = Field()  #
+    class Message(BaseModel):
+        pass
+
+    class ExecutorCompleteMessage(Message):
+        id: int = Field()
+        error: t.Optional[str] = Field(default=None)
         result: t.Any = Field()
+
+    class PingBatchComplete(ExecutorCompleteMessage):
+        result: t.Optional[Data.CompletedPing] = Field()
+
+    class TracerouteComplete(ExecutorCompleteMessage):
+        result: t.Optional[Data.TracerouteResponse] = Field(default=None)
+
+    class Iperf2Complete(ExecutorCompleteMessage):
+        result: t.Optional[Data.Iperf2Result] = Field(default=None)
+
+    class Iperf3Complete(ExecutorCompleteMessage):
+        result: t.Optional[t.Any] = Field(default=None)
+
 
 class Commands:
     class Reboot(BaseModel):
