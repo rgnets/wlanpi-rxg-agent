@@ -1,99 +1,86 @@
 import typing as t
 from dataclasses import dataclass
+from pydantic import BaseModel, Field
+
 
 class Messages:
 
-    @dataclass
-    class WifiControlEvent:
-        interface: str
+    class WifiControlEvent(BaseModel):
+        interface: str = Field()
 
-
-    @dataclass
     class DhcpRenewing(WifiControlEvent):
         pass
 
-    @dataclass
     class DhcpRenewalFailed(WifiControlEvent):
-        message: t.Optional[str]
-        exc: t.Optional[Exception]
+        message: t.Optional[str] = Field()
+        exc: t.Optional[Exception] = Field()
 
-    @dataclass
     class DhcpRenewed(WifiControlEvent):
         pass
 
-    @dataclass
     class WpaSupplicantEvent(WifiControlEvent):
-        details: dict #= field(default_factory=dict)
+        details: dict[str, t.Any] = Field(default_factory=dict)
 
-    @dataclass
     class WpaSupplicantStateChanged(WpaSupplicantEvent):
-        state: str
+        state: str = Field()
+
     #
-    # @dataclass
+
     # class Disconnected(WpaSupplicantStateChanged):
     #     state="disconnected"
     #
-    # @dataclass
+
     # class InterfaceDisabled(WpaSupplicantStateChanged):
     #     state="interface_disabled"
     #
-    # @dataclass
+
     # class Inactive(WpaSupplicantStateChanged):
     #     state="inactive"
     #
-    # @dataclass
+
     # class Scanning(WpaSupplicantStateChanged):
     #     state="scanning"
     #
-    # @dataclass
+
     # class Authenticating(WpaSupplicantStateChanged):
     #     state="authenticating"
     #
-    # @dataclass
+
     # class Associating(WpaSupplicantStateChanged):
     #     state="associating"
     #
-    # @dataclass
+
     # class Associated(WpaSupplicantStateChanged):
     #     state="associated"
     #
-    # @dataclass
+
     # class FourWayHandshake(WpaSupplicantStateChanged):
     #     state="4-way handshake" # Todo: Verify this is the correct way to do this
     #
-    # @dataclass
+
     # class GroupHandshake(WpaSupplicantStateChanged):
     #     state="group handshake" # Todo: Verify this is the correct way to do this
     #
-    # @dataclass
+
     # class Completed(WpaSupplicantStateChanged):
     #     state="completed"
 
-
-
-    @dataclass
     class ScanningStateChanged(WpaSupplicantEvent):
-        scanning: bool
+        scanning: bool = Field()
 
-
-    @dataclass
     class Disconnection(WpaSupplicantEvent):
         pass
 
-
-
-
-    @dataclass
+    # Not used yet, to be better defined later.
     class WpaSupplicantScanResults:
-        interface: str
-        results: list
+        interface: str = Field()
+
+        results: list[t.Any] = Field()
 
 
 class Commands:
     # class Reboot(t.NamedTuple):
     #     pass
 
-
-    @dataclass
     class GetOrCreateInterface:
-        if_name: str
+        if_name: str = Field()
