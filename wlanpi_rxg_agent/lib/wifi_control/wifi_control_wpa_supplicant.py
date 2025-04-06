@@ -450,7 +450,7 @@ if __name__ == "__main__":
         # # wlan_if.blocking_scan()
         # pprint(wlan_if.interface.get_current_network())
 
-        await wlan_if.connect(ssid="Kronos-5", psk="***REMOVED***")
+        await wlan_if.connect(ssid="anetwork", psk="apassword")
         logger.info(f"Connection state of {interface_name} is complete. Renewing dhcp.")
         await wlan_if.renew_dhcp()
         # self.logger.info(f"Waiting for dhcp to settle.")
