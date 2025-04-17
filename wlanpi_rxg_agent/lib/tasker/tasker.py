@@ -171,19 +171,23 @@ class Tasker:
                         interval=target.period
                     )
                 else:
+
+                    def on_complete():
+                        logging.debug(f"Dropping {composite_id} from scheduled_speed_tests. Current keys: {self.scheduled_speed_tests.keys()}" )
+                        self.scheduled_speed_tests.pop(composite_id)
                     new_task = OneShotTask(
                         self.scheduler,
                         "Iperf3Test",
                         identifier=composite_id,
                         task_executor=lambda: Iperf3Executor(iperf_def=test_def).execute(),
                         start_date= target.start_date,
-                        on_complete= lambda : self.scheduled_ping_targets.pop(composite_id)
+                        on_complete= lambda : on_complete()
                     )
-                self.scheduled_ping_targets[composite_id] = TaskDefinition(id=composite_id, task_obj=new_task,
+                self.scheduled_speed_tests[composite_id] = TaskDefinition(id=composite_id, task_obj=new_task,
                                                                            definition=target)
 
-            if composite_id in self.scheduled_ping_targets:
-                existing_task_def: TaskDefinition = self.scheduled_ping_targets[composite_id]
+            if composite_id in self.scheduled_speed_tests:
+                existing_task_def: TaskDefinition = self.scheduled_speed_tests[composite_id]
 
                 if existing_task_def.definition == target:
                     # Nothing needed, tasks should match
@@ -193,7 +197,7 @@ class Tasker:
                     self.logger.warning("Task modification not supported yet!")
 
                     # Cancel/stop the task
-                    existing_task = self.scheduled_ping_targets[composite_id]
+                    existing_task = self.scheduled_speed_tests[composite_id]
                     existing_task.task_obj.end_task()
 
                     # Create new task to replace it with
