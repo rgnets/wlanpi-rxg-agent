@@ -177,7 +177,7 @@ class Tasker:
                         identifier=composite_id,
                         task_executor=lambda: Iperf3Executor(iperf_def=test_def).execute(),
                         start_date= target.start_date,
-                        on_complete= lambda _ : self.scheduled_ping_targets.pop(composite_id)
+                        on_complete= lambda : self.scheduled_ping_targets.pop(composite_id)
                     )
                 self.scheduled_ping_targets[composite_id] = TaskDefinition(id=composite_id, task_obj=new_task,
                                                                            definition=target)
