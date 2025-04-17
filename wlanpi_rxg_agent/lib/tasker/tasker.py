@@ -99,7 +99,7 @@ class Tasker:
                     self.logger.debug("Task already exists and matches target configuration. Skipping...")
                 else:
                     # Tasks exists but the configuration does not match. Update it.
-                    self.logger.warning("Task modification not supported yet!")
+                    self.logger.warning("Task modification not supported yet! Replacing task.")
 
                     # Cancel/stop the task
                     existing_task = self.scheduled_ping_targets[composite_id]
@@ -138,7 +138,7 @@ class Tasker:
                     self.logger.debug("Task already exists and matches target configuration. Skipping...")
                 else:
                     # Tasks exists but the configuration does not match. Update it.
-                    self.logger.warning("Task modification not supported yet!")
+                    self.logger.warning("Task modification not supported yet! Replacing task.")
 
                     # Cancel/stop the task
                     existing_task = self.scheduled_traceroutes[composite_id]
@@ -194,7 +194,7 @@ class Tasker:
                     self.logger.debug("Task already exists and matches target configuration. Skipping...")
                 else:
                     # Tasks exists but the configuration does not match. Update it.
-                    self.logger.warning("Task modification not supported yet!")
+                    self.logger.warning("Task modification not supported yet! Replacing task.")
 
                     # Cancel/stop the task
                     existing_task = self.scheduled_speed_tests[composite_id]

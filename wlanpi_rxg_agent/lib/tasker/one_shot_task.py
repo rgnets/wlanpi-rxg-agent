@@ -61,5 +61,3 @@ class OneShotTask:
         finally:
             self.logger.info(f"One-shot complete for \"{self.identifier}\". Removing job and calling on_complete callbacks.")
             self.end_task()
-            if self.on_complete is not None:
-                self.on_complete()
