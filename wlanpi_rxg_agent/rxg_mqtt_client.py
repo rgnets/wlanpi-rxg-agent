@@ -172,7 +172,7 @@ class RxgMqttClient:
             message_bus.handle(supplicant_domain.Messages.RestartInternalMqtt(**event.__dict__))
 
 
-    async def ping_batch_handler(self, event:Union[actions_domain.Messages.PingBatchComplete, actions_domain.Messages.PingBatchFailure]):
+    async def ping_batch_handler(self, event:actions_domain.Messages.PingBatchComplete):
 
         await self.publish_with_retry(topic=f"{self.my_base_topic}/ingest/ping_batch", payload=event.to_json() )
 

@@ -3,6 +3,8 @@ import logging
 import asyncio
 from datetime import datetime, timedelta
 from typing import Coroutine, Callable, Union, Optional
+
+from apscheduler.jobstores.base import JobLookupError
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 
@@ -37,6 +39,16 @@ class RepeatingTask:
                                           # start_date='2023-06-21 10:00:00',
                                           # end_date='2023-06-21 11:00:00'
                                           )
+
+    def end_task(self):
+        try:
+            self.job.remove()
+        except JobLookupError:
+            self.logger.warning(f"Error looking up job while ending task {self.identifier}. It was probably already removed.")
+        self.logger.info(f"Task ended: {self.identifier}")
+
+    # Technically, jobs can be modified in place. Currently not doing that.
+
 
     async def run_once(self):
         try:

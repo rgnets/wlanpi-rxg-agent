@@ -15,6 +15,9 @@ class Messages:
         message: t.Optional[str] = Field()
         exc: t.Optional[Exception] = Field()
 
+        class Config:
+            arbitrary_types_allowed = True
+
     class DhcpRenewed(WifiControlEvent):
         pass
 
@@ -82,5 +85,5 @@ class Commands:
     # class Reboot(t.NamedTuple):
     #     pass
 
-    class GetOrCreateInterface:
+    class GetOrCreateInterface(BaseModel):
         if_name: str = Field()

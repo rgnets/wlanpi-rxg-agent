@@ -87,11 +87,9 @@ class AgentActions():
         # Then ping targets
         command_bus.handle(actions_domain.Commands.ConfigurePingTargets(targets=event.ping_targets))
         # Then traceroute targets
-
+        command_bus.handle(actions_domain.Commands.ConfigureTraceroutes(targets=event.traceroute_targets))
         # Then Speed Tests
-
-
-
+        command_bus.handle(actions_domain.Commands.ConfigureSpeedTests(targets=event.speed_tests))
 
 
 

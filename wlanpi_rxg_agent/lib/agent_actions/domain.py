@@ -169,10 +169,11 @@ class Messages:
     class ExecutorCompleteMessage(Message):
         id: int = Field()
         error: t.Optional[str] = Field(default=None)
-        result: t.Any = Field()
+        result: t.Any = Field(default=None)
+        extra: t.Any = Field(default=None)
 
     class PingBatchComplete(ExecutorCompleteMessage):
-        result: t.Optional[Data.CompletedPing] = Field()
+        result: t.Optional[Data.CompletedPing] = Field(default=None)
 
     class TracerouteComplete(ExecutorCompleteMessage):
         result: t.Optional[Data.TracerouteResponse] = Field(default=None)
@@ -211,7 +212,10 @@ class Commands:
         interfaces: dict[str, Data.RadioConfiguration] = Field(default={})
 
     class ConfigureTraceroutes(BaseModel):
-        pass
+        targets: list[Data.Traceroute] = Field()
+
+    class ConfigureSpeedTests(BaseModel):
+        targets: list[Data.SpeedTest] = Field()
 
     class ConfigurePingTargets(BaseModel):
         targets: list[Data.PingTarget] = Field()

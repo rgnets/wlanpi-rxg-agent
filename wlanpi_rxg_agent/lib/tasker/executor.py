@@ -50,7 +50,7 @@ class PingExecutor(Executor):
     def execution_complete(self, message_model: Type[actions_domain.Messages.ExecutorCompleteMessage], result):
         if "message" in result:
             self.logger.warning(f"Something went wrong executor: {result}")
-            message_bus.handle(message_model(id=self.exec_def.id, error=str(result), result=result))
+            message_bus.handle(message_model(id=self.exec_def.id, error=str(result)))
         else:
             message_bus.handle(message_model(id=self.exec_def.id, result=result))
 
