@@ -160,6 +160,49 @@ class Data:
     class Iperf3Test(Iperf3ClientRequest):
         id: int = Field()
 
+    class DhcpTestResponse(BaseModel):
+        time: float = Field()
+        duid: str = Field(examples=["00:01:00:01:2e:74:ef:71:dc:a6:32:8e:04:17"])
+        events: list[str] = Field()
+        data: dict[str, str] = Field()
+
+    class DhcpTestRequest(BaseModel):
+        interface: t.Optional[str] = Field(examples=["wlan0"], default=None)
+        timeout: int = Field(default=5)
+
+    class DigRequest(BaseModel):
+        interface: t.Optional[str] = Field(examples=["wlan0"], default=None)
+        nameserver: t.Optional[str] = Field(examples=["wlan0"], default=None)
+        host: str = Field(examples=["wlanpi.com"])
+
+    class DigQuestion(BaseModel):
+        name: str = Field(examples=["wlanpi.com."])
+        question_class: str = Field(examples=["IN"], alias="class")
+        type: str = Field(examples=["A"])
+
+    class DigAnswer(BaseModel):
+        name: str = Field(examples=["wlanpi.com."])
+        answer_class: str = Field(examples=["IN"], alias="class")
+        type: str = Field(examples=["A"])
+        ttl: int = Field(examples=[1795])
+        data: str = Field(examples=["165.227.111.100"])
+
+    class DigResponse(BaseModel):
+        id: int = Field()
+        opcode: str = Field()
+        status: str = Field()
+        flags: list[str] = Field()
+        query_num: int = Field()
+        answer_num: int = Field()
+        authority_num: int = Field()
+        additional_num: int = Field()
+        question: Data.DigQuestion = Field()
+        answer: list[Data.DigAnswer] = Field()
+        query_time: int = Field(examples=[3])
+        server: str = Field(examples=["192.168.30.1#53(192.168.30.1)"])
+        when: str = Field(examples=["Thu Nov 14 19:15:39 EST 2024"])
+        rcvd: int = Field(examples=[82])
+
 
 class Messages:
 
@@ -183,6 +226,12 @@ class Messages:
 
     class Iperf3Complete(ExecutorCompleteMessage):
         result: t.Optional[t.Any] = Field(default=None)
+
+    class DigTestComplete(ExecutorCompleteMessage):
+        result: t.Optional[t.List[Data.DigResponse]] = Field(default=None)
+
+    class DhcpTestComplete(ExecutorCompleteMessage):
+        result: t.Optional[Data.DhcpTestResponse] = Field(default=None)
 
 
 class Commands:
