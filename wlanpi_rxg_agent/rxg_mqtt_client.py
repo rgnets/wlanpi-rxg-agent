@@ -101,6 +101,12 @@ class RxgMqttClient:
             (agent_domain.Messages.ShutdownStarted, self.shutdown_handler),
             # (agent_domain.Messages.StartupComplete, self.startup_complete_handler),
             # (agent_domain.Messages.AgentConfigUpdate, self.config_update_handler),
+            (actions_domain.Messages.PingBatchComplete, self.ping_batch_handler),
+            (actions_domain.Messages.TracerouteComplete, self.traceroute_complete_handler),
+            (actions_domain.Messages.Iperf2Complete, self.iperf2_complete_handler),
+            (actions_domain.Messages.Iperf3Complete, self.iperf3_complete_handler),
+            (actions_domain.Messages.DigTestComplete, self.dig_test_complete_handler),
+            (actions_domain.Messages.DhcpTestComplete, self.dhcp_test_complete_handler),
         ]
 
         self.setup_listeners()
@@ -173,8 +179,22 @@ class RxgMqttClient:
 
 
     async def ping_batch_handler(self, event:actions_domain.Messages.PingBatchComplete):
+        await self.publish_with_retry(topic=f"{self.my_base_topic}/ingest/ping_batch", payload=json.dumps(event.model_dump()) )
 
-        await self.publish_with_retry(topic=f"{self.my_base_topic}/ingest/ping_batch", payload=event.to_json() )
+    async def traceroute_complete_handler(self, event:actions_domain.Messages.TracerouteComplete):
+        await self.publish_with_retry(topic=f"{self.my_base_topic}/ingest/traceroute", payload=json.dumps(event.model_dump()) )
+
+    async def iperf2_complete_handler(self, event: actions_domain.Messages.Iperf2Complete):
+        await self.publish_with_retry(topic=f"{self.my_base_topic}/ingest/iperf2", payload=json.dumps(event.model_dump()))
+
+    async def iperf3_complete_handler(self, event: actions_domain.Messages.Iperf3Complete):
+        await self.publish_with_retry(topic=f"{self.my_base_topic}/ingest/iperf3", payload=json.dumps(event.model_dump()))
+
+    async def dig_test_complete_handler(self, event: actions_domain.Messages.DigTestComplete):
+        await self.publish_with_retry(topic=f"{self.my_base_topic}/ingest/dig", payload=json.dumps(event.model_dump()))
+
+    async def dhcp_test_complete_handler(self, event: actions_domain.Messages.DhcpTestComplete):
+        await self.publish_with_retry(topic=f"{self.my_base_topic}/ingest/dhcp", payload=json.dumps(event.model_dump()))
 
     async def stop(self):
         self.logger.info("Stopping MQTTBridge")
@@ -220,6 +240,7 @@ class RxgMqttClient:
         try:
             if (msg.topic.matches(self.my_base_topic + "/error")
                     or msg.topic.value.endswith('/_response')
+                    or msg.topic.value.startswith(f"{self.my_base_topic}/ingest")
                     or msg.topic.value.endswith('/status') or not (
                             msg.topic.matches(self.__global_base_topic + '/#') or msg.topic.matches(
                         self.my_base_topic + '/#'))):
@@ -336,9 +357,9 @@ class RxgMqttClient:
             qos: int = 0,
             retain: bool = False,
             properties: Optional[Properties] = None,
-            *args: Any,
+            # *args: Any = None,
             timeout: Optional[float] = None,
-            **kwargs: Any,
+            # **kwargs: Any,
     ) -> None:
         """Publishes a message to the MQTT broker with retry logic.
 
@@ -360,7 +381,8 @@ class RxgMqttClient:
         while attempts < MAX_ATTEMPTS:
             try:
                 attempts += 1
-                result = await self.mqtt_client.publish(topic, payload, qos, retain, properties, *args, timeout, **kwargs)  # Capture result
+                result = await self.mqtt_client.publish(topic=topic, payload=payload, qos=qos, retain=retain, properties=properties, timeout=timeout)  # Capture result
+                # result = await self.mqtt_client.publish(topic, payload, qos, retain, properties, *args, timeout,**kwargs)  # Capture result
                 return result  # Return the result if successful
             except MqttError:
                 self.logger.exception(

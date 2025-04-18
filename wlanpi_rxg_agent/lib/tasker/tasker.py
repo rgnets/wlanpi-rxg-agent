@@ -1,12 +1,12 @@
 import logging
 import asyncio
-from typing import TypeVar, Generic, Union
+from typing import TypeVar, Generic, Union, Any
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from pydantic import BaseModel, Field, ConfigDict
 
 from busses import message_bus, command_bus
-from lib.tasker.executor import PingExecutor, TraceRouteExecutor, Iperf3Executor
+from lib.tasker.executor import PingExecutor, TraceRouteExecutor, Iperf3Executor, DigTestExecutor, DhcpTestExecutor
 from lib.tasker.one_shot_task import OneShotTask
 from lib.tasker.repeating_task import RepeatingTask
 from lib.wifi_control import domain as wifi_domain
@@ -37,7 +37,7 @@ class Tasker:
         self.scheduled_ping_targets: dict[str, TaskDefinition[actions_domain.Data.PingTarget]] = {}
         self.scheduled_traceroutes: dict[str, TaskDefinition[actions_domain.Data.Traceroute]] = {}
         self.scheduled_speed_tests: dict[str, TaskDefinition[actions_domain.Data.SpeedTest]] = {}
-
+        self.misc_tasks: dict[str, TaskDefinition[Any]] = {}
 
 
         # Event/Command Bus
@@ -50,6 +50,8 @@ class Tasker:
             (agent_domain.Messages.ShutdownStarted, self.shutdown),
         )
         self.setup_listeners()
+
+        self.configure_fixed_tasks()
 
     def setup_listeners(self):
         # TODO: Surely we can implement this as some sort of decorator function?
@@ -70,6 +72,29 @@ class Tasker:
 
     def __del__(self):
         self.shutdown()
+
+
+    def configure_fixed_tasks(self):
+        # Configures fixed tasks that always run while the tasker is running.
+        self.logger.info("Configuring fixed tasks")
+        fixed_task_prefix = "ft_"
+        fixed_tasks = [
+            ["dig_eth0", "DigTest", 60, DigTestExecutor(exec_def=actions_domain.Data.DigRequest( host='google.com', interface='eth0'))],
+            ["dhcp_eth0", "DhcpTest", 60, DhcpTestExecutor(exec_def=actions_domain.Data.DhcpTestRequest( interface='eth0', timeout=10))],
+        ]
+        
+        for task_ident, task_type, task_period, task_executor in fixed_tasks:
+            task_ident = fixed_task_prefix + task_ident
+            self.logger.info(f"Configuring {task_ident}")
+            new_task = RepeatingTask(
+                self.scheduler,
+                task_type,
+                identifier=task_ident,
+                task_executor=lambda: task_executor.execute(),
+                interval=task_period
+            )
+            self.misc_tasks[task_ident] = TaskDefinition(id=task_ident, task_obj=new_task,
+                                                                           definition=task_executor.exec_def)
 
 
 
