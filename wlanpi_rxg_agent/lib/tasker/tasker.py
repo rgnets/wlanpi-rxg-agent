@@ -1,5 +1,6 @@
 import logging
 import asyncio
+from datetime import datetime
 from typing import TypeVar, Generic, Union, Any
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -30,7 +31,7 @@ class Tasker:
         # self.active_tasks: list = []
 
         self.loop = asyncio.get_event_loop()
-        self.scheduler = AsyncIOScheduler(loop=self.loop)
+        self.scheduler = AsyncIOScheduler(loop=self.loop, misfire_grace_time=30)
         self.scheduler.start()
 
 
@@ -73,6 +74,8 @@ class Tasker:
     def __del__(self):
         self.shutdown()
 
+    def debug_tick_task(self):
+        print('Tick! The time is: %s' % datetime.now())
 
     def configure_fixed_tasks(self):
         # Configures fixed tasks that always run while the tasker is running.
@@ -95,8 +98,8 @@ class Tasker:
             )
             self.misc_tasks[task_ident] = TaskDefinition(id=task_ident, task_obj=new_task,
                                                                            definition=task_executor.exec_def)
-
-
+        # self.misc_tasks['debug_tick'] = TaskDefinition(id="DebugTickTask",definition={}, task_obj=Re)
+        # self.scheduler.add_job(self.debug_tick_task, 'interval', seconds=2)
 
     def configure_ping_targets(self, event: actions_domain.Commands.ConfigurePingTargets):
         # TODO: Implement this function to actually set the ping targets.
@@ -121,7 +124,7 @@ class Tasker:
 
                 if existing_task_def.definition == target:
                     # Nothing needed, tasks should match
-                    self.logger.debug("Task already exists and matches target configuration. Skipping...")
+                    self.logger.debug(f"Task \"{composite_id}\" (from event {event.__class__}) already exists and matches target configuration. Skipping...")
                 else:
                     # Tasks exists but the configuration does not match. Update it.
                     self.logger.warning("Task modification not supported yet! Replacing task.")
@@ -160,7 +163,7 @@ class Tasker:
 
                 if existing_task_def.definition == target:
                     # Nothing needed, tasks should match
-                    self.logger.debug("Task already exists and matches target configuration. Skipping...")
+                    self.logger.debug(f"Task \"{composite_id}\" (from event {event.__class__}) already exists and matches target configuration. Skipping...")
                 else:
                     # Tasks exists but the configuration does not match. Update it.
                     self.logger.warning("Task modification not supported yet! Replacing task.")
@@ -216,7 +219,7 @@ class Tasker:
 
                 if existing_task_def.definition == target:
                     # Nothing needed, tasks should match
-                    self.logger.debug("Task already exists and matches target configuration. Skipping...")
+                    self.logger.debug(f"Task \"{composite_id}\" (from event {event.__class__}) already exists and matches target configuration. Skipping...")
                 else:
                     # Tasks exists but the configuration does not match. Update it.
                     self.logger.warning("Task modification not supported yet! Replacing task.")

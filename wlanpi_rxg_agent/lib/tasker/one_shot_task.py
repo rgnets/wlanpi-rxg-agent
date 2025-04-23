@@ -31,7 +31,9 @@ class OneShotTask:
 
         self.job = self.scheduler.add_job(self.run_once,
                                           'date',
+                                          name=self.ident_name,
                                           next_run_time=self.start_date,
+                                          misfire_grace_time=120,
                                           )
 
     def end_task(self):

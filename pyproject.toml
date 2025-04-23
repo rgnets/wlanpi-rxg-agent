@@ -38,7 +38,8 @@ dependencies = [
     "fastapi",
     "uvicorn",
     "apscheduler",
-    "jc"
+    "jc",
+    "aiohttp"
 ]
 
 [project.optional-dependencies]

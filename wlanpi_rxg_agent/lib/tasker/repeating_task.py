@@ -33,11 +33,13 @@ class RepeatingTask:
 
         self.job = self.scheduler.add_job(self.run_once,
                                           'interval',
+                                          name=self.ident_name,
                                           seconds=self.interval,
                                           start_date=self.start_date,
                                           end_date=self.end_date,
                                           # start_date='2023-06-21 10:00:00',
                                           # end_date='2023-06-21 11:00:00'
+                                          misfire_grace_time=int(self.interval/2),
                                           )
 
     def end_task(self):
