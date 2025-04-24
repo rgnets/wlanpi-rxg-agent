@@ -77,6 +77,13 @@ class Tasker:
     def debug_tick_task(self):
         print('Tick! The time is: %s' % datetime.now())
 
+    def debug_dump_task(self):
+        self.logger.debug(f"Scheduled PingTargets: {self.scheduled_ping_targets.items()}")
+        self.logger.debug(f"Scheduled TraceRoutes: {self.scheduled_traceroutes.items()}")
+        self.logger.debug(f"Scheduled SpeedTests: {self.scheduled_speed_tests.items()}")
+        self.logger.debug(f"Scheduled misc: {self.misc_tasks.items()}")
+        self.logger.debug(f"Raw Scheduler jobs: {self.scheduler.get_jobs()}")
+
     def configure_fixed_tasks(self):
         # Configures fixed tasks that always run while the tasker is running.
         self.logger.info("Configuring fixed tasks")
@@ -100,31 +107,19 @@ class Tasker:
                                                                            definition=task_executor.exec_def)
         # self.misc_tasks['debug_tick'] = TaskDefinition(id="DebugTickTask",definition={}, task_obj=Re)
         # self.scheduler.add_job(self.debug_tick_task, 'interval', seconds=2)
+        self.scheduler.add_job(self.debug_dump_task, 'interval', seconds=10)
 
     def configure_ping_targets(self, event: actions_domain.Commands.ConfigurePingTargets):
-        # TODO: Implement this function to actually set the ping targets.
-
+        # Configure ping targets based on agent config payload, delivered to this as an event.
         for target in event.targets:
             composite_id = f"{target.id}:{target.interface}"
-
-            def create_new_task():
-                new_task = RepeatingTask(
-                    self.scheduler,
-                    "PingTarget",
-                    identifier=composite_id,
-                    task_executor=lambda: PingExecutor(ping_target=target).execute(),
-                    interval= target.period
-                )
-
-                self.scheduled_ping_targets[composite_id] = TaskDefinition(id=composite_id, task_obj=new_task,
-                                                                           definition=target)
-
             if composite_id in self.scheduled_ping_targets:
                 existing_task_def: TaskDefinition = self.scheduled_ping_targets[composite_id]
 
                 if existing_task_def.definition == target:
                     # Nothing needed, tasks should match
                     self.logger.debug(f"Task \"{composite_id}\" (from event {event.__class__}) already exists and matches target configuration. Skipping...")
+                    continue
                 else:
                     # Tasks exists but the configuration does not match. Update it.
                     self.logger.warning("Task modification not supported yet! Replacing task.")
@@ -133,30 +128,20 @@ class Tasker:
                     existing_task = self.scheduled_ping_targets[composite_id]
                     existing_task.task_obj.end_task()
 
-                    # Create new task to replace it with
-                    create_new_task()
+            new_task = RepeatingTask(
+                self.scheduler,
+                "PingTarget",
+                identifier=composite_id,
+                task_executor=lambda: PingExecutor(ping_target=target).execute(),
+                interval=target.period
+            )
 
-                pass
-            else:
-                create_new_task()
-
+            self.scheduled_ping_targets[composite_id] = TaskDefinition(id=composite_id, task_obj=new_task,
+                                                                       definition=target)
 
     def configure_traceroutes(self, event: actions_domain.Commands.ConfigureTraceroutes):
-
         for target in event.targets:
             composite_id = f"{target.id}:{target.interface}"
-
-            def create_new_task():
-                new_task = RepeatingTask(
-                    self.scheduler,
-                    "TraceRoute",
-                    identifier=composite_id,
-                    task_executor=lambda: TraceRouteExecutor(traceroute_def=target).execute(),
-                    interval=target.period
-                )
-
-                self.scheduled_traceroutes[composite_id] = TaskDefinition(id=composite_id, task_obj=new_task,
-                                                                           definition=target)
 
             if composite_id in self.scheduled_traceroutes:
                 existing_task_def: TaskDefinition = self.scheduled_traceroutes[composite_id]
@@ -164,6 +149,7 @@ class Tasker:
                 if existing_task_def.definition == target:
                     # Nothing needed, tasks should match
                     self.logger.debug(f"Task \"{composite_id}\" (from event {event.__class__}) already exists and matches target configuration. Skipping...")
+                    continue
                 else:
                     # Tasks exists but the configuration does not match. Update it.
                     self.logger.warning("Task modification not supported yet! Replacing task.")
@@ -173,46 +159,20 @@ class Tasker:
                     existing_task.task_obj.end_task()
 
                     # Create new task to replace it with
-                    create_new_task()
-
-                pass
-            else:
-                create_new_task()
+            new_task = RepeatingTask(
+                self.scheduler,
+                "TraceRoute",
+                identifier=composite_id,
+                task_executor=lambda: TraceRouteExecutor(traceroute_def=target).execute(),
+                interval=target.period
+            )
+            self.scheduled_traceroutes[composite_id] = TaskDefinition(id=composite_id, task_obj=new_task,
+                                                                      definition=target)
 
 
     def configure_speed_tests(self, event: actions_domain.Commands.ConfigureSpeedTests):
-
         for target in event.targets:
             composite_id = f"{target.id}:{target.interface}"
-
-            def create_new_task():
-
-                test_def = actions_domain.Data.Iperf3Test(**target.model_dump())
-
-                if target.period:
-                    new_task = RepeatingTask(
-                        self.scheduler,
-                        "TraceRoute",
-                        identifier=composite_id,
-                        task_executor=lambda: Iperf3Executor(iperf_def=test_def).execute(),
-                        start_date=target.start_date,
-                        interval=target.period
-                    )
-                else:
-
-                    def on_complete():
-                        logging.debug(f"Dropping {composite_id} from scheduled_speed_tests. Current keys: {self.scheduled_speed_tests.keys()}" )
-                        self.scheduled_speed_tests.pop(composite_id)
-                    new_task = OneShotTask(
-                        self.scheduler,
-                        "Iperf3Test",
-                        identifier=composite_id,
-                        task_executor=lambda: Iperf3Executor(iperf_def=test_def).execute(),
-                        start_date= target.start_date,
-                        on_complete= lambda : on_complete()
-                    )
-                self.scheduled_speed_tests[composite_id] = TaskDefinition(id=composite_id, task_obj=new_task,
-                                                                           definition=target)
 
             if composite_id in self.scheduled_speed_tests:
                 existing_task_def: TaskDefinition = self.scheduled_speed_tests[composite_id]
@@ -220,6 +180,7 @@ class Tasker:
                 if existing_task_def.definition == target:
                     # Nothing needed, tasks should match
                     self.logger.debug(f"Task \"{composite_id}\" (from event {event.__class__}) already exists and matches target configuration. Skipping...")
+                    continue
                 else:
                     # Tasks exists but the configuration does not match. Update it.
                     self.logger.warning("Task modification not supported yet! Replacing task.")
@@ -228,12 +189,34 @@ class Tasker:
                     existing_task = self.scheduled_speed_tests[composite_id]
                     existing_task.task_obj.end_task()
 
-                    # Create new task to replace it with
-                    create_new_task()
+            test_def = actions_domain.Data.Iperf3Test(**target.model_dump())
 
-                pass
+            if target.period:
+                new_task = RepeatingTask(
+                    self.scheduler,
+                    "TraceRoute",
+                    identifier=composite_id,
+                    task_executor=lambda: Iperf3Executor(iperf_def=test_def).execute(),
+                    start_date=target.start_date,
+                    interval=target.period
+                )
             else:
-                create_new_task()
+
+                def on_complete(composite_id):
+                    logging.debug(
+                        f"Dropping {composite_id} from scheduled_speed_tests. Current keys: {self.scheduled_speed_tests.keys()}")
+                    self.scheduled_speed_tests.pop(composite_id)
+
+                new_task = OneShotTask(
+                    self.scheduler,
+                    "Iperf3Test",
+                    identifier=composite_id,
+                    task_executor=lambda: Iperf3Executor(iperf_def=test_def).execute(),
+                    start_date=target.start_date,
+                    on_complete=lambda: on_complete(composite_id)
+                )
+            self.scheduled_speed_tests[composite_id] = TaskDefinition(id=composite_id, task_obj=new_task,
+                                                                      definition=target)
 
 
 
