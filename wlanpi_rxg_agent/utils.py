@@ -2,6 +2,7 @@ import asyncio
 import datetime
 import json
 import logging
+import pprint
 import shlex
 import subprocess
 import time
@@ -322,5 +323,21 @@ def get_eth0_mac() -> str:
     return eth0_data["mac_addr"]
 
 
+async def async_wrapper(sync_task, *args):
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(None, sync_task, *args)
+
+
+async def every(__seconds: float, func, *args, **kwargs):
+    while True:
+        func(*args, **kwargs)
+        await asyncio.sleep(__seconds)
+
+async def aevery(__seconds: float, func, *args, **kwargs):
+    while True:
+        await func(*args, **kwargs)
+        await asyncio.sleep(__seconds)
+
 if __name__ == "__main__":
-    print(get_interface_ip_addr("eth0"))
+    # print(get_interface_ip_addr("eth0"))
+    pprint.pp(get_default_gateways())

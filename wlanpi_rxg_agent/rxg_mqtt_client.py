@@ -1,6 +1,10 @@
+import inspect
 import re
+import traceback
+from asyncio import AbstractEventLoop
 from os import unlink
 from ssl import SSLCertVerificationError
+import ssl
 from typing import Optional, Callable, Union, Any, Coroutine
 
 import json
@@ -12,19 +16,26 @@ import string
 import socket
 import time
 import paho.mqtt.client as mqtt
-import schedule
+# import schedule
 import asyncio
 import aiomqtt
-from aiomqtt import TLSParameters
+from aiomqtt import TLSParameters, MqttError, MqttCodeError
+from aiomqtt.types import PayloadType
+from paho.mqtt.properties import Properties
 
+from busses import message_bus, command_bus
+import lib.domain as agent_domain
+import lib.rxg_supplicant.domain as supplicant_domain
+import lib.agent_actions.domain as actions_domain
 from api_client import ApiClient
 from kismet_control import KismetControl
 from lib.configuration.agent_config_file import AgentConfigFile
 from lib.configuration.bootloader_config_file import BootloaderConfigFile
 from lib.configuration.bridge_config_file import BridgeConfigFile
 from lib.wifi_control.wifi_control_wpa_supplicant import WiFiControlWpaSupplicant
-from structures import TLSConfig, MQTTResponse
+from structures import TLSConfig, MQTTRestResponse
 import utils
+
 from utils import run_command_async
 
 
@@ -33,39 +44,24 @@ class RxgMqttClient:
 
     def __init__(
             self,
-            mqtt_server: str = "wi.fi",
-            mqtt_port: int = 1883,
-            tls_config: Optional[TLSConfig] = None,
-            wlan_pi_core_base_url: str = "http://127.0.0.1:31415",
-            kismet_base_url: str = "http://127.0.0.1:2501",
-            identifier: Optional[str] = None,
-            agent_reconfig_callback: Optional[Callable[[dict[str,Any]], Coroutine[Any,Any,None]]] = None,
+            identifier: Optional[str] = None
     ):
         self.logger = logging.getLogger(__name__)
-        self.logger.info("Initializing RxgMqttClient")
+        self.logger.info(f"Initializing {__name__}")
 
+        self.use_tls = True
         self.run = False
         self.connected = False
 
-        self.mqtt_server = mqtt_server
-        self.mqtt_port = mqtt_port
-        self.tls_config = tls_config
-        self.core_base_url = wlan_pi_core_base_url
-        self.kismet_base_url = kismet_base_url
-
-        self.agent_reconfig_callback = agent_reconfig_callback
-        self.api_client = ApiClient(server_ip=mqtt_server, verify_ssl=False, timeout=None)
-
-        self.wifi_control = WiFiControlWpaSupplicant()
+        self.mqtt_server = None
+        self.mqtt_port = None
+        self.tls_config: Optional[TLSConfig] = None
+        # self.wifi_control = WiFiControlWpaSupplicant()
 
         self.my_base_topic = f"wlan-pi/{identifier}/agent"
-        # self.mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
-        self.mqtt_client = aiomqtt.Client(
-            mqtt_server,
-            port=self.mqtt_port,
-            tls_params=TLSParameters(**self.tls_config.__dict__) if self.tls_config else None,
-            will=aiomqtt.Will(f"{self.my_base_topic}/status", "Abnormally Disconnected", 1, True)
-        )
+
+        # Dummy declaration for type safety. Real client is created on startup hook
+        self.mqtt_client = aiomqtt.Client('127.0.0.1')
 
         # Endpoints in the core that should be routinely polled and updated
         # This may go away if we can figure out to do event-based updates
@@ -95,85 +91,136 @@ class RxgMqttClient:
 
         # Holds scheduled jobs from `scheduler` so we can clean them up
         # on exit.
-        self.scheduled_jobs: list[schedule.Job] = []
+        # self.scheduled_jobs: list[schedule.Job] = []
 
-        self.kismet_control = KismetControl()
-
-        self.bootloader_config = BootloaderConfigFile()
         self.agent_config = AgentConfigFile()
         self.bridge_config = BridgeConfigFile()
 
-    async def go(self):
-        """
-        Run the client. This calls the Paho client's `.loop_start()` method,
-        which runs in the background until the Paho client is disconnected.
-        :return:
-        """
-        self.logger.info("Starting RxgMqttClient")
-        self.run = True
 
-        reconnect_interval = 5
+        self.message_handler_pairs = [
+            (supplicant_domain.Messages.NewCertifiedConnection, self.certified_handler),
+            (supplicant_domain.Messages.RestartInternalMqtt, self.start_client),
+            (agent_domain.Messages.ShutdownStarted, self.shutdown_handler),
+            # (agent_domain.Messages.StartupComplete, self.startup_complete_handler),
+            # (agent_domain.Messages.AgentConfigUpdate, self.config_update_handler),
+            (actions_domain.Messages.PingComplete, self.ping_batch_handler),
+            (actions_domain.Messages.TracerouteComplete, self.traceroute_complete_handler),
+            (actions_domain.Messages.Iperf2Complete, self.iperf2_complete_handler),
+            (actions_domain.Messages.Iperf3Complete, self.iperf3_complete_handler),
+            (actions_domain.Messages.DigTestComplete, self.dig_test_complete_handler),
+            (actions_domain.Messages.DhcpTestComplete, self.dhcp_test_complete_handler),
+        ]
 
-        self.logger.info(
-            f"Connecting to MQTT server at {self.mqtt_server}:{self.mqtt_port}"
-        )
-        while True:
+        self.setup_listeners()
+        self.mqtt_listener_task: Any = None
+
+
+    def setup_listeners(self):
+        for message, handler in self.message_handler_pairs:
+            message_bus.add_handler(message, handler)
+
+    def teardown_listeners(self):
+        for message, handler in self.message_handler_pairs:
+            message_bus.remove_handler(message, handler)
+
+    async def shutdown_handler(self, event: agent_domain.Messages.ShutdownStarted) -> None:
+        if self.run:
+            await self.stop()
+
+    async def listen(self, client:aiomqtt.Client):
+        async for message in self.mqtt_client.messages:
+            # self.logger.info(f"Got message {message}: {message.payload}")
+            await self.handle_message(self.mqtt_client, message)
+
+    async def start_client(self, host, port, tls_config: TLSConfig = None ):
+        try:
+            async with aiomqtt.Client(
+                host,
+                port=port,
+                tls_params=TLSParameters(**tls_config.__dict__) if tls_config else None,
+                will=aiomqtt.Will(f"{self.my_base_topic}/status", "Abnormally Disconnected", 1, True)
+            ) as c:
+                # Make client globally available
+                self.mqtt_client = c
+                self.logger.info(
+                    f"Connected to MQTT server at {self.mqtt_server}:{self.mqtt_port}."
+                )
+
+                self.logger.info("Subscribing to topics of interest.")
+                # Subscribe to the topics we're going to care about.
+                for topic in self.topics_of_interest:
+                    self.logger.info(f"Subscribing to {topic}")
+                    await self.mqtt_client.subscribe(topic)
+
+                # Once we're ready, announce that we're connected:
+                await self.mqtt_client.publish(f"{self.my_base_topic}/status", "Connected", 1, True)
+
+                self.connected = True
+
+                loop = asyncio.get_event_loop()
+                self.mqtt_listener_task = loop.create_task(self.listen(self.mqtt_client))
+                await self.mqtt_listener_task
+
+        except (aiomqtt.exceptions.MqttError, aiomqtt.exceptions.MqttCodeError) as e:
+            err_msg = "There was an error in the MQTT Listener"
+            self.logger.error(err_msg, exc_info=True)
+            message_bus.handle(agent_domain.Messages.MqttError(err_msg, e))
+            message_bus.handle(supplicant_domain.Messages.RestartInternalMqtt(host=host, port=port, tls_config=tls_config))
+
+    async def certified_handler(self, event:supplicant_domain.Messages.Certified) -> None:
+        if self.run:
             try:
-                async with self.mqtt_client:
-                    self.logger.info(
-                        f"Connected to MQTT server at {self.mqtt_server}:{self.mqtt_port}."
-                    )
+                await self.stop()
+            except aiomqtt.exceptions.MqttCodeError as e:
+                self.logger.warning(f"Failed to stop Agent MQTT: {e}", exc_info=True)
+        self.run = True
+        self.tls_config = TLSConfig(ca_certs=event.ca_file, certfile=event.certificate_file, keyfile=event.key_file,
+                               cert_reqs=ssl.VerifyMode(event.cert_reqs), tls_version=ssl.PROTOCOL_TLSv1_2,
+                               ciphers=None) if self.use_tls else None
+        self.mqtt_server = event.host
+        self.mqtt_port = event.port
 
-                    self.logger.info("Subscribing to topics of interest.")
-                    # Subscribe to the topics we're going to care about.
-                    for topic in self.topics_of_interest:
-                        self.logger.info(f"Subscribing to {topic}")
-                        await self.mqtt_client.subscribe(topic)
+        await self.start_client(host=event.host, port=event.port, tls_config=self.tls_config)
 
-                    # Once we're ready, announce that we're connected:
-                    await self.mqtt_client.publish(f"{self.my_base_topic}/status", "Connected", 1, True)
+    async def ping_batch_handler(self, event:actions_domain.Messages.PingComplete):
+        await self.publish_with_retry(topic=f"{self.my_base_topic}/ingest/ping_batch", payload=json.dumps(event.model_dump(), default=str) )
 
-                    self.connected = True
-                    # Now do the first round of periodic data:
-                    # self.publish_periodic_data()
+    async def traceroute_complete_handler(self, event:actions_domain.Messages.TracerouteComplete):
+        await self.publish_with_retry(topic=f"{self.my_base_topic}/ingest/traceroute", payload=json.dumps(event.model_dump(), default=str) )
 
-                    async for message in self.mqtt_client.messages:
-                        # self.logger.info(f"Got message {message}: {message.payload}")
-                        await self.handle_message(self.mqtt_client, message)
+    async def iperf2_complete_handler(self, event: actions_domain.Messages.Iperf2Complete):
+        await self.publish_with_retry(topic=f"{self.my_base_topic}/ingest/iperf2", payload=json.dumps(event.model_dump(), default=str))
 
+    async def iperf3_complete_handler(self, event: actions_domain.Messages.Iperf3Complete):
+        await self.publish_with_retry(topic=f"{self.my_base_topic}/ingest/iperf3", payload=json.dumps(event.model_dump(), default=str))
 
-            except aiomqtt.MqttError as e:
-                self.connected = False
-                if not self.run:
-                    self.logger.warning("Run is false--not attempting to reconnect.")
-                    break
-                self.logger.warning(f"Connection lost; Reconnecting in {reconnect_interval} seconds ... ", exc_info=e)
-                await asyncio.sleep(reconnect_interval)
-            except Exception as e:
-                self.logger.error("Something really nasty happened in the MQTT Client: ", exc_info=e)
+    async def dig_test_complete_handler(self, event: actions_domain.Messages.DigResponse):
+        await self.publish_with_retry(topic=f"{self.my_base_topic}/ingest/dig", payload=json.dumps(event.model_dump(), default=str))
 
+    async def dhcp_test_complete_handler(self, event: actions_domain.Messages.DhcpTestResponse):
+        await self.publish_with_retry(topic=f"{self.my_base_topic}/ingest/dhcp", payload=json.dumps(event.model_dump(), default=str))
 
-        self.logger.info("Stopping MQTTBridge")
-
-        # for job in self.scheduled_jobs:
-        #     schedule.cancel_job(job)
-        #     self.scheduled_jobs.remove(job)
-
-    async def stop(self) -> None:
-        """
-        Closes the MQTT connection and shuts down any scheduled tasks for a clean exit.
-        :return:
-        """
+    async def stop(self):
         self.logger.info("Stopping MQTTBridge")
         self.run = False
-        await self.mqtt_client.publish(
-            f"{self.my_base_topic}/status", "Disconnected", 1, True
-        )
-        self.mqtt_client._client.disconnect()
-
-        # for job in self.scheduled_jobs:
-        #     schedule.cancel_job(job)
-        #     self.scheduled_jobs.remove(job)
+        try:
+            await self.mqtt_client.publish(
+                f"{self.my_base_topic}/status", "Disconnected", 1, True
+            )
+        except (aiomqtt.exceptions.MqttError, aiomqtt.exceptions.MqttCodeError) as e:
+            self.logger.warning(f"Failed to stop Agent MQTT: {e}", exc_info=True)
+        if self.mqtt_listener_task is None:
+            return
+        # Cancel the task
+        self.mqtt_listener_task.cancel()
+        # Wait for the task to be cancelled
+        try:
+            await self.mqtt_listener_task
+        except (aiomqtt.exceptions.MqttError, aiomqtt.exceptions.MqttCodeError) as e:
+            err_msg = "There was an error in the MQTT Listener, but we were stopping it, so we don't care."
+            self.logger.warn(err_msg, exc_info=True)
+        except asyncio.CancelledError:
+            pass
 
     async def add_subscription(self, topic) -> bool:
         """
@@ -200,6 +247,7 @@ class RxgMqttClient:
         try:
             if (msg.topic.matches(self.my_base_topic + "/error")
                     or msg.topic.value.endswith('/_response')
+                    or msg.topic.value.startswith(f"{self.my_base_topic}/ingest")
                     or msg.topic.value.endswith('/status') or not (
                             msg.topic.matches(self.__global_base_topic + '/#') or msg.topic.matches(
                         self.my_base_topic + '/#'))):
@@ -233,22 +281,63 @@ class RxgMqttClient:
                 self.logger.warning(f"Received message on topic '{msg.topic}': {str(msg.payload)}")
                 self.logger.debug(f"Payload: {payload}")
 
-                if subtopic == "get_clients":
-                    mqtt_response = await self.exec_get_clients(self.mqtt_client)
-                elif subtopic == "tcpdump_on_interface":
-                    mqtt_response = await self.handle_tcp_dump_on_interface(self.mqtt_client, payload)
-                elif subtopic == "configure_radios":
-                    mqtt_response = await self.configure_radios(self.mqtt_client, payload)
-                elif subtopic == "override_rxg/set":
-                    mqtt_response = await self.set_override_rxg(self.mqtt_client, payload)
-                elif subtopic == "fallback_rxg/set":
-                    mqtt_response = await self.set_fallback_rxg(self.mqtt_client, payload)
-                elif subtopic == "password/set":
-                    mqtt_response = await self.set_password(payload)
-                elif subtopic == "reboot":
-                    mqtt_response = await self.reboot()
+                topic_handlers = {
+                    "get_clients":
+                        lambda: command_bus.handle(actions_domain.Commands.GetClients()),
+                    "tcpdump_on_interface":
+                        lambda: command_bus.handle(actions_domain.Commands.TCPDump(**payload, upload_ip=self.mqtt_server)),
+                    "configure_radios":
+                        lambda: command_bus.handle(actions_domain.Commands.ConfigureRadios(**payload)),
+                    "override_rxg/set":
+                        lambda : command_bus.handle(actions_domain.Commands.SetRxgs(override=payload["value"])),
+                    "fallback_rxg/set":
+                        lambda : command_bus.handle(actions_domain.Commands.SetRxgs(fallback=payload["value"])),
+                    "password/set":
+                        lambda : command_bus.handle(actions_domain.Commands.SetCredentials(user="wlanpi", password=payload['value'])),
+                    "reboot":
+                        lambda : command_bus.handle(actions_domain.Commands.Reboot()),
+                    "configure/traceroutes":
+                        lambda: command_bus.handle(actions_domain.Commands.ConfigureTraceroutes()),
+                    "configure/ping_targets":
+                        lambda: command_bus.handle(actions_domain.Commands.ConfigurePingTargets(targets=payload)),
+                    "configure/agent":
+                        lambda: command_bus.handle(actions_domain.Commands.ConfigureAgent(**payload)),
+                    # "execute/tcp_dump":
+                    #     lambda: command_bus.handle(actions_domain.Commands.TCPDump(**payload)),
+                    "execute/ping":
+                        lambda: command_bus.handle(actions_domain.Commands.Ping(**payload)),
+                    "execute/iperf2":
+                        lambda: command_bus.handle(actions_domain.Commands.Iperf2(**payload)),
+
+                    "execute/iperf3":
+                        lambda: command_bus.handle(actions_domain.Commands.Iperf3(**payload)),
+
+
+                }
+
+                if subtopic in topic_handlers:
+                    res = topic_handlers[subtopic]()
+
+                    if isinstance(res, asyncio.Task):
+                        res = await res
+                    # The promise returned from the task will then be handled here
+                    if inspect.iscoroutine(res):
+                        res = await res
+
+                    def custom_serializer(obj):
+
+                        if callable(getattr(obj, "model_dump", None)):
+                            return obj.model_dump()  # Convert to a dict
+                        if callable(getattr(obj, "_json_encoder", None)):
+                            return obj._json_encoder(obj)  # Convert to a dictionary
+                        if callable(getattr(obj, "to_json", None)):
+                            return obj.to_json()  # Convert to a dictionary
+                        raise TypeError(f"Object of type {obj.__class__.__name__} is not JSON serializable")
+
+                    mqtt_response = MQTTRestResponse(status="success", data=json.dumps(res, default=custom_serializer))
+
                 else:
-                    mqtt_response = MQTTResponse(
+                    mqtt_response = MQTTRestResponse(
                         status="validation_error",
                         errors=[
                             [
@@ -262,196 +351,82 @@ class RxgMqttClient:
                 await self.default_callback(client=client,topic=response_topic,message=mqtt_response.to_json())
 
             except Exception as e:
-                self.logger.error(f"Exception while handling message on topic '{msg.topic}'",exc_info=e)
+                self.logger.exception(f"Exception while handling message on topic '{msg.topic}'",exc_info=True)
+                tb = traceback.format_exception(etype=type(e), value=e, tb=e.__traceback__)
+
                 await self.mqtt_client.publish(
                     response_topic,
-                    MQTTResponse(
+                    MQTTRestResponse(
                         status="agent_error",
-                        errors=[[utils.get_full_class_name(e), str(e)]],
+                        errors=[[utils.get_full_class_name(e), str(e), tb]],
                         bridge_ident=bridge_ident,
                     ).to_json(),
                 )
 
         except Exception as e:
-            self.logger.error(f"Big nasty thing while handling message on topic '{msg.topic}'",exc_info=e)
+            self.logger.exception(f"Big nasty thing while handling message on topic '{msg.topic}'",exc_info=True)
+            tb = traceback.format_exception(etype=type(e), value=e, tb=e.__traceback__)
             await self.mqtt_client.publish(
                 self.my_base_topic + "/error",
-                MQTTResponse(
+                MQTTRestResponse(
                     status="agent_error",
-                    errors=[[utils.get_full_class_name(e), str(e)]],
+                    errors=[[utils.get_full_class_name(e), str(e),tb]],
                 ).to_json(),
             )
 
-    async def exec_get_clients(self, client):
-        if self.kismet_control.is_kismet_running():
-            seen_clients = self.kismet_control.get_seen_devices()
-        else:
-            seen_clients = self.kismet_control.empty_seen_devices()
-        return MQTTResponse(
-            data=json.dumps(seen_clients),
-        )
+    async def publish_with_retry(
+            self,
+            topic: str,
+            payload: PayloadType = None,
+            qos: int = 0,
+            retain: bool = False,
+            properties: Optional[Properties] = None,
+            # *args: Any = None,
+            timeout: Optional[float] = None,
+            # **kwargs: Any,
+    ) -> None:
+        """Publishes a message to the MQTT broker with retry logic.
 
-    async def handle_tcp_dump_on_interface(self,client,payload):
-        required_keys = ["interface", "upload_token"]
-        for key in required_keys:
-            if not key in payload:
-                return MQTTResponse(
-                    status= "validation_error",
-                    errors=[
-                        [
-                            "RxgMqttClient.handle_tcp_dump_on_interface",
-                            f"Missing required key '{key}' in payload",
-                        ]
-                    ])
-        result = await self.tcpdump_on_interface(
-            interface_name=payload["interface"],
-            upload_token=payload["upload_token"],
-            max_packets=payload.get("max_packets", None),
-            timeout=payload.get("timeout", None),
-            filter=payload.get("filter", None),
-        )
-
-        return MQTTResponse(
-            data=result
-        )
-
-    async def tcpdump_on_interface(self, interface_name, upload_token, filter:Optional[str], max_packets: Optional[int]=None, timeout: Optional[int]=None) -> str:
-        self.logger.info(f"Starting tcpdump on interface {interface_name}")
-
-        if timeout is None and max_packets is None:
-            # Forcibly set a 1-minute timeout if no timeout is provided.
-            timeout = 60
-
-        # Query kismet control to see if the interface is one it has active, if so, append "mon"
-        if self.kismet_control.is_kismet_running() and interface_name in self.kismet_control.active_kismet_interfaces().keys() and not interface_name.endswith("mon"):
-            interface_name += "mon"
-
-        random_str = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
-        filepath = f"/tmp/{random_str}.pcap"
-
-        cmd = ["tcpdump", "-i", interface_name, '-w', filepath]
-
-        if max_packets:
-            cmd.extend(["-c", str(max_packets)])
-        if timeout:
-            cmd = ["timeout", "--preserve-status", str(timeout)] + cmd
-        if filter:
-            cmd.extend(filter.split(' '))
-
-        result = ''
-        try:
-            self.logger.info(f"Starting tcpdump with command: {cmd}")
-            c_res = await run_command_async(cmd, use_shlex=False)
-            result = c_res.stdout + c_res.stderr
-            self.logger.info(f"Finished tcpdump on interface {interface_name}")
-            # Then get a token and upload it
-            self.logger.info(f"Uploading dump file to {self.api_client.ip}")
-            ul_result = await self.api_client.upload_tcpdump(file_path=filepath, submit_token=upload_token)
-            self.logger.info(f"Finished upload. Result: {ul_result.status_code} { ul_result.reason} {ul_result.text}")
-        finally:
-            self.logger.info(f"Unlinking {filepath}")
-            unlink(filepath)
-        return result
-
-    async def configure_radios(self, client, payload):
-        self.logger.info(f"Configuring radios: New payload: {payload}")
-        for interface_name, config in payload.get("interfaces", {}).items():
-            # if not interface_name in self.kismet_control.available_kismet_interfaces().keys():
-            #     return MQTTResponse(
-            #         status="validation_error",
-            #         errors=[
-            #             [
-            #                 "RxgMqttClient.configure_radios",
-            #                 f"Interface '{interface_name}' is not available",
-            #             ]
-            #         ],
-            #     )
-            new_mode = config.get("mode",'')
-            if new_mode == "monitor":
-                self.logger.debug(f"{interface_name} should be in monitor mode.")
-                if not self.kismet_control.is_kismet_running():
-                    self.logger.debug(f"Starting kismet on {interface_name}mon")
-                    self.kismet_control.start_kismet(interface_name)
-                else:
-                    if interface_name not in self.kismet_control.all_kismet_sources().keys():
-                        self.logger.debug(f"Adding {interface_name}")
-                        self.kismet_control.add_source(interface_name)
-                    if interface_name not in self.kismet_control.active_kismet_interfaces().keys():
-                        self.logger.debug(f"Enabling {interface_name}mon")
-                        self.kismet_control.open_source_by_name(interface_name)
-                        self.kismet_control.resume_source_by_name(interface_name)
-            else:
-                self.logger.debug(f"{interface_name} should be in {new_mode} mode.")
-                # Teardown kismet monitor control
-                if self.kismet_control.is_kismet_running() and interface_name in self.kismet_control.active_kismet_interfaces().keys():
-                    self.kismet_control.close_source_by_name(interface_name)
-                await run_command_async(['iw', 'dev', interface_name + "mon", 'del'], raise_on_fail=False)
-                await run_command_async(['ip', 'link', 'set', interface_name, 'up'])
-                # TODO: Do full adapter config here.
-
-                wlan_if = self.wifi_control.get_or_create_interface(interface_name=interface_name)
-                self.logger.info(
-                    f"Checking managed state of {interface_name}")
-                wlan_data = config.get('wlan')
-                if wlan_data is None or len(wlan_data) == 0:
-                    self.logger.info(
-                        f"{interface_name} should be disconnected.")
-                    if wlan_if.connected:
-                        self.logger.info(
-                            f"{interface_name} is connected to a network. Disconnecting.")
-                        wlan_if.disconnect()
-                else:
-                    if isinstance(wlan_data, list):
-                        wlan_data = wlan_data[0]
-                    self.logger.info(f"{interface_name} should be connected to {wlan_data.get('ssid')}. (Auth hidden) Currently connected to {wlan_if.ssid}")
-                    if not (wlan_if.connected and wlan_if.ssid == wlan_data.get('ssid') and wlan_if.psk == wlan_data.get('psk')):
-                        self.logger.info(f"Connection state of {interface_name} is incorrect. Reconnecting.")
-                        await wlan_if.connect(ssid=wlan_data.get('ssid'), psk=wlan_data.get('psk'))
-                        self.logger.info(f"Connection state of {interface_name} is complete. Renewing dhcp.")
-                        await wlan_if.renew_dhcp()
-                        # self.logger.info(f"Waiting for dhcp to settle.")
-                        # await asyncio.sleep(5)
-                        self.logger.info(f"Adding default routes for {interface_name}.")
-                        await wlan_if.add_default_routes()
+        Args:
+            topic: The topic to publish to.
+            payload: The message payload.
+            qos: The QoS level to use for publication.
+            retain: If set to ``True``, the message will be retained by the broker.
+            properties: (MQTT v5.0 only) Optional paho-mqtt properties.
+            *args: Additional positional arguments to pass to paho-mqtt's publish
+                method.
+            timeout: The maximum time in seconds to wait for publication to complete.
+                Use ``math.inf`` to wait indefinitely.
+            **kwargs: Additional keyword arguments to pass to paho-mqtt's publish
+                method.
+        """
+        attempts = 0
+        MAX_ATTEMPTS = 3
+        while attempts < MAX_ATTEMPTS:
+            try:
+                attempts += 1
+                result = await self.mqtt_client.publish(topic=topic, payload=payload, qos=qos, retain=retain, properties=properties, timeout=timeout)  # Capture result
+                # result = await self.mqtt_client.publish(topic, payload, qos, retain, properties, *args, timeout,**kwargs)  # Capture result
+                return result  # Return the result if successful
+            except MqttCodeError as e:
+                self.logger.exception(
+                    f"MQTT Code Exception sending MQTT Message to {topic}. Attempt #{attempts} of {MAX_ATTEMPTS}")
+                if e.rc in [4]:
+                    self.logger.warn("MQTT Client reports disconnection. Restarting internal MQTT client.")
+                    message_bus.handle(
+                        supplicant_domain.Messages.RestartInternalMqtt(host=self.mqtt_server
+                                                                       , port=self.mqtt_port, tls_config=self.tls_config))
+                await asyncio.sleep(3)
+            except MqttError:
+                self.logger.exception(
+                    f"Exception sending MQTT Message to {topic}. Attempt #{attempts} of {MAX_ATTEMPTS}")
+                await asyncio.sleep(3)
 
 
-        if self.kismet_control.is_kismet_running() and len(self.kismet_control.active_kismet_interfaces())==0:
-            self.logger.info("No monitor interfaces. Killing kismet.")
-            self.kismet_control.kill_kismet()
-        return MQTTResponse(
-            status="success",
-            data= (await run_command_async(['iwconfig'], raise_on_fail=False)).stdout
-        )
 
-    async def reboot(self):
-        self.logger.info(f"Rebooting")
-        utils.run_command("reboot", raise_on_fail=False)
+        return None  # Return None if all attempts failed
 
-    async def set_override_rxg(self, client, payload):
-        self.bootloader_config.load()
-        self.logger.info(f"Setting override_rxg: {payload}")
-        self.bootloader_config.data["boot_server_override"] = payload["value"]
-        self.bootloader_config.save()
-        if self.agent_reconfig_callback is not None:
-            await self.agent_reconfig_callback({"override_rxg": payload["value"]})
-        return MQTTResponse(status="success", data=json.dumps(self.bootloader_config.data))
-
-    async def set_fallback_rxg(self, client, payload):
-        self.bootloader_config.load()
-        self.logger.info(f"Setting fallback_rxg: {payload}")
-        self.bootloader_config.data["boot_server_fallback"] = payload["value"]
-        self.bootloader_config.save()
-        if self.agent_reconfig_callback is not None:
-            await self.agent_reconfig_callback({"fallback_rxg": payload["value"]})
-        return MQTTResponse(status="success", data=json.dumps(self.bootloader_config.data))
-
-    async def set_password(self, payload):
-        self.logger.info(f"Setting new password.")
-        await utils.run_command_async("chpasswd", input=f"wlanpi:{payload['value']}" )
-        return MQTTResponse(status="success", data=json.dumps(True))
-
-
-    async def default_callback(self, client, topic, message: Union[str, bytes]) -> None:
+    async def default_callback(self, client: aiomqtt.Client, topic, message: Union[str, bytes]) -> None:
         """
         Default callback for sending a REST response on to the MQTT endpoint.
         :param client:
@@ -459,14 +434,34 @@ class RxgMqttClient:
         :param message:
         :return:
         """
-        self.logger.info(f"Default callback. Topic: {topic} Message: {str(message)}")
-        await client.publish(topic, message)
+        info_msg_max_size = 100 #max chars for info logging
+        stringified_message = str(message)
+        if len(stringified_message) > info_msg_max_size:
+            self.logger.info(f"Default callback. Topic: {topic} Message: {stringified_message[:info_msg_max_size]}... <truncated>")
+        else:
+            self.logger.info(f"Default callback. Topic: {topic} Message: {stringified_message[:info_msg_max_size]}... <truncated>")
+        self.logger.debug(f"Default callback. Topic: {topic} Message: {stringified_message}")
+        await self.publish_with_retry(topic, message)
+
+
 
     async def __aenter__(self) -> object:
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
-        await self.stop()
+        if self.run:
+            try:
+                await self.stop()
+            except aiomqtt.exceptions.MqttCodeError as e:
+                self.logger.warning(f"Failed to stop Agent MQTT: {e}", exc_info=True)
+
+    def __del__(self):
+        self.teardown_listeners()
+        if self.run:
+            try:
+                self.stop()
+            except aiomqtt.exceptions.MqttCodeError as e:
+                self.logger.warning(f"Failed to stop Agent MQTT: {e}", exc_info=True)
 
 
 if __name__ == "__main__":

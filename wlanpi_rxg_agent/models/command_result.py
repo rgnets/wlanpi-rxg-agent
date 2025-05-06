@@ -2,7 +2,8 @@ import json
 import re
 from json import JSONDecodeError
 from re import RegexFlag
-from typing import Union
+from typing import Union, Any
+from enum import Enum
 
 
 class CommandResult:
@@ -17,6 +18,12 @@ class CommandResult:
     def output_from_json(self) -> Union[dict, list, int, float, str, None]:
         try:
             return json.loads(self.stdout)
+        except JSONDecodeError:
+            return None
+
+    def error_from_json(self) -> Union[dict, list, int, float, str, None]:
+        try:
+            return json.loads(self.stderr)
         except JSONDecodeError:
             return None
 
@@ -50,3 +57,21 @@ class CommandResult:
                 )
             )
         return filtered if split else "\n".join(filtered)
+
+    def to_json(self) -> str:
+        """Serialize the object to JSON."""
+        return json.dumps(self, default=self._json_encoder, indent=2)
+
+    @staticmethod
+    def _json_encoder(obj: Any) -> Any:
+        """Custom JSON encoder to handle non-serializable types."""
+        if isinstance(obj, (CommandResult,)):  # Include other custom types if needed
+            dict_form = obj.__dict__
+            dict_form["output_from_json"] = obj.output_from_json()
+            dict_form["error_from_json"] = obj.error_from_json()
+            return dict_form
+        elif isinstance(obj, (re.Pattern, RegexFlag)):
+           return str(obj)  # Or a more meaningful representation if available
+        elif isinstance(obj, Enum):
+            return obj.value
+        return json.JSONEncoder().default(obj) # Let the base encoder handle other types

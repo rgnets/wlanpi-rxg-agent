@@ -12,7 +12,7 @@ class ConfigFile():
 
     def __init__(self, config_file:Union[str, PathLike] = "config.toml", defaults: dict[str,Any] = None):
         self.logger = logging.getLogger(__name__)
-        self.logger.info(f"Initializing {__name__}")
+        self.logger.info(f"Initializing {__name__} for {config_file}")
 
         self.defaults = defaults
         if self.defaults is None:

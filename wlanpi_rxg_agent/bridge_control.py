@@ -1,5 +1,8 @@
 import logging
 
+from busses import message_bus, command_bus
+import lib.domain as agent_domain
+import lib.rxg_supplicant.domain as supplicant_domain
 import dbus
 
 
@@ -13,6 +16,17 @@ class BridgeControl:
             "org.freedesktop.systemd1", "/org/freedesktop/systemd1"
         )
         self.manager = dbus.Interface(systemd1, "org.freedesktop.systemd1.Manager")
+
+    #     self.setup_listeners()
+    #
+    # def setup_listeners(self):
+    #     # message_bus.add_handler(agent_domain.Messages.StartupComplete, self.startup_complete_handler)
+    #     message_bus.add_handler(supplicant_domain.Messages.NewCertifiedConnection, self.certified_handler)
+    #     message_bus.add_handler(supplicant_domain.Messages.RestartInternalMqtt, self.certified_handler)
+    #     message_bus.add_handler(agent_domain.Messages.ShutdownStarted, self.shutdown_handler)
+    #     # message_bus.add_handler(agent_domain.Messages.AgentConfigUpdate, self.config_update_handler)
+
+
 
     def enable(self) -> bool:
         try:

@@ -24,7 +24,7 @@ dependencies = [
     "requests",
     "scapy",
     "dpkt",
-    "schedule",
+#    "schedule",
     "aiomqtt",
     "pydantic-settings",
     "python-daemon",
@@ -33,7 +33,13 @@ dependencies = [
     "dbus-python",
     "PyGObject",
     "kismet-rest",
-    "wpa_supplicant"
+    "wpa_supplicant",
+    "jinja2",
+    "fastapi",
+    "uvicorn",
+    "apscheduler",
+    "jc",
+    "aiohttp"
 ]
 
 [project.optional-dependencies]

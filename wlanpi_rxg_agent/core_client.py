@@ -3,13 +3,17 @@ import time
 from typing import Any, Optional
 
 import requests
+from aiohttp import ClientSession
+
 from requests import JSONDecodeError
+
+from structures import FlatResponse
 
 
 class CoreClient:
     def __init__(
-        self,
-        base_url="http://127.0.0.1:31415",
+            self,
+            base_url="http://127.0.0.1:31415",
     ):
         self.logger = logging.getLogger(__name__)
         self.logger.info(f"Initializing CoreClient against {base_url}")
@@ -39,12 +43,12 @@ class CoreClient:
                 time.sleep(5)
 
     def execute_request(
-        self,
-        method: str,
-        path: str,
-        data: Optional[Any] = None,
-        params: Optional[Any] = None,
-    ):
+            self,
+            method: str,
+            path: str,
+            data: Optional[Any] = None,
+            params: Optional[Any] = None,
+    ) -> requests.Response:
         self.logger.debug(
             f"Executing {method.upper()} on path {path} with data: {str(data)}"
         )
@@ -56,6 +60,42 @@ class CoreClient:
             headers=self.base_headers,
         )
         return response
+
+    async def execute_async_request(
+            self,
+            method: str,
+            path: str,
+            data: Optional[Any] = None,
+            params: Optional[Any] = None,
+    ) -> FlatResponse:
+        self.logger.debug(
+            f"Executing {method.upper()} asynchonously on path {path} with data: {str(data)}"
+        )
+
+        async with ClientSession() as session:
+            async with session.request(
+                    method=method,
+                    params=params,
+                    url=f"{self.base_url}/{path}",
+                    json=data,
+                    headers=self.base_headers,
+            ) as response:
+                self.logger.debug(
+                    f"Returning response for {method.upper()} on path {path} with data: {str(data)}"
+                )
+                # Returning a flat response here to make our lives easier. Do NOT return the raw ClientResponse object!
+                # The async methods will not work outside the context providers above!
+                # If you find yourself needing more data or in a different form, modify the
+                # FlatResponse class to accommodate.
+                # content = await response.content.read()
+                content = await response.read()
+                return FlatResponse(
+                    headers=response.headers,
+                    url=str(response.url),
+                    status_code=response.status,
+                    content=content,
+                    encoding=response.get_encoding()
+                )
 
     def get_current_path_data(self, path):
         self.logger.debug(f"Getting current path data for {path}")
