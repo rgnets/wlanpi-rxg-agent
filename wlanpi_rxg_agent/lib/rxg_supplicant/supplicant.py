@@ -22,6 +22,8 @@ from busses import command_bus,message_bus
 from enum import Enum
 from typing import Literal
 
+from structures import FlatResponse
+
 
 class RxgSupplicantState(Enum):
     UNASSOCIATED = 0
@@ -87,7 +89,7 @@ class RxgSupplicant:
 
         while True:
             try:
-                server_ip = self.find_rxg()
+                server_ip = await self.find_rxg()
                 res = await self.configure_server(server_ip=server_ip)
                 if not res:
                     raise RXGAgentException("Unable to configure server.")
@@ -106,7 +108,7 @@ class RxgSupplicant:
     async def monitor_for_new_rxg(self, wait_period=60):
         while True:
             try:
-                server_ip = self.find_rxg()
+                server_ip = await self.find_rxg()
                 res = await self.configure_server(server_ip=server_ip)
                 if not res:
                     raise RXGAgentException("Unable to configure server.")
@@ -144,14 +146,14 @@ class RxgSupplicant:
                         changed = True
                     if not len(update.fallback_rxg):
                         update.fallback_rxg=None
-                    elif self.test_address_for_rxg(update.fallback_rxg):
+                    elif await self.test_address_for_rxg(update.fallback_rxg):
                         self.fallback_server = update.fallback_rxg
                 if update.override_rxg is not None:
                     if self.override_server != update.override_rxg:
                         changed = True
                     if not len(update.override_rxg):
                         update.override_rxg = None
-                    elif self.test_address_for_rxg(update.override_rxg):
+                    elif await self.test_address_for_rxg(update.override_rxg):
                         self.override_server = update.override_rxg
 
             else:
@@ -199,7 +201,7 @@ class RxgSupplicant:
 
 
 
-    def test_address_for_rxg(self, ip: str) -> bool:
+    async def test_address_for_rxg(self, ip: str) -> bool:
         """
         Checks that the expected WLAN Pi control node on an rXg is present and
         responsive on an IP address, which would indicate that it's a viable
@@ -208,7 +210,7 @@ class RxgSupplicant:
         api_client = ApiClient(verify_ssl=self.api_verify_ssl, timeout=5)
 
         try:
-            resp = api_client.check_device(ip)
+            resp = await api_client.check_device(ip)
 
         except (ConnectTimeout, ConnectionError, ReadTimeout) as e:
             self.logger.warning(f"Testing of address {ip} failed: {e}")
@@ -224,9 +226,9 @@ class RxgSupplicant:
                     return True
         return False
 
-    def find_rxg(self, max_hops=3):
+    async def find_rxg(self, max_hops=3):
         # Check if an override server is configured, validate and use it if so.
-        if self.override_server and self.test_address_for_rxg(self.override_server):
+        if self.override_server and await self.test_address_for_rxg(self.override_server):
             return self.override_server
 
         first_gateway = utils.get_default_gateways().get("eth0", None)
@@ -234,7 +236,7 @@ class RxgSupplicant:
         if not first_gateway:
             raise RXGAgentException("Unable to find first gateway on eth0")
 
-        if self.test_address_for_rxg(first_gateway):
+        if await self.test_address_for_rxg(first_gateway):
             return first_gateway
 
         raw_hop_data: list[dict] = utils.trace_route("google.com")["hops"]
@@ -249,18 +251,18 @@ class RxgSupplicant:
         ]
 
         for i, address in enumerate(hop_addresses):
-            if i < max_hops and self.test_address_for_rxg(address):
+            if i < max_hops and await self.test_address_for_rxg(address):
                 return address
 
         # Todo: insert fallback here
-        if self.fallback_server and self.test_address_for_rxg(self.fallback_server):
+        if self.fallback_server and await self.test_address_for_rxg(self.fallback_server):
             return self.fallback_server
 
         raise RXGAgentException("Unable to find an rXg.")
 
-    def get_client_cert(self, server_ip):
+    async def get_client_cert(self, server_ip):
         api_client = ApiClient(verify_ssl=self.api_verify_ssl, server_ip=server_ip)
-        get_cert_resp = api_client.get_cert()
+        get_cert_resp = await api_client.get_cert()
         if get_cert_resp.status_code == 200:
             # Registration has succeeded, we need to get our certs.
             response_data = get_cert_resp.json()
@@ -284,10 +286,15 @@ class RxgSupplicant:
     async def check_registration(self, server_ip:str):
         api_client = ApiClient(server_ip=server_ip, verify_ssl=self.api_verify_ssl)
         self.logger.info(f"Checking if we need to register with {api_client.ip}")
-        resp = api_client.check_device()
+        resp = await api_client.check_device()
         if resp.status_code == 200:
             response_data = resp.json()
             return response_data["status"] != "unregistered"
+        else:
+            self.logger.warning(
+                f"check_registration failed: {resp.status_code}: {resp.reason}"
+            )
+            return False
         # TODO: DO we need to do anything else here? Raise on non-200?
 
 
@@ -296,7 +303,7 @@ class RxgSupplicant:
         # self.event_bus.emit(RxgSupplicantEvents.REGISTERING, server_ip)
         # self.supplicant_state = RxgSupplicantState.REGISTERING
 
-        registration_resp = api_client.register(
+        registration_resp : FlatResponse = await api_client.register(
             model=utils.get_model_info()["Model"], csr=self.csr
         )
 
@@ -321,8 +328,8 @@ class RxgSupplicant:
             return False
 
 
-    def renew_client_cert(self, server_ip) -> tuple[bool, Optional[supplicant_domain.Messages.Certified]]:
-        get_cert_success, status, ca_str, cert_str, host, port = self.get_client_cert(
+    async def renew_client_cert(self, server_ip) -> tuple[bool, Optional[supplicant_domain.Messages.Certified]]:
+        get_cert_success, status, ca_str, cert_str, host, port = await self.get_client_cert(
             server_ip=server_ip
         )
         if get_cert_success:
@@ -387,7 +394,7 @@ class RxgSupplicant:
                 )
                 # self.supplicant_state = RxgSupplicantState.CERTIFYING
                 message_bus.handle(supplicant_domain.Messages.Certifying())
-                cert_result, certified = self.renew_client_cert(server_ip=server_ip)
+                cert_result, certified = await self.renew_client_cert(server_ip=server_ip)
                 if cert_result:
                     self.supplicant_state = RxgSupplicantState.CERTIFIED
                     if certified:

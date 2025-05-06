@@ -25,13 +25,13 @@ def mocked_utils(monkeypatch):
     monkeypatch.setattr('wlanpi_rxg_agent.utils.trace_route', trace_route)
 
 
-def test_find_rxg_first_gateway(mocked_utils, mocked_test_check_device_unknown_device):
+async def test_find_rxg_first_gateway(mocked_utils, mocked_test_check_device_unknown_device):
 
     # Instantiate the RxgSupplicant class
     instance = RxgSupplicant()
 
     # Call test_address_for_rxg with a fake IP
-    result = instance.find_rxg()
+    result = await instance.find_rxg()
 
     # Assert that it returned True
     assert result == '192.168.30.1'
