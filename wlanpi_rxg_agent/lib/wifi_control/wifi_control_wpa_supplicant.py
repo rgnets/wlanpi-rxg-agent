@@ -59,7 +59,7 @@ class WifiInterface():
                 if result["State"] == "completed":
                     # message_bus.handle(wifi_domain.Messages.WifiControlEvent(interface=self.name, details=result))
                     self.logger.debug(f"Connection of {self.name} to {self.ssid} with {self.psk} completed")
-                    # message_bus.handle(wifi_domain.Messages.Completed(interface=self.name, details=result))
+                    message_bus.handle(wifi_domain.Messages.Completed(interface=self.name, details=result))
 
             elif "DisconnectReason" in result:
                 message_bus.handle(
@@ -285,7 +285,7 @@ class WifiInterface():
         # PropertiesChanged
         try:
             return await asyncio.wait_for(asyncio.shield(add_network_future), timeout=timeout)
-        except (asyncio.TimeoutError, TimeoutError) as e:
+        except (asyncio.TimeoutError, TimeoutError, asyncio.exceptions.CancelledError) as e:
             self.logger.warning(f"Timeout connecting {self.name} to {ssid}")
             raise TimeoutError(f"Timeout connecting {self.name} to {ssid}")
         finally:
