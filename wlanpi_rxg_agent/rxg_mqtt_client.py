@@ -1,5 +1,6 @@
 import inspect
 import re
+import traceback
 from asyncio import AbstractEventLoop
 from os import unlink
 from ssl import SSLCertVerificationError
@@ -18,7 +19,7 @@ import paho.mqtt.client as mqtt
 # import schedule
 import asyncio
 import aiomqtt
-from aiomqtt import TLSParameters, MqttError
+from aiomqtt import TLSParameters, MqttError, MqttCodeError
 from aiomqtt.types import PayloadType
 from paho.mqtt.properties import Properties
 
@@ -32,7 +33,7 @@ from lib.configuration.agent_config_file import AgentConfigFile
 from lib.configuration.bootloader_config_file import BootloaderConfigFile
 from lib.configuration.bridge_config_file import BridgeConfigFile
 from lib.wifi_control.wifi_control_wpa_supplicant import WiFiControlWpaSupplicant
-from structures import TLSConfig, MQTTResponse
+from structures import TLSConfig, MQTTRestResponse
 import utils
 
 from utils import run_command_async
@@ -54,6 +55,7 @@ class RxgMqttClient:
 
         self.mqtt_server = None
         self.mqtt_port = None
+        self.tls_config: Optional[TLSConfig] = None
         # self.wifi_control = WiFiControlWpaSupplicant()
 
         self.my_base_topic = f"wlan-pi/{identifier}/agent"
@@ -97,11 +99,11 @@ class RxgMqttClient:
 
         self.message_handler_pairs = [
             (supplicant_domain.Messages.NewCertifiedConnection, self.certified_handler),
-            (supplicant_domain.Messages.RestartInternalMqtt, self.certified_handler),
+            (supplicant_domain.Messages.RestartInternalMqtt, self.start_client),
             (agent_domain.Messages.ShutdownStarted, self.shutdown_handler),
             # (agent_domain.Messages.StartupComplete, self.startup_complete_handler),
             # (agent_domain.Messages.AgentConfigUpdate, self.config_update_handler),
-            (actions_domain.Messages.PingBatchComplete, self.ping_batch_handler),
+            (actions_domain.Messages.PingComplete, self.ping_batch_handler),
             (actions_domain.Messages.TracerouteComplete, self.traceroute_complete_handler),
             (actions_domain.Messages.Iperf2Complete, self.iperf2_complete_handler),
             (actions_domain.Messages.Iperf3Complete, self.iperf3_complete_handler),
@@ -130,23 +132,11 @@ class RxgMqttClient:
             # self.logger.info(f"Got message {message}: {message.payload}")
             await self.handle_message(self.mqtt_client, message)
 
-    async def certified_handler(self, event:supplicant_domain.Messages.Certified) -> None:
-        if self.run:
-            try:
-                await self.stop()
-            except aiomqtt.exceptions.MqttCodeError as e:
-                self.logger.warning(f"Failed to stop Agent MQTT: {e}", exc_info=True)
-        self.run = True
-        tls_config = TLSConfig(ca_certs=event.ca_file, certfile=event.certificate_file, keyfile=event.key_file,
-                               cert_reqs=ssl.VerifyMode(event.cert_reqs), tls_version=ssl.PROTOCOL_TLSv1_2,
-                               ciphers=None) if self.use_tls else None
-        self.mqtt_server = event.host
-        self.mqtt_port = event.port
-
+    async def start_client(self, host, port, tls_config: TLSConfig = None ):
         try:
             async with aiomqtt.Client(
-                event.host,
-                port=event.port,
+                host,
+                port=port,
                 tls_params=TLSParameters(**tls_config.__dict__) if tls_config else None,
                 will=aiomqtt.Will(f"{self.my_base_topic}/status", "Abnormally Disconnected", 1, True)
             ) as c:
@@ -175,33 +165,50 @@ class RxgMqttClient:
             err_msg = "There was an error in the MQTT Listener"
             self.logger.error(err_msg, exc_info=True)
             message_bus.handle(agent_domain.Messages.MqttError(err_msg, e))
-            message_bus.handle(supplicant_domain.Messages.RestartInternalMqtt(**event.__dict__))
+            message_bus.handle(supplicant_domain.Messages.RestartInternalMqtt(host=host, port=port, tls_config=tls_config))
 
+    async def certified_handler(self, event:supplicant_domain.Messages.Certified) -> None:
+        if self.run:
+            try:
+                await self.stop()
+            except aiomqtt.exceptions.MqttCodeError as e:
+                self.logger.warning(f"Failed to stop Agent MQTT: {e}", exc_info=True)
+        self.run = True
+        self.tls_config = TLSConfig(ca_certs=event.ca_file, certfile=event.certificate_file, keyfile=event.key_file,
+                               cert_reqs=ssl.VerifyMode(event.cert_reqs), tls_version=ssl.PROTOCOL_TLSv1_2,
+                               ciphers=None) if self.use_tls else None
+        self.mqtt_server = event.host
+        self.mqtt_port = event.port
 
-    async def ping_batch_handler(self, event:actions_domain.Messages.PingBatchComplete):
-        await self.publish_with_retry(topic=f"{self.my_base_topic}/ingest/ping_batch", payload=json.dumps(event.model_dump()) )
+        await self.start_client(host=event.host, port=event.port, tls_config=self.tls_config)
+
+    async def ping_batch_handler(self, event:actions_domain.Messages.PingComplete):
+        await self.publish_with_retry(topic=f"{self.my_base_topic}/ingest/ping_batch", payload=json.dumps(event.model_dump(), default=str) )
 
     async def traceroute_complete_handler(self, event:actions_domain.Messages.TracerouteComplete):
-        await self.publish_with_retry(topic=f"{self.my_base_topic}/ingest/traceroute", payload=json.dumps(event.model_dump()) )
+        await self.publish_with_retry(topic=f"{self.my_base_topic}/ingest/traceroute", payload=json.dumps(event.model_dump(), default=str) )
 
     async def iperf2_complete_handler(self, event: actions_domain.Messages.Iperf2Complete):
-        await self.publish_with_retry(topic=f"{self.my_base_topic}/ingest/iperf2", payload=json.dumps(event.model_dump()))
+        await self.publish_with_retry(topic=f"{self.my_base_topic}/ingest/iperf2", payload=json.dumps(event.model_dump(), default=str))
 
     async def iperf3_complete_handler(self, event: actions_domain.Messages.Iperf3Complete):
-        await self.publish_with_retry(topic=f"{self.my_base_topic}/ingest/iperf3", payload=json.dumps(event.model_dump()))
+        await self.publish_with_retry(topic=f"{self.my_base_topic}/ingest/iperf3", payload=json.dumps(event.model_dump(), default=str))
 
-    async def dig_test_complete_handler(self, event: actions_domain.Messages.DigTestComplete):
-        await self.publish_with_retry(topic=f"{self.my_base_topic}/ingest/dig", payload=json.dumps(event.model_dump()))
+    async def dig_test_complete_handler(self, event: actions_domain.Messages.DigResponse):
+        await self.publish_with_retry(topic=f"{self.my_base_topic}/ingest/dig", payload=json.dumps(event.model_dump(), default=str))
 
-    async def dhcp_test_complete_handler(self, event: actions_domain.Messages.DhcpTestComplete):
-        await self.publish_with_retry(topic=f"{self.my_base_topic}/ingest/dhcp", payload=json.dumps(event.model_dump()))
+    async def dhcp_test_complete_handler(self, event: actions_domain.Messages.DhcpTestResponse):
+        await self.publish_with_retry(topic=f"{self.my_base_topic}/ingest/dhcp", payload=json.dumps(event.model_dump(), default=str))
 
     async def stop(self):
         self.logger.info("Stopping MQTTBridge")
         self.run = False
-        await self.mqtt_client.publish(
-            f"{self.my_base_topic}/status", "Disconnected", 1, True
-        )
+        try:
+            await self.mqtt_client.publish(
+                f"{self.my_base_topic}/status", "Disconnected", 1, True
+            )
+        except (aiomqtt.exceptions.MqttError, aiomqtt.exceptions.MqttCodeError) as e:
+            self.logger.warning(f"Failed to stop Agent MQTT: {e}", exc_info=True)
         if self.mqtt_listener_task is None:
             return
         # Cancel the task
@@ -295,6 +302,17 @@ class RxgMqttClient:
                         lambda: command_bus.handle(actions_domain.Commands.ConfigurePingTargets(targets=payload)),
                     "configure/agent":
                         lambda: command_bus.handle(actions_domain.Commands.ConfigureAgent(**payload)),
+                    # "execute/tcp_dump":
+                    #     lambda: command_bus.handle(actions_domain.Commands.TCPDump(**payload)),
+                    "execute/ping":
+                        lambda: command_bus.handle(actions_domain.Commands.Ping(**payload)),
+                    "execute/iperf2":
+                        lambda: command_bus.handle(actions_domain.Commands.Iperf2(**payload)),
+
+                    "execute/iperf3":
+                        lambda: command_bus.handle(actions_domain.Commands.Iperf3(**payload)),
+
+
                 }
 
                 if subtopic in topic_handlers:
@@ -307,16 +325,19 @@ class RxgMqttClient:
                         res = await res
 
                     def custom_serializer(obj):
+
+                        if callable(getattr(obj, "model_dump", None)):
+                            return obj.model_dump()  # Convert to a dict
                         if callable(getattr(obj, "_json_encoder", None)):
                             return obj._json_encoder(obj)  # Convert to a dictionary
                         if callable(getattr(obj, "to_json", None)):
                             return obj.to_json()  # Convert to a dictionary
                         raise TypeError(f"Object of type {obj.__class__.__name__} is not JSON serializable")
 
-                    mqtt_response = MQTTResponse(status="success", data=json.dumps(res, default=custom_serializer))
+                    mqtt_response = MQTTRestResponse(status="success", data=json.dumps(res, default=custom_serializer))
 
                 else:
-                    mqtt_response = MQTTResponse(
+                    mqtt_response = MQTTRestResponse(
                         status="validation_error",
                         errors=[
                             [
@@ -330,23 +351,26 @@ class RxgMqttClient:
                 await self.default_callback(client=client,topic=response_topic,message=mqtt_response.to_json())
 
             except Exception as e:
-                self.logger.error(f"Exception while handling message on topic '{msg.topic}'",exc_info=True)
+                self.logger.exception(f"Exception while handling message on topic '{msg.topic}'",exc_info=True)
+                tb = traceback.format_exception(etype=type(e), value=e, tb=e.__traceback__)
+
                 await self.mqtt_client.publish(
                     response_topic,
-                    MQTTResponse(
+                    MQTTRestResponse(
                         status="agent_error",
-                        errors=[[utils.get_full_class_name(e), str(e)]],
+                        errors=[[utils.get_full_class_name(e), str(e), tb]],
                         bridge_ident=bridge_ident,
                     ).to_json(),
                 )
 
         except Exception as e:
-            self.logger.error(f"Big nasty thing while handling message on topic '{msg.topic}'",exc_info=True)
+            self.logger.exception(f"Big nasty thing while handling message on topic '{msg.topic}'",exc_info=True)
+            tb = traceback.format_exception(etype=type(e), value=e, tb=e.__traceback__)
             await self.mqtt_client.publish(
                 self.my_base_topic + "/error",
-                MQTTResponse(
+                MQTTRestResponse(
                     status="agent_error",
-                    errors=[[utils.get_full_class_name(e), str(e)]],
+                    errors=[[utils.get_full_class_name(e), str(e),tb]],
                 ).to_json(),
             )
 
@@ -384,13 +408,25 @@ class RxgMqttClient:
                 result = await self.mqtt_client.publish(topic=topic, payload=payload, qos=qos, retain=retain, properties=properties, timeout=timeout)  # Capture result
                 # result = await self.mqtt_client.publish(topic, payload, qos, retain, properties, *args, timeout,**kwargs)  # Capture result
                 return result  # Return the result if successful
+            except MqttCodeError as e:
+                self.logger.exception(
+                    f"MQTT Code Exception sending MQTT Message to {topic}. Attempt #{attempts} of {MAX_ATTEMPTS}")
+                if e.rc in [4]:
+                    self.logger.warn("MQTT Client reports disconnection. Restarting internal MQTT client.")
+                    message_bus.handle(
+                        supplicant_domain.Messages.RestartInternalMqtt(host=self.mqtt_server
+                                                                       , port=self.mqtt_port, tls_config=self.tls_config))
+                await asyncio.sleep(3)
             except MqttError:
                 self.logger.exception(
                     f"Exception sending MQTT Message to {topic}. Attempt #{attempts} of {MAX_ATTEMPTS}")
                 await asyncio.sleep(3)
+
+
+
         return None  # Return None if all attempts failed
 
-    async def default_callback(self, client, topic, message: Union[str, bytes]) -> None:
+    async def default_callback(self, client: aiomqtt.Client, topic, message: Union[str, bytes]) -> None:
         """
         Default callback for sending a REST response on to the MQTT endpoint.
         :param client:
@@ -405,17 +441,9 @@ class RxgMqttClient:
         else:
             self.logger.info(f"Default callback. Topic: {topic} Message: {stringified_message[:info_msg_max_size]}... <truncated>")
         self.logger.debug(f"Default callback. Topic: {topic} Message: {stringified_message}")
+        await self.publish_with_retry(topic, message)
 
-        attempts=0
-        MAX_ATTEMPTS = 3
-        while attempts<MAX_ATTEMPTS:
-            try:
-                attempts+=1
-                await client.publish(topic, message)
-                break
-            except MqttError:
-                self.logger.exception(f"Exception in default MQTT callback. Attempt #{attempts} of {MAX_ATTEMPTS}")
-                await asyncio.sleep(3)
+
 
     async def __aenter__(self) -> object:
         return self

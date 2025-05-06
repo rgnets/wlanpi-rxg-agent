@@ -12,8 +12,7 @@ from requests.models import guess_json_utf
 from requests.structures import CaseInsensitiveDict
 from requests.compat import json as complexjson, chardet
 
-
-class MQTTResponse:
+class MQTTRestResponse:
     """
     Standardized MQTT response object that contains details on internal
     failures, REST failures, and the response data. Additionally, it

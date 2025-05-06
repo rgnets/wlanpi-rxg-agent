@@ -3,6 +3,7 @@ import typing as t
 from dataclasses import dataclass
 
 from lib import domain as agent_domain
+from structures import TLSConfig
 
 PREFIX = "RXG_SUPPLICANT_"
 class RxgSupplicantEvents(Enum):
@@ -63,8 +64,11 @@ class Messages:
     class NewCertifiedConnection(Certified):
         pass
 
-    class RestartInternalMqtt(Certified):
-        pass
+    class RestartInternalMqtt(t.NamedTuple):
+        host: str
+        port: int
+        tls_config: t.Optional[TLSConfig] = None
+
 
     class CertificationFailed(t.NamedTuple):
         pass

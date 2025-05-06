@@ -35,16 +35,6 @@ class Data:
         ssid: t.Optional[str] = Field(default=None)
         psk: t.Optional[str] = Field(default=None)
 
-    class Traceroute(BaseModel):
-        id: int = Field()  # :integer          not null, primary key
-        queries: int = Field(default=1, description="Queries per hop")
-        period: t.Optional[int] = Field(default=None,
-                                    description="If specified, will schedule the traceroute to run periodically after the first attempt, in seconds.")  #
-        host: str = Field()  # :string
-        interface: t.Optional[str] = Field(default=None)
-        ssid: t.Optional[str] = Field(default=None)
-        psk: t.Optional[str] = Field(default=None)
-
 
     class SpeedTest(BaseModel):
         id: int = Field()  # :integer          not null, primary key
@@ -61,6 +51,24 @@ class Data:
         ssid: t.Optional[str] = Field(default=None)
         psk: t.Optional[str] = Field(default=None)
 
+    # Ping
+
+    class PingRequest(BaseModel):
+        host: str = Field(examples=["google.com", "192.168.1.1"])
+        count: int = Field(
+            examples=[1, 10], description="How many packets to send.", default=1
+        )
+        interval: float = Field(
+            examples=[1], description="The interval between packets, in seconds", default=1
+        )
+        ttl: t.Optional[int] = Field(
+            examples=[20], description="The Time-to-Live of the ping attempt.", default=None
+        )
+        interface: t.Optional[str] = Field(
+            examples=["eth0"],
+            description="The interface the ping should originate from",
+            default=None,
+        )
 
     class PingResponse(BaseModel):
         type: str = Field()
@@ -71,6 +79,34 @@ class Data:
         ttl: int = Field()
         time_ms: float = Field()
         duplicate: bool = Field()
+
+    class PingResult(
+        BaseModel,
+    ):
+        destination_ip: str = Field(examples=["142.250.190.142"])
+        interface: t.Optional[str] = Field(
+            examples=["eth0"],
+            default=None,
+            description="The interface the user specified that the ping be issued from. It will be empty if there wasn't one specified.",
+        )
+        data_bytes: t.Optional[int] = Field(examples=[56], default=None)
+        pattern: t.Optional[str] = Field(default=None)
+        destination: str = Field(examples=["google.com"])
+        packets_transmitted: int = Field(examples=[10])
+        packets_received: int = Field(examples=[10])
+        packet_loss_percent: float = Field(examples=[0.0])
+        duplicates: int = Field(examples=[0])
+        time_ms: float = Field(examples=[9012.0])
+        round_trip_ms_min: t.Optional[float] = Field(examples=[24.108], default=None)
+        round_trip_ms_avg: t.Optional[float] = Field(examples=[29.318], default=None)
+        round_trip_ms_max: t.Optional[float] = Field(examples=[37.001], default=None)
+        round_trip_ms_stddev: t.Optional[float] = Field(examples=[4.496], default=None)
+        jitter: t.Optional[float] = Field(examples=[37.001], default=None)
+        responses: list[Data.PingResponse] = Field()
+
+    class PingFailure(BaseModel):
+        destination: str = Field(examples=["google.com"])
+        message: str = Field(examples=["No route to host"])
 
 
     class CompletedPing(BaseModel):
@@ -91,22 +127,6 @@ class Data:
         jitter:  t.Optional[float] = Field(default=None)
         responses: list[Data.PingResponse] = Field(default=[])
 
-    class TracerouteProbes(BaseModel):
-        annotation: t.Any
-        asn: t.Any
-        ip: str = Field(examples=["8.8.4.4"])
-        name: str = Field(examples=["syn-098-123-060-049.biz.spectrum.com"])
-        rtt: float = Field(examples=["3.177"])
-
-    class TracerouteHops(BaseModel):
-        hop: int = Field(examples=[1], default=0)
-        probes: list[Data.TracerouteProbes] = Field()
-
-    class TracerouteResponse(BaseModel):
-        destination_ip: str = Field(examples=["8.8.4.4"])
-        destination_name: str = Field(examples=["dns.google.com"])
-        hops: list[Data.TracerouteHops] = Field()
-
     class Iperf3ClientRequest(BaseModel):
         host: str = Field(examples=["192.168.1.1"])
         port: int = Field(examples=[5001], default=5001)
@@ -115,7 +135,12 @@ class Data:
         reverse: bool = Field(default=False)
         interface: t.Optional[str] = Field(examples=["wlan0"], default=None)
 
-    # No Iperf3Result yet as it hasn't been fully modeled and I (MDK) don't know what all potential output forms are in JSON mode.
+    #  Iperf3Result hasn't been fully modeled and I (MDK) don't know what all potential output forms are in JSON mode.
+
+    class Iperf3Result(BaseModel, extra="allow"):
+        end: dict[str, t.Any] = Field()
+        start: dict[str, t.Any] = Field()
+        intervals: list[dict[str, t.Any]] = Field()
 
     class Iperf2ClientRequest(BaseModel):
         host: str = Field(examples=["192.168.1.1"])
@@ -160,6 +185,44 @@ class Data:
     class Iperf3Test(Iperf3ClientRequest):
         id: int = Field()
 
+    class Traceroute(BaseModel):
+        id: int = Field()  # :integer          not null, primary key
+        queries: int = Field(default=1, description="Queries per hop")
+        period: t.Optional[int] = Field(default=None,
+                                    description="If specified, will schedule the traceroute to run periodically after the first attempt, in seconds.")  #
+        host: str = Field()  # :string
+        interface: t.Optional[str] = Field(default=None)
+        ssid: t.Optional[str] = Field(default=None)
+        psk: t.Optional[str] = Field(default=None)
+
+
+    # Traceroute
+    # Most of these reflect the API definitions in Core
+    class TracerouteRequest(BaseModel):
+        host: str = Field(examples=["dns.google.com"])
+        interface: t.Optional[str] = Field(examples=["wlan0"], default=None)
+        bypass_routing: bool = Field(default=False)
+        queries: t.Optional[int] = Field(default=3)
+        max_ttl: t.Optional[int] = Field(default=30)
+
+    class TracerouteProbes(BaseModel):
+        annotation: t.Any
+        asn: t.Any
+        ip: str = Field(examples=["8.8.4.4"])
+        name: str = Field(examples=["syn-098-123-060-049.biz.spectrum.com"])
+        rtt: float = Field(examples=["3.177"])
+
+    class TracerouteHops(BaseModel):
+        hop: int = Field(examples=[1], default=0)
+        probes: list[Data.TracerouteProbes] = Field()
+
+    class TracerouteResponse(BaseModel):
+        destination_ip: str = Field(examples=["8.8.4.4"])
+        destination_name: str = Field(examples=["dns.google.com"])
+        hops: list[Data.TracerouteHops] = Field()
+
+    # DHCP Test
+
     class DhcpTestResponse(BaseModel):
         time: float = Field()
         duid: str = Field(examples=["00:01:00:01:2e:74:ef:71:dc:a6:32:8e:04:17"])
@@ -169,6 +232,8 @@ class Data:
     class DhcpTestRequest(BaseModel):
         interface: t.Optional[str] = Field(examples=["wlan0"], default=None)
         timeout: int = Field(default=5)
+
+    # Dig Test
 
     class DigRequest(BaseModel):
         interface: t.Optional[str] = Field(examples=["wlan0"], default=None)
@@ -204,34 +269,65 @@ class Data:
         rcvd: int = Field(examples=[82])
 
 
+
 class Messages:
 
     class Message(BaseModel):
         pass
 
-    class ExecutorCompleteMessage(Message):
-        id: int = Field()
+    class TestCompleteMessage(Message):
+        id: t.Optional[int] = Field(default=None)
         error: t.Optional[str] = Field(default=None)
         result: t.Any = Field(default=None)
         extra: t.Any = Field(default=None)
+        request: t.Any =Field(default=None)
 
-    class PingBatchComplete(ExecutorCompleteMessage):
-        result: t.Optional[Data.CompletedPing] = Field(default=None)
+    # Reflect the Core definitions above, so we can modify the messages here
 
-    class TracerouteComplete(ExecutorCompleteMessage):
+    class PingResult(Data.PingResult):
+        pass
+
+    class PingFailure(Data.PingFailure):
+        pass
+
+    class PingComplete(TestCompleteMessage):
+        result: t.Union[Data.PingResult, Data.PingFailure] = Field()
+        request: Data.PingRequest = Field()
+
+    class TracerouteResponse(Data.TracerouteResponse):
+        pass
+
+    class TracerouteComplete(TestCompleteMessage):
         result: t.Optional[Data.TracerouteResponse] = Field(default=None)
+        request: Data.TracerouteRequest = Field()
 
-    class Iperf2Complete(ExecutorCompleteMessage):
+    class Iperf2Result(Data.Iperf2Result):
+        pass
+
+    class Iperf2Complete(TestCompleteMessage):
         result: t.Optional[Data.Iperf2Result] = Field(default=None)
+        request: Data.Iperf2ClientRequest = Field()
 
-    class Iperf3Complete(ExecutorCompleteMessage):
+    class Iperf3Result(Data.Iperf3Result, extra='allow'):
+        pass
+
+    class Iperf3Complete(TestCompleteMessage):
         result: t.Optional[t.Any] = Field(default=None)
+        request: Data.Iperf3ClientRequest = Field()
 
-    class DigTestComplete(ExecutorCompleteMessage):
+    class DigResponse(Data.DigResponse):
+        pass
+
+    class DigTestComplete(TestCompleteMessage):
         result: t.Optional[t.List[Data.DigResponse]] = Field(default=None)
+        request: Data.DigRequest = Field()
 
-    class DhcpTestComplete(ExecutorCompleteMessage):
+    class DhcpTestResponse(Data.DhcpTestResponse):
+        pass
+
+    class DhcpTestComplete(TestCompleteMessage):
         result: t.Optional[Data.DhcpTestResponse] = Field(default=None)
+        request: Data.DhcpTestRequest = Field()
 
 
 class Commands:
@@ -275,3 +371,20 @@ class Commands:
         traceroute_targets: list[Data.Traceroute] = Field(default=[])
         speed_tests: list[Data.SpeedTest] = Field(default=[])
 
+    class Ping(Data.PingRequest):
+        pass
+
+    class Traceroute(Data.TracerouteRequest):
+        pass
+
+    class Iperf2(Data.Iperf2ClientRequest):
+        pass
+
+    class Iperf3(Data.Iperf3ClientRequest):
+        pass
+
+    class Dig(Data.DigRequest):
+        pass
+
+    class DhcpTest(Data.DhcpTestRequest):
+        pass

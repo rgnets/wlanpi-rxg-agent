@@ -44,7 +44,7 @@ class OneShotTask:
                 f"Error looking up job while ending task {self.identifier}. It was probably already removed.")
         if self.on_complete is not None:
             self.on_complete()
-        self.logger.info(f"Task ended: {self.identifier}")
+        # self.logger.info(f"Task ended: {self.identifier}")
 
     # Technically, jobs can be modified in place. Currently not doing that.
 

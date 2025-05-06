@@ -27,11 +27,11 @@ class Messages:
     class WpaSupplicantStateChanged(WpaSupplicantEvent):
         state: str = Field()
 
-    #
+    # More abstracted concepts
 
     # class Disconnected(WpaSupplicantStateChanged):
     #     state="disconnected"
-    #
+
 
     # class InterfaceDisabled(WpaSupplicantStateChanged):
     #     state="interface_disabled"
@@ -65,8 +65,8 @@ class Messages:
     #     state="group handshake" # Todo: Verify this is the correct way to do this
     #
 
-    # class Completed(WpaSupplicantStateChanged):
-    #     state="completed"
+    class Completed(WpaSupplicantStateChanged):
+        state:str ="completed"
 
     class ScanningStateChanged(WpaSupplicantEvent):
         scanning: bool = Field()

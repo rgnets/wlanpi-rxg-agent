@@ -3,12 +3,15 @@ import os
 import random
 import string
 import typing as t
+from json import JSONDecodeError
+
 import utils
 from api_client import ApiClient
 from busses import message_bus, command_bus
 import lib.domain as agent_domain
 import lib.rxg_supplicant.domain as supplicant_domain
 import lib.agent_actions.domain as actions_domain
+from core_client import CoreClient
 from kismet_control import KismetControl
 from lib.configuration.bootloader_config_file import BootloaderConfigFile
 
@@ -27,6 +30,7 @@ class AgentActions():
 
         # Core
         self.core_base_url = wlan_pi_core_base_url
+        self.core_client = CoreClient(base_url=self.core_base_url)
         # Kismet
         self.kismet_base_url = kismet_base_url
         self.kismet_control = KismetControl()
@@ -43,6 +47,13 @@ class AgentActions():
             (actions_domain.Commands.ConfigureAgent, self.configure_agent),
             (actions_domain.Commands.ConfigureRadios, self.configure_radios),
             (actions_domain.Commands.GetClients, self.exec_get_clients),
+            (actions_domain.Commands.Ping, self.run_ping_test),
+            (actions_domain.Commands.Traceroute, self.run_traceroute),
+            (actions_domain.Commands.Dig, self.run_dig_test),
+            (actions_domain.Commands.DhcpTest, self.run_dhcp_test),
+            (actions_domain.Commands.TCPDump, self.handle_tcp_dump_on_interface),
+            (actions_domain.Commands.Iperf2, self.run_iperf2),
+            (actions_domain.Commands.Iperf3, self.run_iperf3),
         )
 
         for command, handler in pairs:
@@ -90,8 +101,6 @@ class AgentActions():
         command_bus.handle(actions_domain.Commands.ConfigureTraceroutes(targets=event.traceroute_targets))
         # Then Speed Tests
         command_bus.handle(actions_domain.Commands.ConfigureSpeedTests(targets=event.speed_tests))
-
-
 
     async def configure_radios(self, event:actions_domain.Commands.ConfigureRadios):
         import lib.wifi_control.domain as wifi_domain # type: ignore
@@ -150,13 +159,18 @@ class AgentActions():
                     self.logger.info(f"{interface_name} should be connected to {wlan_data.ssid}. (Auth hidden) Currently connected to {wlan_if.ssid}")
                     if not (wlan_if.connected and wlan_if.ssid == wlan_data.ssid and wlan_if.psk == wlan_data.psk):
                         self.logger.info(f"Connection state of {interface_name} is incorrect. Reconnecting.")
-                        await wlan_if.connect(ssid=wlan_data.ssid, psk=wlan_data.psk)
-                        self.logger.info(f"Connection state of {interface_name} is complete. Renewing dhcp.")
-                        await wlan_if.renew_dhcp()
-                        # self.logger.info(f"Waiting for dhcp to settle.")
-                        # await asyncio.sleep(5)
-                        self.logger.info(f"Adding default routes for {interface_name}.")
-                        await wlan_if.add_default_routes()
+
+                        try:
+
+                            await wlan_if.connect(ssid=wlan_data.ssid, psk=wlan_data.psk)
+                            self.logger.info(f"Connection state of {interface_name} is complete. Renewing dhcp.")
+                            await wlan_if.renew_dhcp()
+                            # self.logger.info(f"Waiting for dhcp to settle.")
+                            # await asyncio.sleep(5)
+                            self.logger.info(f"Adding default routes for {interface_name}.")
+                            await wlan_if.add_default_routes()
+                        except TimeoutError:
+                            self.logger.error(f"Connection to {wlan_data.ssid} timed out.")
 
 
         if self.kismet_control.is_kismet_running() and len(self.kismet_control.active_kismet_interfaces())==0:
@@ -206,7 +220,7 @@ class AgentActions():
 
         result = ''
         try:
-            self.logger.info(f"Starting tcpdump with command: {cmd}")
+            self.logger.info(f"Starting tcpdump with command: {' '.join(cmd)}")
             c_res = await utils.run_command_async(cmd, use_shlex=False)
             result = c_res.stdout + c_res.stderr
             self.logger.info(f"Finished tcpdump on interface {interface_name}")
@@ -220,3 +234,69 @@ class AgentActions():
             self.logger.info(f"Unlinking {filepath}")
             os.unlink(filepath)
         return result
+
+
+    async def run_ping_test(self, event: actions_domain.Commands.Ping) -> t.Union[actions_domain.Data.PingResult, actions_domain.Data.PingFailure]:
+        self.logger.info(f"Running ping test: {event}")
+        # TODO: Errors when no destination host are found are resolved in a newer version of the JC library. To fix this, core will need to include the new version instead of using the system version.
+        res = await self.core_client.execute_async_request('post', 'api/v1/utils/ping', data=event.model_dump())
+        try:
+            res_data = res.json()
+        except Exception as e:
+            self.logger.exception(msg="Failure getting JSON result from Ping test")
+            result_payload = actions_domain.Data.PingFailure(
+                destination=event.host,
+                message=str(e)
+            )
+        else:
+            if 'message' in res_data:
+                result_payload = actions_domain.Data.PingFailure(**res_data)
+            else:
+                result_payload = actions_domain.Data.PingResult(**res_data)
+        message_bus.handle(result_payload)
+        # We don't emit the Test Complete version here since that requires an rXg identifier to be useful
+        return result_payload
+
+
+    async def run_iperf2(self, event: actions_domain.Commands.Iperf2) -> actions_domain.Messages.Iperf2Result:
+        self.logger.info(f"Running traceroute: {event}")
+        res = await self.core_client.execute_async_request('post', 'api/v1/utils/iperf2/client', data=event.model_dump())
+        result_payload =  actions_domain.Messages.Iperf2Result(**res.json())
+        message_bus.handle(result_payload)
+
+        # We don't emit the Test Complete version here since that requires an rXg identifier to be useful
+        return result_payload
+
+    async def run_iperf3(self, event: actions_domain.Commands.Iperf3) -> actions_domain.Messages.Iperf3Result:
+        self.logger.info(f"Running traceroute: {event}")
+        res = await self.core_client.execute_async_request('post', 'api/v1/utils/iperf3/client', data=event.model_dump())
+        result_payload =  actions_domain.Messages.Iperf3Result(**res.json())
+        message_bus.handle(result_payload)
+        # We don't emit the Test Complete version here since that requires an rXg identifier to be useful
+        return result_payload
+
+    async def run_traceroute(self, event: actions_domain.Commands.Traceroute) -> actions_domain.Messages.TracerouteResponse:
+        self.logger.info(f"Running traceroute: {event}")
+        res = await self.core_client.execute_async_request('post', 'api/v1/utils/traceroute', data=event.model_dump())
+        result_payload =  actions_domain.Messages.TracerouteResponse(**res.json())
+        message_bus.handle(result_payload)
+        return result_payload
+
+    async def run_dig_test(self, event: actions_domain.Commands.Dig) -> actions_domain.Messages.DigResponse:
+        self.logger.info(f"Running dig test: {event}")
+        res = await self.core_client.execute_async_request('post', 'api/v1/utils/dns/dig', data=event.model_dump())
+        res_json =  res.json()
+        result_payload =  actions_domain.Messages.DigResponse(**res.json()[0])
+        message_bus.handle(result_payload)
+        # Extra: emit a test complete message too, for now, since these don't have identifiable rXg models
+        message_bus.handle(actions_domain.Messages.DigTestComplete(request=event, result=res.json()))
+        return result_payload
+
+    async def run_dhcp_test(self, event: actions_domain.Commands.DhcpTest) -> actions_domain.Messages.DhcpTestResponse:
+        self.logger.info(f"Running dhcp test: {event}")
+        res = await self.core_client.execute_async_request('post', 'api/v1/utils/dhcp/test', data=event.model_dump())
+        result_payload =  actions_domain.Messages.DhcpTestResponse(**res.json())
+        message_bus.handle(result_payload)
+        # Extra: emit a test complete message too, for now, since these don't have identifiable rXg models
+        message_bus.handle(actions_domain.Messages.DhcpTestComplete(request=event, result=res.json()))
+        return result_payload

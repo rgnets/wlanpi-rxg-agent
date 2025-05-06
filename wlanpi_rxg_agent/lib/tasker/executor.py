@@ -32,7 +32,7 @@ class BaseExecutor(Executor):
         self.ident_name = "BaseExecutor"
         self.logger = logging.getLogger(self.ident_name)
 
-    def execution_complete(self, message_model: Type[actions_domain.Messages.ExecutorCompleteMessage], result):
+    def execution_complete(self, message_model: Type[actions_domain.Messages.TestCompleteMessage], result):
         self.logger.info("Execution complete")
         if 'id' in self.exec_def.model_dump().keys():
             exec_def_id = self.exec_def.id
@@ -61,22 +61,26 @@ class PingExecutor(BaseExecutor):
         # Check if wifi is correct
 
         # TODO: Errors when no destination host are found are resolved in a newer version of the JC library. To fix this, core will need to include the new version instead of using the system version.
-        res = await self.core_client.execute_async_request('post', 'api/v1/utils/ping', data={
 
-            **{x: y for x, y in self.exec_def.model_dump().items() if x not in ['id']}
-            # "host": self.exec_def.host,
-            # "count": self.exec_def.count,
-            # "interval": self.exec_def.interval,
-            # "interface": self.exec_def.interface,
-        })
-        self.execution_complete(message_model=actions_domain.Messages.PingBatchComplete, result=res.json())
-
-    def execution_complete(self, message_model: Type[actions_domain.Messages.ExecutorCompleteMessage], result):
-        if "message" in result:
-            self.logger.warning(f"Something went wrong executor: {result}")
-            message_bus.handle(message_model(id=self.exec_def.id, error=str(result)))
-        else:
-            message_bus.handle(message_model(id=self.exec_def.id, result=result))
+        ping_command = actions_domain.Commands.Ping(
+            host=self.exec_def.host,
+            count=self.exec_def.count,
+            interval=self.exec_def.interval,
+            # TTL isn't present on ping target
+            # TODO: Implement timeout logic
+            interface=self.exec_def.interface,
+        )
+        res = await command_bus.handle(ping_command)
+        self.logger.debug(f"Execution complete: {res}")
+        message_bus.handle(actions_domain.Messages.PingComplete(id=self.exec_def.id, result=res))
+        # self.execution_complete(mess foage_model=actions_domain.Messages.PingComplete, result=res.json())
+    #
+    # def execution_complete(self, message_model: Type[actions_domain.Messages.ExecutorCompleteMessage], result):
+    #     if "message" in result:
+    #         self.logger.warning(f"Something went wrong executor: {result}")
+    #         message_bus.handle(message_model(id=self.exec_def.id, error=str(result)))
+    #     else:
+    #         message_bus.handle(message_model(id=self.exec_def.id, result=result))
 
 
 class TraceRouteExecutor(BaseExecutor):
