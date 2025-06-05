@@ -1,5 +1,6 @@
 import typing as t
 from dataclasses import dataclass
+
 from pydantic import BaseModel, Field
 
 
@@ -31,7 +32,6 @@ class Messages:
 
     # class Disconnected(WpaSupplicantStateChanged):
     #     state="disconnected"
-
 
     # class InterfaceDisabled(WpaSupplicantStateChanged):
     #     state="interface_disabled"
@@ -66,7 +66,7 @@ class Messages:
     #
 
     class Completed(WpaSupplicantStateChanged):
-        state:str ="completed"
+        state: str = "completed"
 
     class ScanningStateChanged(WpaSupplicantEvent):
         scanning: bool = Field()

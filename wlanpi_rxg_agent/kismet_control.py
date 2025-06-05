@@ -1,22 +1,20 @@
 import logging
+import os
 import pprint
 import random
 import re
 import string
-
-import os
 import subprocess
 import time
-from typing import Optional, Any
-import dpkt
-import kismet_rest  # type: ignore
-import time
+from typing import Any, Optional
 
-from scapy.data import DLT_IEEE802_11, DLT_EN10MB
-from scapy.layers.dot11 import Dot11
-from scapy.utils import PcapReader, PcapWriter, PcapNgReader, PcapNgWriter
+import dpkt
 import kismet_capture
+import kismet_rest  # type: ignore
 from models.runcommand_error import RunCommandError
+from scapy.data import DLT_EN10MB, DLT_IEEE802_11
+from scapy.layers.dot11 import Dot11
+from scapy.utils import PcapNgReader, PcapNgWriter, PcapReader, PcapWriter
 from utils import run_command
 
 
@@ -29,30 +27,36 @@ class KismetControl:
     def __init__(self):
         self.logger = logging.getLogger(__name__)
         self.logger.info("Initializing KismetControl")
-        self.__kismet_httpd_conf_file = os.path.expanduser("~/.kismet/kismet_httpd.conf")
+        self.__kismet_httpd_conf_file = os.path.expanduser(
+            "~/.kismet/kismet_httpd.conf"
+        )
 
         self.kismet_config = self.load_kismet_config()
         self.kismet_conn = kismet_rest.KismetConnector(
             username=self.kismet_config["httpd_username"],
-            password=self.kismet_config["httpd_password"]
+            password=self.kismet_config["httpd_password"],
         )
         self.kismet_devices = kismet_rest.Devices(
             username=self.kismet_config["httpd_username"],
-            password=self.kismet_config["httpd_password"])
+            password=self.kismet_config["httpd_password"],
+        )
         self.kismet_sources = kismet_rest.Datasources(
             username=self.kismet_config["httpd_username"],
-            password=self.kismet_config["httpd_password"])
+            password=self.kismet_config["httpd_password"],
+        )
         self.kismet_alerts = kismet_rest.Alerts(
             username=self.kismet_config["httpd_username"],
-            password=self.kismet_config["httpd_password"])
+            password=self.kismet_config["httpd_password"],
+        )
         self.kismet_capture = kismet_capture.KismetCapture(
             username=self.kismet_config["httpd_username"],
-            password=self.kismet_config["httpd_password"])
+            password=self.kismet_config["httpd_password"],
+        )
 
     def read_kismet_config(self) -> dict[str, str]:
         """
         :raises: FileNotFoundError
-        :return: 
+        :return:
         """
         out_dict = {}
         with open(self.__kismet_httpd_conf_file, "r") as f:
@@ -65,7 +69,7 @@ class KismetControl:
     def write_new_kismet_config(self) -> dict[str, str]:
         contents = {
             "httpd_password": self.generate_random_password(20),
-            "httpd_username": "wlanpi"
+            "httpd_username": "wlanpi",
         }
 
         # Ensure directory exists before writing the file
@@ -99,7 +103,7 @@ class KismetControl:
         all_chars = string.ascii_letters + string.digits + string.punctuation
 
         # Generate a random password
-        password = ''.join(random.choice(all_chars) for _ in range(length))
+        password = "".join(random.choice(all_chars) for _ in range(length))
 
         return password
 
@@ -132,32 +136,46 @@ class KismetControl:
 
     # Source management
     def all_kismet_sources(self) -> dict[str, dict[str, Any]]:
-        return {x['kismet.datasource.interface']: x for x in self.kismet_sources.all() if
-                not x['kismet.datasource.interface'].endswith('mon')}
+        return {
+            x["kismet.datasource.interface"]: x
+            for x in self.kismet_sources.all()
+            if not x["kismet.datasource.interface"].endswith("mon")
+        }
 
     def available_kismet_interfaces(self) -> dict[str, dict[str, Any]]:
-        return {x['kismet.datasource.probed.interface']: x for x in self.kismet_sources.interfaces() if
-                not x['kismet.datasource.probed.interface'].endswith('mon')}
+        return {
+            x["kismet.datasource.probed.interface"]: x
+            for x in self.kismet_sources.interfaces()
+            if not x["kismet.datasource.probed.interface"].endswith("mon")
+        }
 
     def active_kismet_interfaces(self) -> dict[str, str]:
-        return {x['kismet.datasource.interface']: x['kismet.datasource.uuid']
-                for x in self.kismet_sources.all()
-                if x['kismet.datasource.running'] and x['kismet.datasource.uuid'] != '00000000-0000-0000-0000-000000000000'
-                and not x['kismet.datasource.interface'].endswith('mon')}
+        return {
+            x["kismet.datasource.interface"]: x["kismet.datasource.uuid"]
+            for x in self.kismet_sources.all()
+            if x["kismet.datasource.running"]
+            and x["kismet.datasource.uuid"] != "00000000-0000-0000-0000-000000000000"
+            and not x["kismet.datasource.interface"].endswith("mon")
+        }
 
-    def source_uuid_to_name(self, source_uuid, sources: Optional[list[Any]] = None) -> Optional[str]:
+    def source_uuid_to_name(
+        self, source_uuid, sources: Optional[list[Any]] = None
+    ) -> Optional[str]:
         if sources is None:
             sources = list(self.all_kismet_sources().values())
         for x in sources:
-            if x['kismet.datasource.uuid'] == source_uuid and x[
-                'kismet.datasource.uuid'] != '00000000-0000-0000-0000-000000000000':
-                return x['kismet.datasource.interface']
+            if (
+                x["kismet.datasource.uuid"] == source_uuid
+                and x["kismet.datasource.uuid"]
+                != "00000000-0000-0000-0000-000000000000"
+            ):
+                return x["kismet.datasource.interface"]
         return None
 
     def get_kismet_interface_uuid(self, interface: str) -> Optional[str]:
         for x in self.kismet_sources.interfaces():
-            if x['kismet.datasource.probed.interface'] == interface:
-                return x['kismet.datasource.probed.in_use_uuid']
+            if x["kismet.datasource.probed.interface"] == interface:
+                return x["kismet.datasource.probed.in_use_uuid"]
         return None
 
     def add_source(self, source_name: str) -> bool:
@@ -168,8 +186,8 @@ class KismetControl:
 
     def close_source_by_name(self, source_name: str) -> bool:
         for x in self.kismet_sources.interfaces():
-            if x['kismet.datasource.probed.interface'] == source_name:
-                return self.close_source(x['kismet.datasource.probed.in_use_uuid'])
+            if x["kismet.datasource.probed.interface"] == source_name:
+                return self.close_source(x["kismet.datasource.probed.in_use_uuid"])
         return False
 
     def open_source(self, source_uuid: str) -> bool:
@@ -177,9 +195,12 @@ class KismetControl:
 
     def open_source_by_name(self, source_name: str) -> bool:
         for x in self.kismet_sources.interfaces():
-            if x['kismet.datasource.probed.interface'] == source_name and x[
-                'kismet.datasource.probed.in_use_uuid'] != '00000000-0000-0000-0000-000000000000':
-                return self.open_source(x['kismet.datasource.probed.in_use_uuid'])
+            if (
+                x["kismet.datasource.probed.interface"] == source_name
+                and x["kismet.datasource.probed.in_use_uuid"]
+                != "00000000-0000-0000-0000-000000000000"
+            ):
+                return self.open_source(x["kismet.datasource.probed.in_use_uuid"])
         return False
 
     def resume_source(self, source_uuid: str) -> bool:
@@ -187,22 +208,29 @@ class KismetControl:
 
     def resume_source_by_name(self, source_name: str) -> bool:
         for x in self.kismet_sources.interfaces():
-            if x['kismet.datasource.probed.interface'] == source_name and x[
-                'kismet.datasource.probed.in_use_uuid'] != '00000000-0000-0000-0000-000000000000':
-                return self.resume_source(x['kismet.datasource.probed.in_use_uuid'])
+            if (
+                x["kismet.datasource.probed.interface"] == source_name
+                and x["kismet.datasource.probed.in_use_uuid"]
+                != "00000000-0000-0000-0000-000000000000"
+            ):
+                return self.resume_source(x["kismet.datasource.probed.in_use_uuid"])
         return False
 
-    def set_sources_by_name(self, source_names: list[str]) -> list[tuple[str, str, bool]]:
+    def set_sources_by_name(
+        self, source_names: list[str]
+    ) -> list[tuple[str, str, bool]]:
         results = []
         # Remove other sources that aren't in the list
         for source_name, source_uuid in self.active_kismet_interfaces().items():
 
             if source_uuid not in source_names:
-                results.append(('remove', source_name, self.close_source_by_name(source_name)))
+                results.append(
+                    ("remove", source_name, self.close_source_by_name(source_name))
+                )
 
         for source_name in source_names:
             if source_name not in self.active_kismet_interfaces():
-                results.append(('add', source_name, self.add_source(source_name)))
+                results.append(("add", source_name, self.add_source(source_name)))
         return results
 
     # Todo: May need to define hopping behavior somewhere. I think the defaults are sane for now.
@@ -212,16 +240,16 @@ class KismetControl:
 
     def get_seen_aps(self):
         fields_of_interest = [
-            'kismet.device.base.seenby',
-            'kismet.device.base.name',
-            'kismet.device.base.freq_khz_map',
-            'kismet.device.base.macaddr',
-            'kismet.device.base.manuf',
-            'kismet.device.base.channel',
-            'kismet.device.base.frequency',
-            'kismet.device.base.key',
-            'kismet.device.base.signal',
-            'kismet.device.base.type'
+            "kismet.device.base.seenby",
+            "kismet.device.base.name",
+            "kismet.device.base.freq_khz_map",
+            "kismet.device.base.macaddr",
+            "kismet.device.base.manuf",
+            "kismet.device.base.channel",
+            "kismet.device.base.frequency",
+            "kismet.device.base.key",
+            "kismet.device.base.signal",
+            "kismet.device.base.type",
             # 'dot11.device'
         ]
         current_sources = list(self.all_kismet_sources().values())
@@ -229,52 +257,65 @@ class KismetControl:
         for ap in self.kismet_devices.dot11_access_points(fields=fields_of_interest):
 
             seen_by = []
-            for seer in ap['kismet.device.base.seenby']:
+            for seer in ap["kismet.device.base.seenby"]:
                 # seen_by.append(self.source_uuid_to_name(seer, interfaces=current_avail_interfaces))
-                new_seer = {key.lstrip("kismet.common.seenby."): value for key, value in seer.items()}
-                new_seer['interface'] = self.source_uuid_to_name(new_seer['uuid'], sources=current_sources)
+                new_seer = {
+                    key.lstrip("kismet.common.seenby."): value
+                    for key, value in seer.items()
+                }
+                new_seer["interface"] = self.source_uuid_to_name(
+                    new_seer["uuid"], sources=current_sources
+                )
                 seen_by.append(new_seer)
-            if 'kismet.device.base.signal' in ap:
-                signal = {key.lstrip("kismet.common.signal."): value for key, value in
-                          ap['kismet.device.base.signal'].items()}
+            if "kismet.device.base.signal" in ap:
+                signal = {
+                    key.lstrip("kismet.common.signal."): value
+                    for key, value in ap["kismet.device.base.signal"].items()
+                }
             else:
                 signal = None
 
             # del seen_by['uuid']
-            results.append({
-                'key': ap['kismet.device.base.key'],
-                'type': ap['kismet.device.base.type'],
-                'ssid': ap['kismet.device.base.name'],
-                'mac': ap['kismet.device.base.macaddr'],
-                'freq': ap['kismet.device.base.frequency'],
-                'channel': ap['kismet.device.base.channel'],
-                'freq_mhz': ap['kismet.device.base.frequency'] / 1000,
-                # 'seen_by': ap['kismet.device.base.seenby'],
-                'seen_by': seen_by,
-                'signal': signal,
-
-                # 'dot11.device': ap['dot11.device']
-            })
+            results.append(
+                {
+                    "key": ap["kismet.device.base.key"],
+                    "type": ap["kismet.device.base.type"],
+                    "ssid": ap["kismet.device.base.name"],
+                    "mac": ap["kismet.device.base.macaddr"],
+                    "freq": ap["kismet.device.base.frequency"],
+                    "channel": ap["kismet.device.base.channel"],
+                    "freq_mhz": ap["kismet.device.base.frequency"] / 1000,
+                    # 'seen_by': ap['kismet.device.base.seenby'],
+                    "seen_by": seen_by,
+                    "signal": signal,
+                    # 'dot11.device': ap['dot11.device']
+                }
+            )
         return results
 
     @staticmethod
     def empty_seen_devices():
-        return {"Wi-Fi Client": [], "Wi-Fi AP": [], "Wi-Fi Ad-Hoc": [], "Wi-Fi Bridged": [], "Wi-Fi Device": []}
+        return {
+            "Wi-Fi Client": [],
+            "Wi-Fi AP": [],
+            "Wi-Fi Ad-Hoc": [],
+            "Wi-Fi Bridged": [],
+            "Wi-Fi Device": [],
+        }
 
     def get_seen_devices(self):
         # "kismet.device.base.type": "Wi-Fi Client",
         fields_of_interest = [
-            'kismet.device.base.seenby',
-            'kismet.device.base.name',
-            'kismet.device.base.freq_khz_map',
-            'kismet.device.base.macaddr',
-            'kismet.device.base.manuf',
-            'kismet.device.base.channel',
-            'kismet.device.base.frequency',
-            'kismet.device.base.key',
-            'kismet.device.base.signal',
-            'kismet.device.base.type'
-            'dot11.device'
+            "kismet.device.base.seenby",
+            "kismet.device.base.name",
+            "kismet.device.base.freq_khz_map",
+            "kismet.device.base.macaddr",
+            "kismet.device.base.manuf",
+            "kismet.device.base.channel",
+            "kismet.device.base.frequency",
+            "kismet.device.base.key",
+            "kismet.device.base.signal",
+            "kismet.device.base.type" "dot11.device",
             # 'dot11.device.last_bssid'
         ]
 
@@ -284,40 +325,51 @@ class KismetControl:
         # Clients,Bridges, and Devices have client maps
         for device in self.kismet_devices.all():
             # print(device["kismet.device.base.commonname"])
-            base_type = device['kismet.device.base.type']
+            base_type = device["kismet.device.base.type"]
             seen_by = []
 
-            for seer in device['kismet.device.base.seenby']:
+            for seer in device["kismet.device.base.seenby"]:
                 # seen_by.append(self.source_uuid_to_name(seer, interfaces=current_avail_interfaces))
-                new_seer = {key.lstrip("kismet.common.seenby."): value for key, value in seer.items()}
-                new_seer['interface'] = self.source_uuid_to_name(new_seer['uuid'], sources=current_sources)
+                new_seer = {
+                    key.lstrip("kismet.common.seenby."): value
+                    for key, value in seer.items()
+                }
+                new_seer["interface"] = self.source_uuid_to_name(
+                    new_seer["uuid"], sources=current_sources
+                )
                 seen_by.append(new_seer)
-            if 'kismet.device.base.signal' in device:
-                signal = {re.sub(r"^kismet\.common\.signal\.", "", key): value for key, value in
-                          device['kismet.device.base.signal'].items()}
+            if "kismet.device.base.signal" in device:
+                signal = {
+                    re.sub(r"^kismet\.common\.signal\.", "", key): value
+                    for key, value in device["kismet.device.base.signal"].items()
+                }
             else:
                 signal = None
 
             prepared_device = {
-                'key': device['kismet.device.base.key'],
-                'type': device['kismet.device.base.type'],
-                'ssid': device['kismet.device.base.name'],
-                'mac': device['kismet.device.base.macaddr'],
-                'freq': device['kismet.device.base.frequency'],
-                'channel': device['kismet.device.base.channel'],
-                'freq_mhz': device['kismet.device.base.frequency'] / 1000,
+                "key": device["kismet.device.base.key"],
+                "type": device["kismet.device.base.type"],
+                "ssid": device["kismet.device.base.name"],
+                "mac": device["kismet.device.base.macaddr"],
+                "freq": device["kismet.device.base.frequency"],
+                "channel": device["kismet.device.base.channel"],
+                "freq_mhz": device["kismet.device.base.frequency"] / 1000,
                 # 'seen_by': device['kismet.device.base.seenby'],
-                'seen_by': seen_by,
-                'signal': signal,
-
+                "seen_by": seen_by,
+                "signal": signal,
                 # 'dot11.device': ap['dot11.device']
             }
 
             if base_type in ["Wi-Fi Client"]:
-                if device['dot11.device'] and 'dot11.device.last_bssid' in device['dot11.device']:
-                    prepared_device['last_bssid'] = device['dot11.device']["dot11.device.last_bssid"]
+                if (
+                    device["dot11.device"]
+                    and "dot11.device.last_bssid" in device["dot11.device"]
+                ):
+                    prepared_device["last_bssid"] = device["dot11.device"][
+                        "dot11.device.last_bssid"
+                    ]
                 else:
-                    prepared_device['last_bssid'] = None
+                    prepared_device["last_bssid"] = None
 
             try:
                 res[base_type].append(prepared_device)
@@ -327,6 +379,7 @@ class KismetControl:
             #     res[device['kismet.device.base.key']] = device['kismet.device.base.seenby']
 
         return res
+
     #
     # def test_method(self):
     #     res = {"Wi-Fi Client": [], "Wi-Fi AP": [], "Wi-Fi Ad-Hoc": [], "Wi-Fi Bridged": [], "Wi-Fi Device": []}
@@ -403,7 +456,14 @@ class KismetControl:
 
     def ignore(self):
 
-        [{y: x[f"kismet.datasource.{y}"] for y in ['paused', 'running', 'error', 'interface', 'uuid'] } for x in kc.kismet_sources.all()]
+        [
+            {
+                y: x[f"kismet.datasource.{y}"]
+                for y in ["paused", "running", "error", "interface", "uuid"]
+            }
+            for x in kc.kismet_sources.all()
+        ]
+
 
 if __name__ == "__main__":
     # logger = logging.getLogger(__name__)

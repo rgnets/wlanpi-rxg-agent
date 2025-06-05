@@ -1,16 +1,18 @@
 from __future__ import annotations
+
 import typing as t
 from dataclasses import dataclass
 from datetime import datetime
 
-from pydantic import BaseModel, Field, Extra
+from pydantic import BaseModel, Extra, Field
+
 
 class Data:
 
     class WifiConfiguration(BaseModel):
-        id: t.Optional[int] = Field() #
-        ssid: str = Field() #
-        psk: str = Field() #
+        id: t.Optional[int] = Field()  #
+        ssid: str = Field()  #
+        psk: str = Field()  #
         encryption: t.Optional[str] = Field(default=None)
         authentication: t.Optional[str] = Field(default=None)
 
@@ -20,21 +22,25 @@ class Data:
         wlan: t.Optional[Data.WifiConfiguration] = Field()
 
     class PingTarget(BaseModel):
-        id: int = Field() #                    :integer          not null, primary key
-        count: int = Field(default=3) #              :integer
+        id: int = Field()  #                    :integer          not null, primary key
+        count: int = Field(default=3)  #              :integer
 
-        interval: float = Field(default=1.0) #              :decimal(7, 2)    default(1.0)
-        period: t.Optional[int] = Field(default=None, description="If specified, will schedule the ping to run periodically after the first attempt, in seconds.") #              :decimal(7, 2)    default(1.0)
-        name: t.Optional[str] = Field(default=None) #                  :string
-        note: t.Optional[str] = Field(default=None) #                  :text
-        host: str = Field() #                :string
-        timeout: float = Field() #               :decimal(4, 2)
-        traceroute_interval: t.Optional[float] = Field(default=None) #   :decimal(7, 2)
+        interval: float = Field(
+            default=1.0
+        )  #              :decimal(7, 2)    default(1.0)
+        period: t.Optional[int] = Field(
+            default=None,
+            description="If specified, will schedule the ping to run periodically after the first attempt, in seconds.",
+        )  #              :decimal(7, 2)    default(1.0)
+        name: t.Optional[str] = Field(default=None)  #                  :string
+        note: t.Optional[str] = Field(default=None)  #                  :text
+        host: str = Field()  #                :string
+        timeout: float = Field()  #               :decimal(4, 2)
+        traceroute_interval: t.Optional[float] = Field(default=None)  #   :decimal(7, 2)
 
         interface: t.Optional[str] = Field(default=None)
         ssid: t.Optional[str] = Field(default=None)
         psk: t.Optional[str] = Field(default=None)
-
 
     class SpeedTest(BaseModel):
         id: int = Field()  # :integer          not null, primary key
@@ -42,10 +48,14 @@ class Data:
         port: int = Field()
         udp: bool = Field()
 
-        period: t.Optional[int] = Field(default=None,
-                                    description="If specified, will schedule the speed test to run periodically after the first attempt, in seconds.")
-        start_date: t.Optional[datetime] = Field(default_factory=datetime.now, description="The date and time when the speed test or test periods should start.")
-
+        period: t.Optional[int] = Field(
+            default=None,
+            description="If specified, will schedule the speed test to run periodically after the first attempt, in seconds.",
+        )
+        start_date: t.Optional[datetime] = Field(
+            default_factory=datetime.now,
+            description="The date and time when the speed test or test periods should start.",
+        )
 
         interface: t.Optional[str] = Field(default=None)
         ssid: t.Optional[str] = Field(default=None)
@@ -59,10 +69,14 @@ class Data:
             examples=[1, 10], description="How many packets to send.", default=1
         )
         interval: float = Field(
-            examples=[1], description="The interval between packets, in seconds", default=1
+            examples=[1],
+            description="The interval between packets, in seconds",
+            default=1,
         )
         ttl: t.Optional[int] = Field(
-            examples=[20], description="The Time-to-Live of the ping attempt.", default=None
+            examples=[20],
+            description="The Time-to-Live of the ping attempt.",
+            default=None,
         )
         interface: t.Optional[str] = Field(
             examples=["eth0"],
@@ -108,23 +122,22 @@ class Data:
         destination: str = Field(examples=["google.com"])
         message: str = Field(examples=["No route to host"])
 
-
     class CompletedPing(BaseModel):
         destination_ip: str = Field()
         interface: str = Field()
-        data_bytes:  t.Any = Field(default=None)
-        pattern:  t.Any = Field(default=None)
+        data_bytes: t.Any = Field(default=None)
+        pattern: t.Any = Field(default=None)
         destination: str = Field()
         packets_transmitted: int = Field()
-        packets_received:  int = Field()
-        packet_loss_percent:  float = Field()
-        duplicates:  int = Field()
-        time_ms:  float = Field()
-        round_trip_ms_min:   float = Field()
-        round_trip_ms_avg:   float = Field()
-        round_trip_ms_max:    float = Field()
-        round_trip_ms_stddev:    float = Field()
-        jitter:  t.Optional[float] = Field(default=None)
+        packets_received: int = Field()
+        packet_loss_percent: float = Field()
+        duplicates: int = Field()
+        time_ms: float = Field()
+        round_trip_ms_min: float = Field()
+        round_trip_ms_avg: float = Field()
+        round_trip_ms_max: float = Field()
+        round_trip_ms_stddev: float = Field()
+        jitter: t.Optional[float] = Field(default=None)
         responses: list[Data.PingResponse] = Field(default=[])
 
     class Iperf3ClientRequest(BaseModel):
@@ -188,13 +201,14 @@ class Data:
     class Traceroute(BaseModel):
         id: int = Field()  # :integer          not null, primary key
         queries: int = Field(default=1, description="Queries per hop")
-        period: t.Optional[int] = Field(default=None,
-                                    description="If specified, will schedule the traceroute to run periodically after the first attempt, in seconds.")  #
+        period: t.Optional[int] = Field(
+            default=None,
+            description="If specified, will schedule the traceroute to run periodically after the first attempt, in seconds.",
+        )  #
         host: str = Field()  # :string
         interface: t.Optional[str] = Field(default=None)
         ssid: t.Optional[str] = Field(default=None)
         psk: t.Optional[str] = Field(default=None)
-
 
     # Traceroute
     # Most of these reflect the API definitions in Core
@@ -269,7 +283,6 @@ class Data:
         rcvd: int = Field(examples=[82])
 
 
-
 class Messages:
 
     class Message(BaseModel):
@@ -280,7 +293,7 @@ class Messages:
         error: t.Optional[str] = Field(default=None)
         result: t.Any = Field(default=None)
         extra: t.Any = Field(default=None)
-        request: t.Any =Field(default=None)
+        request: t.Any = Field(default=None)
 
     # Reflect the Core definitions above, so we can modify the messages here
 
@@ -308,7 +321,7 @@ class Messages:
         result: t.Optional[Data.Iperf2Result] = Field(default=None)
         request: Data.Iperf2ClientRequest = Field()
 
-    class Iperf3Result(Data.Iperf3Result, extra='allow'):
+    class Iperf3Result(Data.Iperf3Result, extra="allow"):
         pass
 
     class Iperf3Complete(TestCompleteMessage):

@@ -2,8 +2,8 @@ import typing as t
 
 from pymessagebus._messagebus import MessageBus
 
-
 _DEFAULT_MESSAGE_BUS = MessageBus()
+
 
 # Public API:
 # This is our handy decorator:

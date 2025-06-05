@@ -1,19 +1,17 @@
 import logging
+from abc import ABC, abstractmethod
 from json import JSONDecodeError
 from typing import Type
 
-from pydantic import BaseModel
-
 import lib.agent_actions.domain as actions_domain
-from busses import message_bus, command_bus
+from busses import command_bus, message_bus
 from core_client import CoreClient
-from abc import ABC, abstractmethod
+from pydantic import BaseModel
 
 
 class Executor(ABC):
 
-    def __init__(self
-                 ):
+    def __init__(self):
         self.core_client = CoreClient()
 
         @abstractmethod
@@ -32,15 +30,19 @@ class BaseExecutor(Executor):
         self.ident_name = "BaseExecutor"
         self.logger = logging.getLogger(self.ident_name)
 
-    def execution_complete(self, message_model: Type[actions_domain.Messages.TestCompleteMessage], result):
+    def execution_complete(
+        self, message_model: Type[actions_domain.Messages.TestCompleteMessage], result
+    ):
         self.logger.info("Execution complete")
-        if 'id' in self.exec_def.model_dump().keys():
+        if "id" in self.exec_def.model_dump().keys():
             exec_def_id = self.exec_def.id
         else:
             exec_def_id = -1
         if "message" in result:
             self.logger.warning(f"Something went wrong executor: {result}")
-            message_bus.handle(message_model(id=exec_def_id, error=str(result), result=result))
+            message_bus.handle(
+                message_model(id=exec_def_id, error=str(result), result=result)
+            )
         else:
             message_bus.handle(message_model(id=exec_def_id, result=result))
 
@@ -72,8 +74,11 @@ class PingExecutor(BaseExecutor):
         )
         res = await command_bus.handle(ping_command)
         self.logger.debug(f"Execution complete: {res}")
-        message_bus.handle(actions_domain.Messages.PingComplete(id=self.exec_def.id, result=res))
+        message_bus.handle(
+            actions_domain.Messages.PingComplete(id=self.exec_def.id, result=res)
+        )
         # self.execution_complete(mess foage_model=actions_domain.Messages.PingComplete, result=res.json())
+
     #
     # def execution_complete(self, message_model: Type[actions_domain.Messages.ExecutorCompleteMessage], result):
     #     if "message" in result:
@@ -88,7 +93,9 @@ class TraceRouteExecutor(BaseExecutor):
     def __init__(self, traceroute_def: actions_domain.Data.Traceroute):
         super().__init__()
 
-        self.ident_name = f"{self.__class__}:{traceroute_def.interface}:{traceroute_def.host}"
+        self.ident_name = (
+            f"{self.__class__}:{traceroute_def.interface}:{traceroute_def.host}"
+        )
         self.logger = logging.getLogger(self.ident_name)
         # self.logger = logging.getLogger(__name__)
         self.logger.info(f"Initializing {self.ident_name}")
@@ -99,17 +106,27 @@ class TraceRouteExecutor(BaseExecutor):
         # Check if wifi is correct
 
         # TODO: Errors when no destination host are found are resolved in a newer version of the JC library. To fix this, core will need to include the new version instead of using the system version.
-        res = await self.core_client.execute_async_request('post', 'api/v1/utils/traceroute', data={
-            **{x: y for x, y in self.exec_def.model_dump().items() if x not in ['id']}
-            # "host": self.exec_def.host,
-            # "interface": self.exec_def.interface,
-            # "queries": self.exec_def.queries,
-            #
-            #
-            # # "count": self.traceroute_def.count,
-            # # "interval": self.traceroute_def.interval,
-        })
-        self.execution_complete(message_model=actions_domain.Messages.TracerouteComplete, result=res.json())
+        res = await self.core_client.execute_async_request(
+            "post",
+            "api/v1/utils/traceroute",
+            data={
+                **{
+                    x: y
+                    for x, y in self.exec_def.model_dump().items()
+                    if x not in ["id"]
+                }
+                # "host": self.exec_def.host,
+                # "interface": self.exec_def.interface,
+                # "queries": self.exec_def.queries,
+                #
+                #
+                # # "count": self.traceroute_def.count,
+                # # "interval": self.traceroute_def.interval,
+            },
+        )
+        self.execution_complete(
+            message_model=actions_domain.Messages.TracerouteComplete, result=res.json()
+        )
 
 
 class Iperf2Executor(BaseExecutor):
@@ -125,10 +142,20 @@ class Iperf2Executor(BaseExecutor):
 
     async def execute(self):
         self.logger.info(f"Iperf2Executor.execute: {self.exec_def}")
-        res = await self.core_client.execute_async_request('post', 'api/v1/utils/iperf2/client', data={
-            **{x: y for x, y in self.exec_def.model_dump().items() if x not in ['id']}
-        })
-        self.execution_complete(message_model=actions_domain.Messages.Iperf2Complete, result=res.json())
+        res = await self.core_client.execute_async_request(
+            "post",
+            "api/v1/utils/iperf2/client",
+            data={
+                **{
+                    x: y
+                    for x, y in self.exec_def.model_dump().items()
+                    if x not in ["id"]
+                }
+            },
+        )
+        self.execution_complete(
+            message_model=actions_domain.Messages.Iperf2Complete, result=res.json()
+        )
 
 
 class Iperf3Executor(BaseExecutor):
@@ -144,10 +171,20 @@ class Iperf3Executor(BaseExecutor):
 
     async def execute(self):
         self.logger.info(f"Iperf3Executor.execute: {self.exec_def}")
-        res = await self.core_client.execute_async_request('post', 'api/v1/utils/iperf3/client', data={
-            **{x: y for x, y in self.exec_def.model_dump().items() if x not in ['id']}
-        })
-        self.execution_complete(message_model=actions_domain.Messages.Iperf3Complete, result=res.json())
+        res = await self.core_client.execute_async_request(
+            "post",
+            "api/v1/utils/iperf3/client",
+            data={
+                **{
+                    x: y
+                    for x, y in self.exec_def.model_dump().items()
+                    if x not in ["id"]
+                }
+            },
+        )
+        self.execution_complete(
+            message_model=actions_domain.Messages.Iperf3Complete, result=res.json()
+        )
 
 
 #
@@ -166,6 +203,7 @@ class Iperf3Executor(BaseExecutor):
 #             })
 #             self.execution_complete(message_model=actions_domain.Messages.Iperf3Complete, result=res.json())
 
+
 class DigTestExecutor(BaseExecutor):
 
     def __init__(self, exec_def: actions_domain.Data.DigRequest):
@@ -175,17 +213,26 @@ class DigTestExecutor(BaseExecutor):
         self.logger.info(f"Initializing {self.ident_name}")
         self.exec_def = exec_def
 
-
     async def execute(self):
         self.logger.info(f"DigTestExecutor.execute: {self.exec_def}")
-        res = await self.core_client.execute_async_request('post', 'api/v1/utils/dns/dig', data={
-            **{x: y for x, y in self.exec_def.model_dump().items() if x not in ['id']}
-        })
+        res = await self.core_client.execute_async_request(
+            "post",
+            "api/v1/utils/dns/dig",
+            data={
+                **{
+                    x: y
+                    for x, y in self.exec_def.model_dump().items()
+                    if x not in ["id"]
+                }
+            },
+        )
         try:
             res_out = res.json()
         except JSONDecodeError:
             res_out = {"message": res.text}
-        self.execution_complete(message_model=actions_domain.Messages.DigTestComplete, result=res_out)
+        self.execution_complete(
+            message_model=actions_domain.Messages.DigTestComplete, result=res_out
+        )
 
 
 class DhcpTestExecutor(BaseExecutor):
@@ -199,14 +246,24 @@ class DhcpTestExecutor(BaseExecutor):
 
     async def execute(self):
         self.logger.info(f"DhcpTestExecutor.execute: {self.exec_def}")
-        res = await self.core_client.execute_async_request('post', 'api/v1/utils/dhcp/test', data={
-            **{x: y for x, y in self.exec_def.model_dump().items() if x not in ['id']}
-        })
+        res = await self.core_client.execute_async_request(
+            "post",
+            "api/v1/utils/dhcp/test",
+            data={
+                **{
+                    x: y
+                    for x, y in self.exec_def.model_dump().items()
+                    if x not in ["id"]
+                }
+            },
+        )
         try:
             res_out = res.json()
         except JSONDecodeError:
             res_out = {"message": res.text}
-        self.execution_complete(message_model=actions_domain.Messages.DhcpTestComplete, result=res_out)
+        self.execution_complete(
+            message_model=actions_domain.Messages.DhcpTestComplete, result=res_out
+        )
 
 
 if __name__ == "__main__":
@@ -232,6 +289,6 @@ if __name__ == "__main__":
     # dig_test_e = DigTestExecutor(exec_def=dig_test)
     # dig_test_e.execute()
 
-    dhcp_test = actions_domain.Data.DhcpTestRequest(interface='eth0')
+    dhcp_test = actions_domain.Data.DhcpTestRequest(interface="eth0")
     dhcp_test_e = DhcpTestExecutor(exec_def=dhcp_test)
     dhcp_test_e.execute()

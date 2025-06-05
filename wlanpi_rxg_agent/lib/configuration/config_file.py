@@ -3,14 +3,18 @@ import json
 import logging
 from collections import defaultdict
 from os import PathLike
-from typing import Union, Any
+from typing import Any, Union
 
 import toml
 
 
-class ConfigFile():
+class ConfigFile:
 
-    def __init__(self, config_file:Union[str, PathLike] = "config.toml", defaults: dict[str,Any] = None):
+    def __init__(
+        self,
+        config_file: Union[str, PathLike] = "config.toml",
+        defaults: dict[str, Any] = None,
+    ):
         self.logger = logging.getLogger(__name__)
         self.logger.info(f"Initializing {__name__} for {config_file}")
 
@@ -19,7 +23,7 @@ class ConfigFile():
             self.defaults = {}
 
         self.config_file = config_file
-        self.data:dict[str,dict] = defaultdict(dict)
+        self.data: dict[str, dict] = defaultdict(dict)
 
     def load(self):
         try:
@@ -33,9 +37,7 @@ class ConfigFile():
             self.logger.error(f"Failed to load config file: {e}")
             raise e
         except (toml.decoder.TomlDecodeError, json.decoder.JSONDecodeError) as e:
-            self.logger.error(
-                f"Unable to decode existing config. Error: {e.msg}"
-            )
+            self.logger.error(f"Unable to decode existing config. Error: {e.msg}")
             raise e
 
     def save(self):
@@ -45,7 +47,6 @@ class ConfigFile():
             else:
                 json.dump(self.data, f)
 
-
     def create_defaults(self):
         self.data = copy.deepcopy(self.defaults)
 
@@ -53,7 +54,9 @@ class ConfigFile():
         try:
             self.load()
             if not self.data:
-                self.logger.warning("Config file was empty, and allow_empty is false. Creating defaults")
+                self.logger.warning(
+                    "Config file was empty, and allow_empty is false. Creating defaults"
+                )
                 self.create_defaults()
         except FileNotFoundError as e:
             self.logger.warning(f"Unable to load config, using defaults. Error: {e}")

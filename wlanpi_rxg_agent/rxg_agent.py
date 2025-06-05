@@ -1,23 +1,24 @@
 import asyncio
 import json
-import subprocess
-
-from contextlib import asynccontextmanager
-from fastapi import FastAPI
 import logging
+import subprocess
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager
 
-# import wlanpi_rxg_agent.utils as utils
-from busses import message_bus, command_bus
 import lib.domain as agent_domain
 import lib.rxg_supplicant.domain as supplicant_domain
+
+# import wlanpi_rxg_agent.utils as utils
+from busses import command_bus, message_bus
+from fastapi import FastAPI
 from lib.agent_actions.actions import AgentActions
+from lib.configuration.bridge_config_file import BridgeConfigFile
 from lib.rxg_supplicant.supplicant import RxgSupplicant
 from lib.tasker.tasker import Tasker
 from lib.wifi_control.wifi_control_wpa_supplicant import WiFiControlWpaSupplicant
 from rxg_mqtt_client import RxgMqttClient
-from lib.configuration.bridge_config_file import BridgeConfigFile
 from utils import aevery
+
 from wlanpi_rxg_agent.bridge_control import BridgeControl
 
 logger = logging.getLogger(__name__)
@@ -46,16 +47,20 @@ class RXGAgent:
 
         self.bridge_control = BridgeControl()
 
-        self.executor  = ThreadPoolExecutor(1)
-
+        self.executor = ThreadPoolExecutor(1)
 
     def setup_listeners(self):
-        message_bus.add_handler(supplicant_domain.Messages.NewCertifiedConnection, self.certified_handler)
-        message_bus.add_handler(agent_domain.Messages.ShutdownStarted, self.shutdown_handler)
+        message_bus.add_handler(
+            supplicant_domain.Messages.NewCertifiedConnection, self.certified_handler
+        )
+        message_bus.add_handler(
+            agent_domain.Messages.ShutdownStarted, self.shutdown_handler
+        )
 
-
-    async def certified_handler(self, event: supplicant_domain.Messages.NewCertifiedConnection) -> None:
-        ''' Reconfigures the MQTT Bridge service whenever a new Certified event hits.'''
+    async def certified_handler(
+        self, event: supplicant_domain.Messages.NewCertifiedConnection
+    ) -> None:
+        """Reconfigures the MQTT Bridge service whenever a new Certified event hits."""
         # Reconfigure MQTT Bridge
         self.logger.info("Reconfiguring Bridge")
         # Try to load existing toml and preserve. If we fail, it doesn't matter that much.
@@ -67,17 +72,20 @@ class RXGAgent:
             self.bridge_config_file.data["MQTT"]["port"] = event.port
             self.bridge_config_file.data["MQTT_TLS"]["use_tls"] = True
             self.bridge_config_file.data["MQTT_TLS"]["ca_certs"] = event.ca_file
-            self.bridge_config_file.data["MQTT_TLS"]["certfile"] = event.certificate_file
+            self.bridge_config_file.data["MQTT_TLS"][
+                "certfile"
+            ] = event.certificate_file
             self.bridge_config_file.data["MQTT_TLS"]["keyfile"] = event.key_file
             self.bridge_config_file.save()
 
             self.logger.info("Bridge config written. Restarting service.")
             self.bridge_control.restart()
 
-    async def shutdown_handler(self, event: agent_domain.Messages.ShutdownStarted) -> None:
+    async def shutdown_handler(
+        self, event: agent_domain.Messages.ShutdownStarted
+    ) -> None:
         self.logger.info("Shutting down Bridge")
         self.bridge_control.stop()
-
 
     @staticmethod
     async def every(__seconds: float, func, *args, **kwargs):
@@ -85,13 +93,11 @@ class RXGAgent:
             func(*args, **kwargs)
             await asyncio.sleep(__seconds)
 
-
     @staticmethod
     async def aevery(__seconds: float, func, *args, **kwargs):
         while True:
             await func(*args, **kwargs)
             await asyncio.sleep(__seconds)
-
 
 
 eth0_res = subprocess.run(
@@ -102,12 +108,10 @@ eth0_data = json.loads(eth0_res.stdout)[0]
 eth0_mac = eth0_data["mac_addr"]
 
 
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Load the ML model
     # ml_models["answer_to_everything"] = fake_answer_to_everything_ml_model
-
 
     # agent = RXGAgent(
     #     verify_ssl=False,
@@ -126,7 +130,6 @@ async def lifespan(app: FastAPI):
         logger.info("Heartbeat!")
         # await asyncio.sleep(10)
 
-
     message_bus.handle(agent_domain.Messages.StartupComplete())
     # asyncio.create_task(every(2, lambda : print("Ping")))
     asyncio.create_task(aevery(3, heartbeat_task))
@@ -140,13 +143,16 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+
 @app.get("/")
 async def root():
     return {"message": "Hello World"}
 
+
 @app.get("/reload_agent")
 async def reload_agent():
     message_bus.handle(agent_domain.Messages.AgentConfigUpdated())
+
 
 #
 # def startup():
@@ -154,4 +160,3 @@ async def reload_agent():
 #     @app.on_event("startup")
 #     async def startup_event():
 #         asyncio.create_task(main())
-

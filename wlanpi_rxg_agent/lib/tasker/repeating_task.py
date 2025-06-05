@@ -1,22 +1,30 @@
+import asyncio
 import inspect
 import logging
-import asyncio
 from datetime import datetime, timedelta
-from typing import Coroutine, Callable, Union, Optional
+from typing import Callable, Coroutine, Optional, Union
 
 from apscheduler.jobstores.base import JobLookupError
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-
 # Useful bits at https://coderslegacy.com/python-apscheduler-asyncioscheduler/
 
-class RepeatingTask:
-    '''
-    Contains all the logical concepts for scheduling and executing an arbitrary repeating task
-    '''
 
-    def __init__(self, scheduler: AsyncIOScheduler, type: str, identifier: str, task_executor: Callable, interval: float,
-                 start_date: Optional[datetime] = None, end_date: Optional[datetime] = None):
+class RepeatingTask:
+    """
+    Contains all the logical concepts for scheduling and executing an arbitrary repeating task
+    """
+
+    def __init__(
+        self,
+        scheduler: AsyncIOScheduler,
+        type: str,
+        identifier: str,
+        task_executor: Callable,
+        interval: float,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+    ):
         self.type = type
         self.identifier = identifier
         self.scheduler = scheduler
@@ -31,26 +39,28 @@ class RepeatingTask:
 
         self.task_executor = task_executor
 
-        self.job = self.scheduler.add_job(self.run_once,
-                                          'interval',
-                                          name=self.ident_name,
-                                          seconds=self.interval,
-                                          start_date=self.start_date,
-                                          end_date=self.end_date,
-                                          # start_date='2023-06-21 10:00:00',
-                                          # end_date='2023-06-21 11:00:00'
-                                          misfire_grace_time=int(self.interval/2),
-                                          )
+        self.job = self.scheduler.add_job(
+            self.run_once,
+            "interval",
+            name=self.ident_name,
+            seconds=self.interval,
+            start_date=self.start_date,
+            end_date=self.end_date,
+            # start_date='2023-06-21 10:00:00',
+            # end_date='2023-06-21 11:00:00'
+            misfire_grace_time=int(self.interval / 2),
+        )
 
     def end_task(self):
         try:
             self.job.remove()
         except JobLookupError:
-            self.logger.warning(f"Error looking up job while ending task {self.identifier}. It was probably already removed.")
+            self.logger.warning(
+                f"Error looking up job while ending task {self.identifier}. It was probably already removed."
+            )
         self.logger.info(f"Task ended: {self.identifier}")
 
     # Technically, jobs can be modified in place. Currently not doing that.
-
 
     async def run_once(self):
         try:
@@ -77,6 +87,7 @@ if __name__ == "__main__":
         print("Starting scheduler")
 
         scheduler.start()
+
         def the_task():
             print("Working hard!")
             logger.info("Working hard!")
@@ -85,10 +96,10 @@ if __name__ == "__main__":
         rt = RepeatingTask(
             scheduler=scheduler,
             type="TestTask",
-            identifier='Number1',
+            identifier="Number1",
             task_executor=the_task,
             interval=10,
-            start_date=datetime.now() - timedelta(0,15)
+            start_date=datetime.now() - timedelta(0, 15),
         )
 
         print(f"Task: {rt}")

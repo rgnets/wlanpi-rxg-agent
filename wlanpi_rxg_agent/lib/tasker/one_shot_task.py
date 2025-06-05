@@ -1,22 +1,29 @@
+import asyncio
 import inspect
 import logging
-import asyncio
 from datetime import datetime, timedelta
-from typing import Coroutine, Callable, Union, Optional
+from typing import Callable, Coroutine, Optional, Union
 
 from apscheduler.jobstores.base import JobLookupError
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-
 # Useful bits at https://coderslegacy.com/python-apscheduler-asyncioscheduler/
 
-class OneShotTask:
-    '''
-    Contains all the logical concepts for scheduling and executing an arbitrary repeating task
-    '''
 
-    def __init__(self, scheduler: AsyncIOScheduler, type: str, identifier: str, task_executor: Callable,
-                 start_date: Optional[datetime] = None, on_complete: Optional[Callable] = None):
+class OneShotTask:
+    """
+    Contains all the logical concepts for scheduling and executing an arbitrary repeating task
+    """
+
+    def __init__(
+        self,
+        scheduler: AsyncIOScheduler,
+        type: str,
+        identifier: str,
+        task_executor: Callable,
+        start_date: Optional[datetime] = None,
+        on_complete: Optional[Callable] = None,
+    ):
         self.type = type
         self.identifier = identifier
         self.scheduler = scheduler
@@ -29,25 +36,26 @@ class OneShotTask:
         self.task_executor = task_executor
         self.on_complete = on_complete
 
-        self.job = self.scheduler.add_job(self.run_once,
-                                          'date',
-                                          name=self.ident_name,
-                                          next_run_time=self.start_date,
-                                          misfire_grace_time=120,
-                                          )
+        self.job = self.scheduler.add_job(
+            self.run_once,
+            "date",
+            name=self.ident_name,
+            next_run_time=self.start_date,
+            misfire_grace_time=120,
+        )
 
     def end_task(self):
         try:
             self.job.remove()
         except JobLookupError:
             self.logger.warning(
-                f"Error looking up job while ending task {self.identifier}. It was probably already removed.")
+                f"Error looking up job while ending task {self.identifier}. It was probably already removed."
+            )
         if self.on_complete is not None:
             self.on_complete()
         # self.logger.info(f"Task ended: {self.identifier}")
 
     # Technically, jobs can be modified in place. Currently not doing that.
-
 
     async def run_once(self):
         try:
@@ -61,5 +69,7 @@ class OneShotTask:
             # Don't allow any exceptions beyond here, as they would break the scheduler
             self.logger.exception("Error in task execution")
         finally:
-            self.logger.info(f"One-shot complete for \"{self.identifier}\". Removing job and calling on_complete callbacks.")
+            self.logger.info(
+                f'One-shot complete for "{self.identifier}". Removing job and calling on_complete callbacks.'
+            )
             self.end_task()

@@ -1,9 +1,9 @@
 import logging
 
-from busses import message_bus, command_bus
+import dbus
 import lib.domain as agent_domain
 import lib.rxg_supplicant.domain as supplicant_domain
-import dbus
+from busses import command_bus, message_bus
 
 
 class BridgeControl:
@@ -25,8 +25,6 @@ class BridgeControl:
     #     message_bus.add_handler(supplicant_domain.Messages.RestartInternalMqtt, self.certified_handler)
     #     message_bus.add_handler(agent_domain.Messages.ShutdownStarted, self.shutdown_handler)
     #     # message_bus.add_handler(agent_domain.Messages.AgentConfigUpdate, self.config_update_handler)
-
-
 
     def enable(self) -> bool:
         try:

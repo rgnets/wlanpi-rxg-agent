@@ -1,6 +1,6 @@
 import typing as t
 
-from ._messagebus import api, MessageBus
+from ._messagebus import MessageBus, api
 
 
 class CommandBus(api.CommandBus):

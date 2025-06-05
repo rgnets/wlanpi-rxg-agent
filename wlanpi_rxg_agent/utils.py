@@ -13,7 +13,8 @@ from typing import Any, Optional, TextIO, Union
 from wlanpi_rxg_agent.models.command_result import CommandResult
 from wlanpi_rxg_agent.models.runcommand_error import RunCommandError, RunCommandTimeout
 
-logger = logging.getLogger('utils')
+logger = logging.getLogger("utils")
+
 
 def run_command(
     cmd: Union[list, str],
@@ -156,9 +157,9 @@ async def run_command_async(
     if shell:
         # If a list was passed in shell mode, safely join using shlex to protect against injection.
         if isinstance(cmd, list):
-            cmd: list # type: ignore
-            cmd: str = shlex.join(cmd) if use_shlex else " ".join(cmd) # type: ignore
-        cmd: str # type: ignore
+            cmd: list  # type: ignore
+            cmd: str = shlex.join(cmd) if use_shlex else " ".join(cmd)  # type: ignore
+        cmd: str  # type: ignore
         logger.warning(
             f"Command {cmd} being run as a shell script. This could present "
             f"an injection vulnerability. Consider whether you really need to do this."
@@ -166,9 +167,9 @@ async def run_command_async(
     else:
         # If a string was passed in non-shell mode, safely split it using shlex to protect against injection.
         if isinstance(cmd, str):
-            cmd: str # type: ignore
-            cmd: list[str] = shlex.split(cmd) if use_shlex else cmd.split() # type: ignore
-        cmd: list[str] # type: ignore
+            cmd: str  # type: ignore
+            cmd: list[str] = shlex.split(cmd) if use_shlex else cmd.split()  # type: ignore
+        cmd: list[str]  # type: ignore
 
     # Prepare input data for communicate
     if input:
@@ -213,7 +214,7 @@ async def run_command_async(
             proc.terminate()
             if raise_on_fail:
                 raise RunCommandTimeout(err_msg)
-            stdout, stderr = b'', b''
+            stdout, stderr = b"", b""
     else:
         # If a string was passed in non-shell mode, safely split it using shlex to protect against injection.
         if isinstance(cmd, str):
@@ -238,12 +239,11 @@ async def run_command_async(
             proc.terminate()
             if raise_on_fail:
                 raise RunCommandTimeout(err_msg)
-            stdout, stderr = b'', b''
+            stdout, stderr = b"", b""
 
     if raise_on_fail and proc.returncode != 0:
         raise RunCommandError(error_msg=stderr.decode(), return_code=proc.returncode)
     return CommandResult(stdout.decode(), stderr.decode(), proc.returncode or 0)
-
 
 
 def get_full_class_name(obj: object) -> str:
@@ -279,7 +279,9 @@ def trace_route(target: str) -> dict[str, Any]:
 
 def get_model_info() -> dict[str, str]:
     model_info = run_command(["wlanpi-model"]).stdout.split("\n")
-    split_model_info = [a.split(":", 1) for a in model_info if (a.strip() != "" and ':' in a)]
+    split_model_info = [
+        a.split(":", 1) for a in model_info if (a.strip() != "" and ":" in a)
+    ]
     model_dict = {}
     for a, b in split_model_info:
         model_dict[a.strip()] = b.strip()
@@ -333,10 +335,12 @@ async def every(__seconds: float, func, *args, **kwargs):
         func(*args, **kwargs)
         await asyncio.sleep(__seconds)
 
+
 async def aevery(__seconds: float, func, *args, **kwargs):
     while True:
         await func(*args, **kwargs)
         await asyncio.sleep(__seconds)
+
 
 if __name__ == "__main__":
     # print(get_interface_ip_addr("eth0"))

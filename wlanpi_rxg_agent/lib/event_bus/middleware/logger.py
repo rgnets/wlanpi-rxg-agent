@@ -1,5 +1,5 @@
-import typing as t
 import logging
+import typing as t
 
 # Heavily inspired by the Tactician Logger Middleware :-)
 # @link https://github.com/thephpleague/tactician-logger
@@ -12,7 +12,6 @@ class LoggingMiddlewareConfig(t.NamedTuple):
     msg_succeeded_level: int = logging.DEBUG
     msg_failed_level: int = logging.ERROR
     include_msg_payload: bool = False
-
 
 
 def get_logger_middleware(
@@ -28,9 +27,7 @@ def get_logger_middleware(
         if middleware_config.include_msg_payload:
             log_msg += f" with payload: {message}"
 
-        logger.log(
-            middleware_config.msg_received_level, log_msg
-        )
+        logger.log(middleware_config.msg_received_level, log_msg)
 
         try:
             result = next_(message)

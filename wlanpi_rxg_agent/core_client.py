@@ -4,16 +4,14 @@ from typing import Any, Optional
 
 import requests
 from aiohttp import ClientSession
-
 from requests import JSONDecodeError
-
 from structures import FlatResponse
 
 
 class CoreClient:
     def __init__(
-            self,
-            base_url="http://127.0.0.1:31415",
+        self,
+        base_url="http://127.0.0.1:31415",
     ):
         self.logger = logging.getLogger(__name__)
         self.logger.info(f"Initializing CoreClient against {base_url}")
@@ -43,11 +41,11 @@ class CoreClient:
                 time.sleep(5)
 
     def execute_request(
-            self,
-            method: str,
-            path: str,
-            data: Optional[Any] = None,
-            params: Optional[Any] = None,
+        self,
+        method: str,
+        path: str,
+        data: Optional[Any] = None,
+        params: Optional[Any] = None,
     ) -> requests.Response:
         self.logger.debug(
             f"Executing {method.upper()} on path {path} with data: {str(data)}"
@@ -62,11 +60,11 @@ class CoreClient:
         return response
 
     async def execute_async_request(
-            self,
-            method: str,
-            path: str,
-            data: Optional[Any] = None,
-            params: Optional[Any] = None,
+        self,
+        method: str,
+        path: str,
+        data: Optional[Any] = None,
+        params: Optional[Any] = None,
     ) -> FlatResponse:
         self.logger.debug(
             f"Executing {method.upper()} asynchonously on path {path} with data: {str(data)}"
@@ -74,11 +72,11 @@ class CoreClient:
 
         async with ClientSession() as session:
             async with session.request(
-                    method=method,
-                    params=params,
-                    url=f"{self.base_url}/{path}",
-                    json=data,
-                    headers=self.base_headers,
+                method=method,
+                params=params,
+                url=f"{self.base_url}/{path}",
+                json=data,
+                headers=self.base_headers,
             ) as response:
                 self.logger.debug(
                     f"Returning response for {method.upper()} on path {path} with data: {str(data)}"
@@ -94,7 +92,7 @@ class CoreClient:
                     url=str(response.url),
                     status_code=response.status,
                     content=content,
-                    encoding=response.get_encoding()
+                    encoding=response.get_encoding(),
                 )
 
     def get_current_path_data(self, path):

@@ -1,7 +1,12 @@
 import json
 
 import requests
-from kismet_rest import BaseInterface, KismetLoginException, Utility, KismetRequestException
+from kismet_rest import (
+    BaseInterface,
+    KismetLoginException,
+    KismetRequestException,
+    Utility,
+)
 
 
 class KismetCapture(BaseInterface):
@@ -27,8 +32,10 @@ class KismetCapture(BaseInterface):
         payload = kwargs["payload"] if "payload" in kwargs else {}
         full_url = Utility.build_full_url(self.host_uri, url_path)
         if verb == "GET":
-            self.logger.debug("interact_binary_stream: GET against {} "
-                              "stream={}".format(full_url, stream))
+            self.logger.debug(
+                "interact_binary_stream: GET against {} "
+                "stream={}".format(full_url, stream)
+            )
             response = self.session.get(full_url, stream=stream)
         elif verb == "POST":
             if payload:
@@ -37,27 +44,30 @@ class KismetCapture(BaseInterface):
                 postdata = "{}"
 
             formatted_payload = {"json": postdata}
-            self.logger.debug("interact_binary_stream: POST against {} "
-                              "with {} stream={}".format(full_url,
-                                                         formatted_payload,
-                                                         stream))
-            response = self.session.post(full_url, data=formatted_payload,
-                                         stream=stream)
+            self.logger.debug(
+                "interact_binary_stream: POST against {} "
+                "with {} stream={}".format(full_url, formatted_payload, stream)
+            )
+            response = self.session.post(
+                full_url, data=formatted_payload, stream=stream
+            )
 
         else:
             self.logger.error("HTTP verb {} not yet supported!".format(verb))
 
         # Application error
         if response.status_code == 500:
-            msg = "Kismet 500 Error response from {}: {}".format(url_path,
-                                                                 response.text)
+            msg = "Kismet 500 Error response from {}: {}".format(
+                url_path, response.text
+            )
             self.logger.error(msg)
             raise KismetLoginException(msg, response.status_code)
 
         # Invalid request
         if response.status_code == 400:
-            msg = "Kismet 400 Error response from {}: {}".format(url_path,
-                                                                 response.text)
+            msg = "Kismet 400 Error response from {}: {}".format(
+                url_path, response.text
+            )
             self.logger.error(msg)
             raise KismetRequestException(msg, response.status_code)
 
@@ -73,21 +83,17 @@ class KismetCapture(BaseInterface):
             self.logger.error(msg)
             raise KismetRequestException(msg, response.status_code)
 
-
         return response
 
-
-
-    def capture_all(self)-> requests.Response:
+    def capture_all(self) -> requests.Response:
         url = "/pcap/all_packets.pcapng"
         return self.interact_binary_stream("GET", url)
 
-    def capture_by_device(self, key)-> requests.Response:
+    def capture_by_device(self, key) -> requests.Response:
         url = "devices/pcap/by-key/{}/packets.pcapng".format(key)
         return self.interact_binary_stream("GET", url)
 
-
-    def capture_by_uuid(self, uuid)-> requests.Response:
+    def capture_by_uuid(self, uuid) -> requests.Response:
         """Capture from source.
 
         Args:

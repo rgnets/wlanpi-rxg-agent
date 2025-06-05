@@ -4,8 +4,14 @@
 #
 #    pip-compile --extra=dev --output-file=requirements-dev.txt pyproject.toml
 #
+aiohappyeyeballs==2.6.1
+    # via aiohttp
+aiohttp==3.12.9
+    # via wlanpi-rxg-agent (pyproject.toml)
 aiomqtt==2.3.0
     # via wlanpi-rxg-agent (pyproject.toml)
+aiosignal==1.3.2
+    # via aiohttp
 annotated-types==0.7.0
     # via pydantic
 anyio==4.9.0
@@ -13,7 +19,9 @@ anyio==4.9.0
 apscheduler==3.11.0
     # via wlanpi-rxg-agent (pyproject.toml)
 attrs==24.2.0
-    # via twisted
+    # via
+    #   aiohttp
+    #   twisted
 automat==24.8.1
     # via twisted
 black==24.10.0
@@ -37,6 +45,10 @@ dpkt==1.9.8
     # via wlanpi-rxg-agent (pyproject.toml)
 fastapi==0.115.11
     # via wlanpi-rxg-agent (pyproject.toml)
+frozenlist==1.6.2
+    # via
+    #   aiohttp
+    #   aiosignal
 h11==0.14.0
     # via uvicorn
 hyperlink==21.0.0
@@ -46,8 +58,11 @@ idna==3.10
     #   anyio
     #   hyperlink
     #   requests
+    #   yarl
 incremental==24.7.2
     # via twisted
+jc==1.25.5
+    # via wlanpi-rxg-agent (pyproject.toml)
 jinja2==3.1.6
     # via wlanpi-rxg-agent (pyproject.toml)
 kismet-rest==2020.5.1
@@ -56,6 +71,10 @@ lockfile==0.12.2
     # via python-daemon
 markupsafe==3.0.2
     # via jinja2
+multidict==6.4.4
+    # via
+    #   aiohttp
+    #   yarl
 mypy==1.12.1
     # via wlanpi-rxg-agent (pyproject.toml)
 mypy-extensions==1.0.0
@@ -72,6 +91,10 @@ pathspec==0.12.1
     # via black
 platformdirs==4.3.6
     # via black
+propcache==0.3.1
+    # via
+    #   aiohttp
+    #   yarl
 pycairo==1.27.0
     # via pygobject
 pydantic==2.9.2
@@ -82,6 +105,8 @@ pydantic-core==2.23.4
     # via pydantic
 pydantic-settings==2.6.0
     # via wlanpi-rxg-agent (pyproject.toml)
+pygments==2.19.1
+    # via jc
 pygobject==3.50.0
     # via wlanpi-rxg-agent (pyproject.toml)
 python-daemon==3.0.1
@@ -92,6 +117,10 @@ requests==2.32.3
     # via
     #   kismet-rest
     #   wlanpi-rxg-agent (pyproject.toml)
+ruamel-yaml==0.18.12
+    # via jc
+ruamel-yaml-clib==0.2.12
+    # via ruamel-yaml
 scapy==2.6.1
     # via wlanpi-rxg-agent (pyproject.toml)
 six==1.17.0
@@ -134,6 +163,10 @@ uvicorn==0.34.0
     # via wlanpi-rxg-agent (pyproject.toml)
 wpa-supplicant==0.2
     # via wlanpi-rxg-agent (pyproject.toml)
+xmltodict==0.14.2
+    # via jc
+yarl==1.20.0
+    # via aiohttp
 zope-interface==7.2
     # via twisted
 

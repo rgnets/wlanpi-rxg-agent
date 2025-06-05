@@ -1,23 +1,18 @@
 import asyncio
 import logging
-from collections import defaultdict
 import typing as t
+from collections import defaultdict
 
 from . import api
 
 
 class MessageBus(api.MessageBus):
-    def __init__(
-            self,
-            *,
-            middlewares: t.List[api.Middleware] = None
-    ) -> None:
+    def __init__(self, *, middlewares: t.List[api.Middleware] = None) -> None:
         self.logger = logging.getLogger(__name__)
         self.logger.info(f"Initializing {__name__}")
         self._handlers: t.Dict[type, t.List[t.Callable]] = defaultdict(list)
         self._middlewares_chain = self._get_middlewares_callables_chain(
-            middlewares,
-            self._trigger_handlers_for_message_as_a_middleware
+            middlewares, self._trigger_handlers_for_message_as_a_middleware
         )
 
     def add_handler(self, message_class: type, message_handler: t.Callable) -> None:
@@ -113,4 +108,3 @@ class MessageBus(api.MessageBus):
             return asyncio.create_task(handler(message))
         else:
             return handler(message)
-

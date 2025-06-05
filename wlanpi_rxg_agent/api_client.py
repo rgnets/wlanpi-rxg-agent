@@ -4,11 +4,12 @@ from typing import Optional, Union
 
 import requests
 import urllib3
+from aiohttp import ClientResponse, ClientSession
 from requests import Response
-
 from structures import FlatResponse
+
 from wlanpi_rxg_agent.utils import get_eth0_mac, get_interface_ip_addr
-from aiohttp import ClientSession, ClientResponse
+
 
 class ApiClient:
 
@@ -37,15 +38,13 @@ class ApiClient:
             ip = self.ip
         async with ClientSession() as session:
             async with session.request(
-                    method="get",
-                    url=f"https://{ip}/{self.api_base}/apcert/check_device",
-                    params={"mac": self.mac, "device_type": "wlanpi"},
-                    verify_ssl=self.verify_ssl,
-                    timeout=self.timeout,
+                method="get",
+                url=f"https://{ip}/{self.api_base}/apcert/check_device",
+                params={"mac": self.mac, "device_type": "wlanpi"},
+                verify_ssl=self.verify_ssl,
+                timeout=self.timeout,
             ) as response:
-                self.logger.debug(
-                    f"Returning response for tcpdump upload"
-                )
+                self.logger.debug(f"Returning response for tcpdump upload")
                 # Returning a flat response here to make our lives easier. Do NOT return the raw ClientResponse object!
                 # The async methods will not work outside the context providers above!
                 # If you find yourself needing more data or in a different form, modify the
@@ -57,24 +56,21 @@ class ApiClient:
                     status_code=response.status,
                     reason=response.reason,
                     content=content,
-                    encoding=response.get_encoding()
+                    encoding=response.get_encoding(),
                 )
-
 
     async def get_cert(self, ip: Optional[str] = None) -> FlatResponse:
         if not ip:
             ip = self.ip
         async with ClientSession() as session:
             async with session.request(
-                    method="get",
-                    url=f"https://{ip}/{self.api_base}/apcert/get_cert",
-                    params={"mac": self.mac, "device_type": "wlanpi"},
-                    verify_ssl=self.verify_ssl,
-                    timeout=self.timeout,
+                method="get",
+                url=f"https://{ip}/{self.api_base}/apcert/get_cert",
+                params={"mac": self.mac, "device_type": "wlanpi"},
+                verify_ssl=self.verify_ssl,
+                timeout=self.timeout,
             ) as response:
-                self.logger.debug(
-                    f"Returning response for tcpdump upload"
-                )
+                self.logger.debug(f"Returning response for tcpdump upload")
                 # Returning a flat response here to make our lives easier. Do NOT return the raw ClientResponse object!
                 # The async methods will not work outside the context providers above!
                 # If you find yourself needing more data or in a different form, modify the
@@ -86,30 +82,31 @@ class ApiClient:
                     status_code=response.status,
                     reason=response.reason,
                     content=content,
-                    encoding=response.get_encoding()
+                    encoding=response.get_encoding(),
                 )
 
-
-    async def register(self, model: str, csr: str, ) -> FlatResponse:
+    async def register(
+        self,
+        model: str,
+        csr: str,
+    ) -> FlatResponse:
 
         async with ClientSession() as session:
             async with session.request(
-                    method="post",
-                    url=f"https://{self.ip}/{self.api_base}/apcert/register",
-                    json={
-                        "device_type": "wlanpi",
-                        "mac": self.mac,
-                        "csr": csr,
-                        "model": model,
-                        # "name": "Generic WLAN Pi",
-                        "ip": get_interface_ip_addr("eth0"),
-                    },
-                    verify_ssl=self.verify_ssl,
-                    timeout=self.timeout,
+                method="post",
+                url=f"https://{self.ip}/{self.api_base}/apcert/register",
+                json={
+                    "device_type": "wlanpi",
+                    "mac": self.mac,
+                    "csr": csr,
+                    "model": model,
+                    # "name": "Generic WLAN Pi",
+                    "ip": get_interface_ip_addr("eth0"),
+                },
+                verify_ssl=self.verify_ssl,
+                timeout=self.timeout,
             ) as response:
-                self.logger.debug(
-                    f"Returning response for tcpdump upload"
-                )
+                self.logger.debug(f"Returning response for tcpdump upload")
                 # Returning a flat response here to make our lives easier. Do NOT return the raw ClientResponse object!
                 # The async methods will not work outside the context providers above!
                 # If you find yourself needing more data or in a different form, modify the
@@ -121,26 +118,28 @@ class ApiClient:
                     status_code=response.status,
                     reason=response.reason,
                     content=content,
-                    encoding=response.get_encoding()
+                    encoding=response.get_encoding(),
                 )
 
-    async def upload_tcpdump(self, file_path:Union[int, str, bytes, PathLike[str], PathLike[bytes]], submit_token:str, ip: Optional[str] = None) -> FlatResponse:
+    async def upload_tcpdump(
+        self,
+        file_path: Union[int, str, bytes, PathLike[str], PathLike[bytes]],
+        submit_token: str,
+        ip: Optional[str] = None,
+    ) -> FlatResponse:
         if not ip:
             ip = self.ip
-        files = {'file': open(file_path, 'rb')}
-        form_data = {'token': submit_token,
-                     'file': open(file_path, 'rb')}
+        files = {"file": open(file_path, "rb")}
+        form_data = {"token": submit_token, "file": open(file_path, "rb")}
         async with ClientSession() as session:
             async with session.request(
-                    method="post",
-                    url=f"https://{ip}/{self.api_base}/tcpdumps/submit_tcpdump",
-                    data=form_data,
-                    verify_ssl=self.verify_ssl,
-                    timeout=self.timeout,
+                method="post",
+                url=f"https://{ip}/{self.api_base}/tcpdumps/submit_tcpdump",
+                data=form_data,
+                verify_ssl=self.verify_ssl,
+                timeout=self.timeout,
             ) as response:
-                self.logger.debug(
-                    f"Returning response for tcpdump upload"
-                )
+                self.logger.debug(f"Returning response for tcpdump upload")
                 # Returning a flat response here to make our lives easier. Do NOT return the raw ClientResponse object!
                 # The async methods will not work outside the context providers above!
                 # If you find yourself needing more data or in a different form, modify the
@@ -152,6 +151,5 @@ class ApiClient:
                     status_code=response.status,
                     reason=response.reason,
                     content=content,
-                    encoding=response.get_encoding()
+                    encoding=response.get_encoding(),
                 )
-

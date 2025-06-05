@@ -1,9 +1,10 @@
 import logging
 
 from lib.event_bus import CommandBus, MessageBus
-from lib.event_bus.middleware.logger import get_logger_middleware, LoggingMiddlewareConfig
-
-
+from lib.event_bus.middleware.logger import (
+    LoggingMiddlewareConfig,
+    get_logger_middleware,
+)
 
 # logging_middleware_config = LoggingMiddlewareConfig(
 #     msg_received_level=logging.INFO,
@@ -19,9 +20,12 @@ from lib.event_bus.middleware.logger import get_logger_middleware, LoggingMiddle
 # command_logger.addHandler(command_fh)
 # command_logging_middleware = get_logger_middleware(command_logger, logging_middleware_config)
 
-command_bus = CommandBus(locking=False, middlewares=[
-    # command_logging_middleware
-])
+command_bus = CommandBus(
+    locking=False,
+    middlewares=[
+        # command_logging_middleware
+    ],
+)
 
 
 #
@@ -31,8 +35,9 @@ command_bus = CommandBus(locking=False, middlewares=[
 # message_logger.addHandler(message_fh)
 # message_logging_middleware = get_logger_middleware(message_logger, logging_middleware_config)
 
-message_bus = MessageBus(middlewares=[
-    # message_logging_middleware
-])
+message_bus = MessageBus(
+    middlewares=[
+        # message_logging_middleware
+    ]
+)
 # command_bus.add_handler(CreateCustomerCommand, handle_customer_creation)
-

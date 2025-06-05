@@ -1,26 +1,33 @@
 import pytest
+from requests.exceptions import ConnectionError, ConnectTimeout, ReadTimeout
+
 from wlanpi_rxg_agent.lib.rxg_supplicant.supplicant import RxgSupplicant
-from requests.exceptions import ConnectTimeout, ConnectionError, ReadTimeout
+
 
 @pytest.fixture
 def mocked_test_check_device_unknown_device(mocker):
     # Set up the mocked ApiClient instance to return a successful response
-    MockedAPIClient = mocker.patch('wlanpi_rxg_agent.lib.rxg_supplicant.supplicant.ApiClient')
+    MockedAPIClient = mocker.patch(
+        "wlanpi_rxg_agent.lib.rxg_supplicant.supplicant.ApiClient"
+    )
     mocked_response = mocker.Mock()
 
     mocked_response.status_code = 200
     mocked_response.json.return_value = {
         "message": "Unknown device",
-        "status": "unregistered"
+        "status": "unregistered",
     }
 
     mocked_api = MockedAPIClient.return_value
     mocked_api.check_device.return_value = mocked_response
 
+
 @pytest.fixture
 def mocked_test_check_device_no_response(mocker):
     # Set up the mocked ApiClient instance to return a failing response
-    MockedAPIClient = mocker.patch('wlanpi_rxg_agent.lib.rxg_supplicant.supplicant.ApiClient')
+    MockedAPIClient = mocker.patch(
+        "wlanpi_rxg_agent.lib.rxg_supplicant.supplicant.ApiClient"
+    )
     mocked_api = MockedAPIClient.return_value
     mocked_response = mocker.Mock()
     mocked_response.status_code = 404

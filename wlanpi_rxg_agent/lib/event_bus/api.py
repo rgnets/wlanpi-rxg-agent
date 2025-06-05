@@ -1,5 +1,5 @@
-from abc import ABC, abstractmethod
 import typing as t
+from abc import ABC, abstractmethod
 
 CallNextMiddleware = t.Callable[[object], t.Any]
 Middleware = t.Callable[[object, CallNextMiddleware], t.Any]

@@ -4,13 +4,14 @@ from ssl import VerifyMode
 from typing import Any, Callable, Literal, Optional
 
 import requests
-from requests.utils import guess_json_utf
-
-from utils import get_current_unix_timestamp
 from requests import JSONDecodeError
+from requests.compat import chardet
+from requests.compat import json as complexjson
 from requests.models import guess_json_utf
 from requests.structures import CaseInsensitiveDict
-from requests.compat import json as complexjson, chardet
+from requests.utils import guess_json_utf
+from utils import get_current_unix_timestamp
+
 
 class MQTTRestResponse:
     """
@@ -25,7 +26,11 @@ class MQTTRestResponse:
         data=None,
         errors: Optional[list] = None,
         status: Literal[
-            "success", "agent_error", "internal_error", "other_error", "validation_error"
+            "success",
+            "agent_error",
+            "internal_error",
+            "other_error",
+            "validation_error",
         ] = "success",
         rest_status: Optional[int] = None,
         rest_reason: Optional[str] = None,
@@ -108,16 +113,23 @@ class BridgeConfig:
 
 
 class FlatResponse:
-    """ Yes, I ripped some guts out of the Requests library for this. Use this to emulate as much of a Requests response as needed."""
+    """Yes, I ripped some guts out of the Requests library for this. Use this to emulate as much of a Requests response as needed."""
 
-    def __init__(self, headers: CaseInsensitiveDict[str], url: str, status_code: int, content: bytes,
-                 encoding: Optional[str] = None, reason: Optional[str]=None):
+    def __init__(
+        self,
+        headers: CaseInsensitiveDict[str],
+        url: str,
+        status_code: int,
+        content: bytes,
+        encoding: Optional[str] = None,
+        reason: Optional[str] = None,
+    ):
         self.headers = headers
         self.url = url
         self.status_code = status_code
         self.content = content
         self.encoding = encoding
-        self.reason: Optional[str]= reason
+        self.reason: Optional[str] = reason
 
     @property
     def apparent_encoding(self):

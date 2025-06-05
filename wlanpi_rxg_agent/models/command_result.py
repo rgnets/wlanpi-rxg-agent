@@ -1,9 +1,9 @@
 import json
 import re
+from enum import Enum
 from json import JSONDecodeError
 from re import RegexFlag
-from typing import Union, Any
-from enum import Enum
+from typing import Any, Union
 
 
 class CommandResult:
@@ -71,7 +71,9 @@ class CommandResult:
             dict_form["error_from_json"] = obj.error_from_json()
             return dict_form
         elif isinstance(obj, (re.Pattern, RegexFlag)):
-           return str(obj)  # Or a more meaningful representation if available
+            return str(obj)  # Or a more meaningful representation if available
         elif isinstance(obj, Enum):
             return obj.value
-        return json.JSONEncoder().default(obj) # Let the base encoder handle other types
+        return json.JSONEncoder().default(
+            obj
+        )  # Let the base encoder handle other types
