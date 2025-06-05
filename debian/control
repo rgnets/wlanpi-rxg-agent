@@ -3,7 +3,6 @@ Section: contrib/python
 Priority: optional
 Maintainer: Michael Ketchel <michael.ketchel@gmail.com>
 Uploaders:
-Depends: wlanpi-rxg-agent (>= 1.0.0)
 Build-Depends: debhelper (>= 11),
                debhelper-compat (= 13),
                dbus,
