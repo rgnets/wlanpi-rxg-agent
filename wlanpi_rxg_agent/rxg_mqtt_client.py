@@ -99,7 +99,7 @@ class RxgMqttClient:
 
         self.message_handler_pairs = [
             (supplicant_domain.Messages.NewCertifiedConnection, self.certified_handler),
-            (supplicant_domain.Messages.RestartInternalMqtt, self.start_client),
+            (supplicant_domain.Messages.RestartInternalMqtt, self.restart_client_handler),
             (agent_domain.Messages.ShutdownStarted, self.shutdown_handler),
             # (agent_domain.Messages.StartupComplete, self.startup_complete_handler),
             # (agent_domain.Messages.AgentConfigUpdate, self.config_update_handler),
@@ -132,7 +132,10 @@ class RxgMqttClient:
             # self.logger.info(f"Got message {message}: {message.payload}")
             await self.handle_message(self.mqtt_client, message)
 
-    async def start_client(self, host, port, tls_config: TLSConfig = None ):
+    async def restart_client_handler(self, event: supplicant_domain.Messages.RestartInternalMqtt):
+        return await self.start_client(event.host, event.port, event.tls_config)
+
+    async def start_client(self, host, port, tls_config: TLSConfig = None):
         try:
             async with aiomqtt.Client(
                 host,
