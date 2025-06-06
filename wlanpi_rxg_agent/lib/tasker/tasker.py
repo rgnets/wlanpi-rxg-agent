@@ -68,6 +68,7 @@ class Tasker:
         self.configure_fixed_tasks()
 
     def setup_listeners(self):
+        self.logger.info("Setting up listeners")
         # TODO: Surely we can implement this as some sort of decorator function?
         for command, handler in self.command_handler_pairs:
             command_bus.add_handler(command, handler)

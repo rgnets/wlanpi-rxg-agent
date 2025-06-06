@@ -69,6 +69,7 @@ class RxgSupplicant:
         self.setup_listeners()
 
     def setup_listeners(self):
+        self.logger.info("Setting up listeners")
         message_bus.add_handler(
             agent_domain.Messages.StartupComplete, self.startup_complete_handler
         )
@@ -85,7 +86,9 @@ class RxgSupplicant:
     async def re_emit_certified_if_new(
         self, event: supplicant_domain.Messages.Certified
     ):
+        self.logger.debug("Checking if we need to re-emit certified connection")
         if event != self.last_certified_connection:
+            self.logger.debug("re-emitting certified connection...")
             self.last_certified_connection = event
             message_bus.handle(
                 supplicant_domain.Messages.NewCertifiedConnection(**event.__dict__)
@@ -339,6 +342,7 @@ class RxgSupplicant:
     async def renew_client_cert(
         self, server_ip
     ) -> tuple[bool, Optional[supplicant_domain.Messages.Certified]]:
+        self.logger.info("Renewing client cert")
         get_cert_success, status, ca_str, cert_str, host, port = (
             await self.get_client_cert(server_ip=server_ip)
         )
@@ -358,6 +362,7 @@ class RxgSupplicant:
             # if host is not None:
             #     self.active_server = host
             # self.active_port = port
+            self.logger.info("Server has certified us")
             return True, supplicant_domain.Messages.Certified(
                 host=host,
                 port=port,
@@ -405,6 +410,7 @@ class RxgSupplicant:
                 if cert_result:
                     self.supplicant_state = RxgSupplicantState.CERTIFIED
                     if certified:
+                        self.logger.info(f"Certified with {server_ip}. Dispatching")
                         message_bus.handle(certified)
                     return True
                 else:

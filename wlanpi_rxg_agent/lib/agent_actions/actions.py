@@ -39,6 +39,7 @@ class AgentActions:
         self.setup_listeners()
 
     def setup_listeners(self):
+        self.logger.info("Setting up listeners")
         # TODO: Surely we can implement this as some sort of decorator function?
         pairs = (
             (actions_domain.Commands.SetRxgs, self.set_rxgs),

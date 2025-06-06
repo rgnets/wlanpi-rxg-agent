@@ -49,7 +49,10 @@ class RXGAgent:
 
         self.executor = ThreadPoolExecutor(1)
 
+        self.setup_listeners()
+
     def setup_listeners(self):
+        self.logger.info("Setting up listeners")
         message_bus.add_handler(
             supplicant_domain.Messages.NewCertifiedConnection, self.certified_handler
         )
@@ -62,7 +65,7 @@ class RXGAgent:
     ) -> None:
         """Reconfigures the MQTT Bridge service whenever a new Certified event hits."""
         # Reconfigure MQTT Bridge
-        self.logger.info("Reconfiguring Bridge")
+        self.logger.info("New certified connection. restarting MQTT Bridge")
         # Try to load existing toml and preserve. If we fail, it doesn't matter that much.
         async with self.bridge_config_lock:
             self.bridge_config_file.load_or_create_defaults()
@@ -113,10 +116,10 @@ async def lifespan(app: FastAPI):
     # Load the ML model
     # ml_models["answer_to_everything"] = fake_answer_to_everything_ml_model
 
-    # agent = RXGAgent(
-    #     verify_ssl=False,
-    #     event_bus=event_bus,
-    # )
+    agent = RXGAgent(
+        # verify_ssl=False,
+        # event_bus=event_bus,
+    )
 
     tasker = Tasker()
 

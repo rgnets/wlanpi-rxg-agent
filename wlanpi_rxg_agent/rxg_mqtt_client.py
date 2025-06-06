@@ -91,7 +91,10 @@ class RxgMqttClient:
 
         self.message_handler_pairs = [
             (supplicant_domain.Messages.NewCertifiedConnection, self.certified_handler),
-            (supplicant_domain.Messages.RestartInternalMqtt, self.restart_client_handler),
+            (
+                supplicant_domain.Messages.RestartInternalMqtt,
+                self.restart_client_handler,
+            ),
             (agent_domain.Messages.ShutdownStarted, self.shutdown_handler),
             # (agent_domain.Messages.StartupComplete, self.startup_complete_handler),
             # (agent_domain.Messages.AgentConfigUpdate, self.config_update_handler),
@@ -110,6 +113,7 @@ class RxgMqttClient:
         self.mqtt_listener_task: Any = None
 
     def setup_listeners(self):
+        self.logger.info("Setting up listeners")
         for message, handler in self.message_handler_pairs:
             message_bus.add_handler(message, handler)
 
@@ -128,7 +132,9 @@ class RxgMqttClient:
             # self.logger.info(f"Got message {message}: {message.payload}")
             await self.handle_message(self.mqtt_client, message)
 
-    async def restart_client_handler(self, event: supplicant_domain.Messages.RestartInternalMqtt):
+    async def restart_client_handler(
+        self, event: supplicant_domain.Messages.RestartInternalMqtt
+    ):
         return await self.start_client(event.host, event.port, event.tls_config)
 
     async def start_client(self, host, port, tls_config: TLSConfig = None):
@@ -179,6 +185,7 @@ class RxgMqttClient:
     async def certified_handler(
         self, event: supplicant_domain.Messages.Certified
     ) -> None:
+        self.logger.info("New certified connection. restarting internal mqtt client")
         if self.run:
             try:
                 await self.stop()
