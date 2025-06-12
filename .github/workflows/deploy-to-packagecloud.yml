@@ -36,54 +36,54 @@ jobs:
 
 
 
-
-  sbuild:
-    name: sbuild ${{ matrix.distro }}+${{ matrix.arch }}
-
-    runs-on: "${{ vars.RUNS_ON || 'ubuntu-22.04' }}"
-
-    strategy:
-      fail-fast: false
-      matrix:
-        distro: [bullseye]
-        arch: [arm64]
-        # arch: [armhf,arm64]
-
-    environment: PACKAGECLOUD
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-
-      - name: sbuild for ${{ matrix.distro }} ${{ matrix.arch }}
-        uses: wlan-pi/sbuild-debian-package@main
-        id: build-debian-package
-        with:
-          distro: ${{ matrix.distro }}
-          arch: ${{ matrix.arch }}
-
-      - name: Archive artifacts and upload to GitHub
-        uses: actions/upload-artifact@v4
-        with:
-          name: wlanpi-rxg-agent-${{ matrix.distro }}-${{ matrix.arch }}
-          path: ${{ steps.build-debian-package.outputs.deb-package }}
-
-      - name: Upload armhf package to raspbian/${{ matrix.distro }}
-        if: matrix.arch == 'armhf'
-        uses: danielmundi/upload-packagecloud@main
-        with:
-          package-name: ${{ steps.build-debian-package.outputs.deb-package }}
-          packagecloud-username: "${{ vars.PACKAGECLOUD_USER || 'wlanpi' }}"
-          packagecloud-repo: "${{ vars.PACKAGECLOUD_REPO || 'dev' }}"
-          packagecloud-distrib: raspbian/${{ matrix.distro }}
-          packagecloud-token: ${{ secrets.PACKAGECLOUD_TOKEN }}
-
-      - name: Upload arm64 package to debian/${{ matrix.distro }}
-        if: matrix.arch == 'arm64'
-        uses: danielmundi/upload-packagecloud@main
-        with:
-          package-name: ${{ steps.build-debian-package.outputs.deb-package }}
-          packagecloud-username: "${{ vars.PACKAGECLOUD_USER || 'wlanpi' }}"
-          packagecloud-repo: "${{ vars.PACKAGECLOUD_REPO || 'dev' }}"
-          packagecloud-distrib: debian/${{ matrix.distro }}
-          packagecloud-token: ${{ secrets.PACKAGECLOUD_TOKEN }}
+#
+#  sbuild:
+#    name: sbuild ${{ matrix.distro }}+${{ matrix.arch }}
+#
+#    runs-on: "${{ vars.RUNS_ON || 'ubuntu-22.04' }}"
+#
+#    strategy:
+#      fail-fast: false
+#      matrix:
+#        distro: [bullseye]
+#        arch: [arm64]
+#        # arch: [armhf,arm64]
+#
+#    environment: PACKAGECLOUD
+#
+#    steps:
+#      - name: Checkout
+#        uses: actions/checkout@v3
+#
+#      - name: sbuild for ${{ matrix.distro }} ${{ matrix.arch }}
+#        uses: wlan-pi/sbuild-debian-package@main
+#        id: build-debian-package
+#        with:
+#          distro: ${{ matrix.distro }}
+#          arch: ${{ matrix.arch }}
+#
+#      - name: Archive artifacts and upload to GitHub
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: wlanpi-rxg-agent-${{ matrix.distro }}-${{ matrix.arch }}
+#          path: ${{ steps.build-debian-package.outputs.deb-package }}
+#
+#      - name: Upload armhf package to raspbian/${{ matrix.distro }}
+#        if: matrix.arch == 'armhf'
+#        uses: danielmundi/upload-packagecloud@main
+#        with:
+#          package-name: ${{ steps.build-debian-package.outputs.deb-package }}
+#          packagecloud-username: "${{ vars.PACKAGECLOUD_USER || 'wlanpi' }}"
+#          packagecloud-repo: "${{ vars.PACKAGECLOUD_REPO || 'dev' }}"
+#          packagecloud-distrib: raspbian/${{ matrix.distro }}
+#          packagecloud-token: ${{ secrets.PACKAGECLOUD_TOKEN }}
+#
+#      - name: Upload arm64 package to debian/${{ matrix.distro }}
+#        if: matrix.arch == 'arm64'
+#        uses: danielmundi/upload-packagecloud@main
+#        with:
+#          package-name: ${{ steps.build-debian-package.outputs.deb-package }}
+#          packagecloud-username: "${{ vars.PACKAGECLOUD_USER || 'wlanpi' }}"
+#          packagecloud-repo: "${{ vars.PACKAGECLOUD_REPO || 'dev' }}"
+#          packagecloud-distrib: debian/${{ matrix.distro }}
+#          packagecloud-token: ${{ secrets.PACKAGECLOUD_TOKEN }}
