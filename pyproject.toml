@@ -17,7 +17,7 @@ exclude = ["tests*"]
 requires-python = ">=3.9"
 name = "wlanpi-rxg-agent"
 description = "The rXg Agent communicates, authenticates with, and configures the WLAN Pi MQTT Bridge to communicate with the RG Nets rXg."
-license = "BSD-3-Clause"
+license = {text= "BSD-3-Clause" }
 version = "1.0.1-7"
 readme = "README.md"
 
