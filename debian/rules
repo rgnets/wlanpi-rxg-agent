@@ -39,7 +39,6 @@ override_dh_virtualenv:
 		--python ${SNAKE} \
 		--upgrade-pip-to=25.1.1 \
 		--preinstall="setuptools==75.2.0" \
-
 		--preinstall="wheel==0.44.0"
 		--preinstall="mock" \
 		--extra-pip-arg "--no-cache-dir" \
