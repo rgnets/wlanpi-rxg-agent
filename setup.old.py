@@ -67,4 +67,5 @@ setup(
     include_package_data=True,
     install_requires=requires,
     extras_require=extras,
+    testing_require=testing,
 )
