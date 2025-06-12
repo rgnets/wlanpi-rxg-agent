@@ -13,6 +13,30 @@ on:
       - 'debian/changelog'
 
 jobs:
+  check_version:
+    name: Check py & deb pkg versions match
+    uses: rgnets/wlanpi-gh-workflows/.github/workflows/check-py-deb-pkg-versions-match.yml@main
+    with:
+      python_version_file_path: 'wlanpi_rxg_agent/__version__.py'
+  format:
+    name: Get formatted version for filename
+    uses: rgnets/wlanpi-gh-workflows/.github/workflows/get-formatted-version-string.yml@main
+
+
+  sbuild_deploy:
+    name: sbuild deploy pkg
+    needs:
+      - format
+      - check_version
+    uses: rgnets/wlanpi-gh-workflows/.github/workflows/sbuild-deploy-pkg.yml@main
+    with:
+      pkg: wlanpi-rxg-agent
+      version: ${{ needs.format.outputs.version }}
+    secrets: inherit
+
+
+
+
   sbuild:
     name: sbuild ${{ matrix.distro }}+${{ matrix.arch }}
 
