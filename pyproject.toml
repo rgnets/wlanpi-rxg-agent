@@ -1,14 +1,26 @@
 [build-system]
-requires = ["setuptools >= 61.0"]
+requires = ["setuptools >= 61.0", "setuptools-scm", "wheel"]
 build-backend = "setuptools.build_meta"
+#
+#[tool.setuptools]
+#packages = ["wlanpi_rxg_agent"]
+#py-modules = ["__main__", "__init__"]
 
-[tool.setuptools]
-py-modules = []
+
+[tool.setuptools.packages.find]
+# This replaces `find_packages(exclude=("tests",))`
+exclude = ["tests*"]
+
 
 
 [project]
 requires-python = ">=3.9"
 name = "wlanpi-rxg-agent"
+description = "The rXg Agent communicates, authenticates with, and configures the WLAN Pi MQTT Bridge to communicate with the RG Nets rXg."
+license = {text= "BSD-3-Clause" }
+version = "1.0.1-8"
+readme = "README.md"
+
 authors = [
     {name = "Michael Ketchel", email = "michael.ketchel@gmail.com"},
     {name = "Michael Ketchel", email = "mdk@rgnets.com"},
@@ -17,9 +29,18 @@ maintainers = [
     {name = "Michael Ketchel", email = "michael.ketchel@gmail.com"},
     {name = "Michael Ketchel", email = "mdk@rgnets.com"},
 ]
-dynamic=["version", "description", "license", "urls", "classifiers"]
 
-#version = "1.0.0-0"
+classifiers=[
+        "Natural Language :: English",
+        "Development Status :: 1 - Planning",
+        "Programming Language :: Python :: 3.9",
+        "Intended Audience :: System Administrators",
+        "Topic :: Utilities",
+    ]
+
+#dynamic=["packages"]
+
+#version = "1.0.1-7"
 dependencies = [
     "requests",
     "scapy",
@@ -41,6 +62,15 @@ dependencies = [
     "jc",
     "aiohttp"
 ]
+#
+#[project.scripts]
+#wlanpi-rxg-agent = "wlanpi_rxg_agent.__main__"
+
+
+[project.urls]
+"Source" = "https://github.com/rgnets/wlanpi-rxg-agent"
+
+
 
 [project.optional-dependencies]
 dev = [

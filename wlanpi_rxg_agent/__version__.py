@@ -15,7 +15,14 @@ __description__ = (
 __url__ = "https://github.com/rgnets/wlanpi-rxg-agent"
 __author__ = "Michael Ketchel"
 __author_email__ = "mdk@rgnets.com"
-__version__ = "1.0.1-3"
+__version__ = "1.0.1-8"
 __status__ = "alpha"
 __license__ = "BSD-3-Clause"
 __license_url__ = "https://opensource.org/licenses/BSD-3-Clause"
+__classifiers__ = [
+        "Natural Language :: English",
+        "Development Status :: 1 - Planning",
+        "Programming Language :: Python :: 3.9",
+        "Intended Audience :: System Administrators",
+        "Topic :: Utilities",
+    ]
