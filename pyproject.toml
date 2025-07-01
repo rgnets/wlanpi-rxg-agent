@@ -60,7 +60,8 @@ dependencies = [
     "uvicorn",
     "apscheduler",
     "jc",
-    "aiohttp"
+    "aiohttp",
+    "baresipy"
 ]
 #
 #[project.scripts]
