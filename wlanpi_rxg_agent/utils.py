@@ -285,6 +285,8 @@ def get_model_info() -> dict[str, str]:
     model_dict = {}
     for a, b in split_model_info:
         model_dict[a.strip()] = b.strip()
+    if "Model" not in model_dict:
+        model_dict["Model"] = run_command(["grep", "Model", "/proc/cpuinfo"]).stdout.strip().split(":")[1].strip()
     return model_dict
 
 
