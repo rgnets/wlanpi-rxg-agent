@@ -135,7 +135,10 @@ class RxgMqttClient:
     async def restart_client_handler(
         self, event: supplicant_domain.Messages.RestartInternalMqtt
     ):
-        return await self.start_client(event.host, event.port, event.tls_config)
+        if event.host and event.port:
+            return await self.start_client(event.host, event.port, event.tls_config)
+        else :
+            self.logger.error(f"restart_client_handler: Missing host or port in event!\n {event}")
 
     async def start_client(self, host, port, tls_config: TLSConfig = None):
         try:
@@ -206,7 +209,7 @@ class RxgMqttClient:
         )
         self.mqtt_server = event.host
         self.mqtt_port = event.port
-
+        self.logger.info(f"Starting client with {event.host}:{event.port}, {self.tls_config}")
         await self.start_client(
             host=event.host, port=event.port, tls_config=self.tls_config
         )
@@ -495,6 +498,14 @@ class RxgMqttClient:
         attempts = 0
         MAX_ATTEMPTS = 3
         while attempts < MAX_ATTEMPTS:
+
+            if not self.mqtt_server or not self.mqtt_port:
+                stack_trace_list = traceback.format_stack()
+                stack_trace_string = ''.join(stack_trace_list[-3:-1])
+                self.logger.warning(f"Client is not properly configured yet, but we tried to publish! Stack: {stack_trace_string}")
+                await asyncio.sleep(3)
+                continue
+
             try:
                 attempts += 1
                 result = await self.mqtt_client.publish(
