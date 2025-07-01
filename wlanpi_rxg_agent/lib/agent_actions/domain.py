@@ -12,7 +12,7 @@ class Data:
     class WifiConfiguration(BaseModel):
         id: t.Optional[int] = Field()  #
         ssid: str = Field()  #
-        psk: str = Field()  #
+        psk: t.Optional[str] = Field()  #
         encryption: t.Optional[str] = Field(default=None)
         authentication: t.Optional[str] = Field(default=None)
 
