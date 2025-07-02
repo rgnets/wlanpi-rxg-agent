@@ -61,7 +61,8 @@ dependencies = [
     "apscheduler",
     "jc",
     "aiohttp",
-    "baresipy"
+    "baresipy",
+    "pyee"
 ]
 #
 #[project.scripts]
