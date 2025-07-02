@@ -10,7 +10,7 @@ from lib.sip_control.sip_control import SipControl, SipInstance
 
 class SipInstanceBaresip(SipInstance):
 
-    def __init__(self, gateway:str, user: str, password: str, extra_login_args: Optional[str] = None):
+    def __init__(self, gateway:str, user: str, password: str, extra_login_args: Optional[str] = None, debug: bool=False):
         self.logger = logging.getLogger(__name__)
         self.logger.info(f"Initializing {__name__}")
 
@@ -18,7 +18,7 @@ class SipInstanceBaresip(SipInstance):
         self._user = user
         self._password = password
         self._extra_login_args = f""
-        self.baresip = CustomBaresipy(user = self._user, pwd=self._password, gateway=self._gateway, block=True, debug=True)
+        self.baresip = CustomBaresipy(user = self._user, pwd=self._password, gateway=self._gateway, block=True, debug=debug)
         # self.baresip.start()
         self.logger.info("Baresip started")
 
@@ -45,12 +45,14 @@ class SipInstanceBaresip(SipInstance):
 
 
 
+
 class SipControlBaresip(SipControl):
 
-    def __init__(self):
+    def __init__(self, baresip_debug:bool=False):
 
         self.logger = logging.getLogger(__name__)
         self.logger.info(f"Initializing {__name__}")
+        self.baresip_debug = baresip_debug
         #
         # self.baresip_cmd = "/usr/bin/baresip"
         self.instances: dict[tuple[str, str, str], SipInstanceBaresip] = {}
@@ -63,7 +65,7 @@ class SipControlBaresip(SipControl):
             return self.instances[ident_tuple]
 
         self.logger.debug(f"Creating new instance for {gateway} {user} {password}")
-        instance = SipInstanceBaresip(gateway=gateway, user=user, password=password, extra_login_args=f";regint=30;outbound=sip:{gateway};sipnat=outbound")
+        instance = SipInstanceBaresip(gateway=gateway, user=user, password=password, extra_login_args=f";regint=30;outbound=sip:{gateway};sipnat=outbound", debug=self.baresip_debug)
         self.instances[ident_tuple] = instance
         return instance
 
@@ -72,7 +74,8 @@ class SipControlBaresip(SipControl):
 
 
 
-
+# Possibly use the second form from https://github.com/OpenJarbas/baresipy
+# to implement test cases/patterns
 
 if __name__ == "__main__":
     sip_c = SipControlBaresip()
