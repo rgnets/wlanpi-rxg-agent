@@ -1,8 +1,6 @@
 import asyncio
 import logging
-import time
 from typing import Optional
-import threading
 from lib.sip_control.custom_baresipy import CustomBaresipy
 from lib.sip_control.mdk_baresip import MdkBareSIP
 
@@ -14,9 +12,6 @@ class SipTestBaresip:
                  gateway:str,
                  user: str,
                  password: str,
-                 # callee: str,
-                 # post_connect: Optional[str] = None,
-                 # call_timeout: Optional[int] = None,
                  extra_login_args: Optional[str] = None,
                  debug: bool=False
                  ):
@@ -27,15 +22,13 @@ class SipTestBaresip:
         self._user = user
         self._password = password
         self._debug = debug
-        # self.callee = callee
-        # self.post_connect = post_connect
         self._extra_login_args = extra_login_args
-        # self.baresip = MdkBareSIP(user=self._user, pwd=self._password, gateway=self._gateway, debug=self._debug)
         self.logger.info("SipTestBaresip initialized")
 
 
 
-    async def execute(self, callee: str, post_connect: Optional[str] = None, call_timeout: Optional[int] = None):
+    async def execute(self, callee: str, post_connect: Optional[str] = None, call_timeout: Optional[int] = None,
+                      summary_callback: Optional[callable] = None):
         async with MdkBareSIP(gateway=self._gateway, user=self._user, pwd=self._password, debug=self._debug, extra_login_args=self._extra_login_args) as bs:
             self.logger.info(f"Executing test against {callee}")
 
@@ -52,7 +45,7 @@ class SipTestBaresip:
                 if post_connect:
                     bs_instance.send_dtmf(post_connect)
                 bs_instance.speak("Your mom's a hoe.")
-                time.sleep(0.5)
+                asyncio.sleep(0.5)
                 bs_instance.hang()
                 if not (in_progress.done() or in_progress.cancelled()): in_progress.set_result(True)
 
