@@ -14,6 +14,9 @@ import tempfile
 import logging
 import subprocess
 from threading import Thread
+
+from utils import run_command_async
+
 # from .utils import create_daemon
 
 logging.getLogger("urllib3.connectionpool").setLevel("WARN")
@@ -38,7 +41,7 @@ class MdkBareSIP():
         QUIT = "quit"
         TIMEOUT = "timeout"
 
-    def __init__(self, user, pwd, gateway, tts=None, debug=False, extra_login_args: Optional[str] = None):
+    def __init__(self, user, pwd, gateway, tts=None, debug=False, extra_login_args: Optional[str] = None, config_path: Optional[str] = None):
         self.logger = logging.getLogger(__name__)
         self.logger.info(f"Initializing {__name__}")
 
@@ -68,7 +71,13 @@ class MdkBareSIP():
         self._call_status = None
         self.audio = None
         self._ts = None
-        self.baresip = pexpect.spawn('baresip')
+
+        self._bs_args = []
+
+        if config_path:
+            self._bs_args.extend(['-f',config_path])
+
+        self.baresip = pexpect.spawn('baresip', args=self._bs_args)
 
         # Patch in an async readline method
         async def readline_async(self:pexpect.pty_spawn.spawn, size=-1):
@@ -88,6 +97,11 @@ class MdkBareSIP():
         self.run_task: Optional[Coroutine] = None
 
 
+    @staticmethod
+    async def setup_pi():
+        ''' Performs some setup steps required for doing this on a headless pi'''
+        dummy_sound = "modprobe snd-dummy fake_buffer=0"
+        await run_command_async(dummy_sound)
 
     # properties
     @property
