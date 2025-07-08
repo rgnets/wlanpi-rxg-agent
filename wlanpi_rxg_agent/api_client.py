@@ -49,14 +49,21 @@ class ApiClient:
                 # The async methods will not work outside the context providers above!
                 # If you find yourself needing more data or in a different form, modify the
                 # FlatResponse class to accommodate.
-                content = await response.content.read()
+                # response._body = await response.read()
+                content = await response.read()
+                encoding = response.charset
+                if not encoding:
+                    try:
+                        response.get_encoding()
+                    except RuntimeError as e:
+                        self.logger.error(f"Unable to determine encoding: {e}", exc_info=True)
                 return FlatResponse(
                     headers=response.headers,
                     url=str(response.url),
                     status_code=response.status,
                     reason=response.reason,
                     content=content,
-                    encoding=response.get_encoding(),
+                    encoding= encoding,
                 )
 
     async def get_cert(self, ip: Optional[str] = None) -> FlatResponse:
@@ -75,14 +82,20 @@ class ApiClient:
                 # The async methods will not work outside the context providers above!
                 # If you find yourself needing more data or in a different form, modify the
                 # FlatResponse class to accommodate.
-                content = await response.content.read()
+                content = await response.read()
+                encoding = response.charset
+                if not encoding:
+                    try:
+                        response.get_encoding()
+                    except RuntimeError as e:
+                        self.logger.error(f"Unable to determine encoding: {e}", exc_info=True)
                 return FlatResponse(
                     headers=response.headers,
                     url=str(response.url),
                     status_code=response.status,
                     reason=response.reason,
                     content=content,
-                    encoding=response.get_encoding(),
+                    encoding=encoding,
                 )
 
     async def register(
@@ -111,14 +124,20 @@ class ApiClient:
                 # The async methods will not work outside the context providers above!
                 # If you find yourself needing more data or in a different form, modify the
                 # FlatResponse class to accommodate.
-                content = await response.content.read()
+                content = await response.read()
+                encoding = response.charset
+                if not encoding:
+                    try:
+                        response.get_encoding()
+                    except RuntimeError as e:
+                        self.logger.error(f"Unable to determine encoding: {e}", exc_info=True)
                 return FlatResponse(
                     headers=response.headers,
                     url=str(response.url),
                     status_code=response.status,
                     reason=response.reason,
                     content=content,
-                    encoding=response.get_encoding(),
+                    encoding=encoding,
                 )
 
     async def upload_tcpdump(
@@ -144,12 +163,18 @@ class ApiClient:
                 # The async methods will not work outside the context providers above!
                 # If you find yourself needing more data or in a different form, modify the
                 # FlatResponse class to accommodate.
-                content = await response.content.read()
+                content = await response.read()
+                encoding = response.charset
+                if not encoding:
+                    try:
+                        response.get_encoding()
+                    except RuntimeError as e:
+                        self.logger.error(f"Unable to determine encoding: {e}", exc_info=True)
                 return FlatResponse(
                     headers=response.headers,
                     url=str(response.url),
                     status_code=response.status,
                     reason=response.reason,
                     content=content,
-                    encoding=response.get_encoding(),
+                    encoding=encoding,
                 )
