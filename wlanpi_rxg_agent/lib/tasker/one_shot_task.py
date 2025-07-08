@@ -27,7 +27,7 @@ class OneShotTask:
         self.type = type
         self.identifier = identifier
         self.scheduler = scheduler
-        self.ident_name = f"{self.__class__}:{self.type}:{self.identifier}"
+        self.ident_name = f"{self.__class__.__name__}:{self.type}:{self.identifier}"
         self.logger = logging.getLogger(self.ident_name)
         # self.logger = logging.getLogger(__name__)
         self.logger.info(f"Initializing {self.ident_name}")

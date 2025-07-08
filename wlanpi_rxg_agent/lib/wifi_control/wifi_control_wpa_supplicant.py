@@ -43,7 +43,7 @@ class WifiInterface:
         interface: Interface,
         event_loop: Optional[AbstractEventLoop] = None,
     ):
-        self.logger = logging.getLogger(f"{__name__}:")
+        self.logger = logging.getLogger(__name__)
         self.logger.info(f"Initializing {__name__}")
         self.name = name
         self.supplicant = supplicant

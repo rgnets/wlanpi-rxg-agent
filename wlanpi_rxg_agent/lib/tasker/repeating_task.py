@@ -28,7 +28,7 @@ class RepeatingTask:
         self.type = type
         self.identifier = identifier
         self.scheduler = scheduler
-        self.ident_name = f"{self.__class__}:{self.type}:{self.identifier}"
+        self.ident_name = f"{self.__class__.__name__}:{self.type}:{self.identifier}"
         self.logger = logging.getLogger(self.ident_name)
         # self.logger = logging.getLogger(__name__)
         self.logger.info(f"Initializing {self.ident_name}")
@@ -44,8 +44,9 @@ class RepeatingTask:
             "interval",
             name=self.ident_name,
             seconds=self.interval,
-            start_date=self.start_date,
-            end_date=self.end_date,
+            # start_date=self.start_date,
+            next_run_time=self.start_date or datetime.now(),
+            # end_date=self.end_date,
             # start_date='2023-06-21 10:00:00',
             # end_date='2023-06-21 11:00:00'
             misfire_grace_time=int(self.interval / 2),
@@ -63,6 +64,7 @@ class RepeatingTask:
     # Technically, jobs can be modified in place. Currently not doing that.
 
     async def run_once(self):
+        self.logger.debug(f"Executing task: {self.identifier} | {self.task_executor.__name__}")
         try:
             res = self.task_executor()
             if isinstance(res, asyncio.Task):
