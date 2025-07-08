@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 
 import lib.domain as agent_domain
 import lib.rxg_supplicant.domain as supplicant_domain
+import utils
 
 # import wlanpi_rxg_agent.utils as utils
 from busses import command_bus, message_bus
@@ -21,16 +22,62 @@ from utils import aevery
 
 from wlanpi_rxg_agent.bridge_control import BridgeControl
 
-logger = logging.getLogger(__name__)
-logging.basicConfig(encoding="utf-8", level=logging.DEBUG)
+# https://talyian.github.io/ansicolors/
+class CustomFormatter(logging.Formatter):
+    red = "\x1b[31;20m"
+    green = "\x1b[32;20m"
+    yellow = "\x1b[33;20m"
+    blue = "\x1b[34;20m"
+    magenta = "\x1b[35;20m"
+    cyan = "\x1b[36;20m"
+    white = "\x1b[38;5;255m"
+    grey = "\x1b[38;20m"
 
+    dark_grey = "\x1b[38;5;244m"
+    orange = "\x1b[38;5;208m"
+
+    bold_red = "\x1b[31;1m"
+    reset = "\x1b[0m"
+    format = "%(asctime)s | %(levelname)8s | %(name)s: %(message)s (%(filename)s:%(lineno)d)"
+
+    USE_COLOR = utils.supports_color()
+
+    FORMATS = {
+        logging.DEBUG: dark_grey + format + reset,
+        logging.INFO: white + format + reset,
+        logging.WARNING: orange + format + reset,
+        logging.ERROR: red + format + reset,
+        logging.CRITICAL: bold_red + format + reset
+    }
+
+    def format(self, record):
+
+        log_fmt = self.FORMATS.get(record.levelno) if self.USE_COLOR else self.format
+        formatter = logging.Formatter(log_fmt)
+        return formatter.format(record)
+
+
+# create console handler with a higher log level
+ch = logging.StreamHandler()
+ch.setLevel(logging.DEBUG)
+ch.setFormatter(CustomFormatter())
+
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(encoding="utf-8", level=logging.DEBUG, handlers=[ch])
 logging.getLogger("requests").setLevel(logging.WARNING)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 logging.getLogger("wlanpi_rxg_agent.rxg_agent").setLevel(logging.INFO)
+logging.getLogger("rxg_agent").setLevel(logging.INFO)
+logging.getLogger("api_client").setLevel(logging.INFO)
 logging.getLogger("lib.event_bus._messagebus").setLevel(logging.INFO)
 logging.getLogger("lib.event_bus._commandbus").setLevel(logging.INFO)
 logging.getLogger("lib.rxg_supplicant.supplicant").setLevel(logging.INFO)
+logging.getLogger("lib.wifi_control.wifi_control_wpa_supplicant").setLevel(logging.INFO)
 logging.getLogger("rxg_mqtt_client").setLevel(logging.INFO)
+logging.getLogger("lib.sip_control.mdk_baresip").setLevel(logging.INFO)
+# logging.getLogger("apscheduler.scheduler").setLevel(logging.INFO)
+# logging.getLogger("lib.tasker.tasker").setLevel(logging.INFO)
 
 
 class RXGAgent:
@@ -130,7 +177,7 @@ async def lifespan(app: FastAPI):
     rxg_mqtt_client = RxgMqttClient(identifier=eth0_mac)
 
     async def heartbeat_task():
-        logger.info("Heartbeat!")
+        logger.debug("Heartbeat!")
         # await asyncio.sleep(10)
 
     message_bus.handle(agent_domain.Messages.StartupComplete())

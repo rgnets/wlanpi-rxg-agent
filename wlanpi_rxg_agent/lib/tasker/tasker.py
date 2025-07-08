@@ -1,7 +1,8 @@
 import asyncio
+import functools
 import logging
 from datetime import datetime, timedelta
-from typing import Any, Generic, TypeVar, Union
+from typing import Any, Generic, TypeVar, Union, Callable
 
 import lib.domain as agent_domain
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -24,6 +25,21 @@ class TaskDefinition(BaseModel, Generic[TaskDefDataType]):
 
 class Tasker:
 
+    class ScheduledTasks:
+        ping_targets: dict[
+            str, TaskDefinition[actions_domain.Data.PingTarget]
+        ] = {}
+        traceroutes: dict[
+            str, TaskDefinition[actions_domain.Data.Traceroute]
+        ] = {}
+        speed_tests: dict[
+            str, TaskDefinition[actions_domain.Data.SpeedTest]
+        ] = {}
+        sip_tests: dict[
+            str, TaskDefinition[actions_domain.Data.SipTest]
+        ] = {}
+        misc_tasks: dict[str, TaskDefinition[Any]] = {}
+
     def __init__(self):
         self.logger = logging.getLogger(__name__)
         self.logger.info(f"Initializing {self.__class__}")
@@ -34,16 +50,8 @@ class Tasker:
         self.scheduler = AsyncIOScheduler(loop=self.loop, misfire_grace_time=30)
         self.scheduler.start()
 
-        self.scheduled_ping_targets: dict[
-            str, TaskDefinition[actions_domain.Data.PingTarget]
-        ] = {}
-        self.scheduled_traceroutes: dict[
-            str, TaskDefinition[actions_domain.Data.Traceroute]
-        ] = {}
-        self.scheduled_speed_tests: dict[
-            str, TaskDefinition[actions_domain.Data.SpeedTest]
-        ] = {}
-        self.misc_tasks: dict[str, TaskDefinition[Any]] = {}
+
+        self.scheduled_tasks: Tasker.ScheduledTasks = Tasker.ScheduledTasks()
 
         # Event/Command Bus
         self.logger.debug("Setting up listeners")
@@ -51,7 +59,7 @@ class Tasker:
             # (wifi_domain.Commands.GetOrCreateInterface, lambda event: self.get_or_create_interface(event.if_name)),
             (
                 actions_domain.Commands.ConfigurePingTargets,
-                lambda event: self.configure_ping_targets(event),
+                lambda event: self.configured_ping_targets(event),
             ),
             (
                 actions_domain.Commands.ConfigureSpeedTests,
@@ -59,7 +67,11 @@ class Tasker:
             ),
             (
                 actions_domain.Commands.ConfigureTraceroutes,
-                lambda event: self.configure_traceroutes(event),
+                lambda event: self.configured_traceroutes(event),
+            ),
+            (
+                actions_domain.Commands.ConfigureSipTests,
+                lambda event: self.configured_sip_tests(event),
             ),
             (agent_domain.Messages.ShutdownStarted, self.shutdown),
         )
@@ -92,13 +104,14 @@ class Tasker:
 
     def debug_dump_task(self):
         self.logger.debug(
-            f"Scheduled PingTargets: {self.scheduled_ping_targets.items()}"
+            f"Scheduled PingTargets: {self.scheduled_tasks.ping_targets.items()}"
         )
         self.logger.debug(
-            f"Scheduled TraceRoutes: {self.scheduled_traceroutes.items()}"
+            f"Scheduled TraceRoutes: {self.scheduled_tasks.traceroutes.items()}"
         )
-        self.logger.debug(f"Scheduled SpeedTests: {self.scheduled_speed_tests.items()}")
-        self.logger.debug(f"Scheduled misc: {self.misc_tasks.items()}")
+        self.logger.debug(f"Scheduled SpeedTests: {self.scheduled_tasks.speed_tests.items()}")
+        self.logger.debug(f"Scheduled SipTests: {self.scheduled_tasks.sip_tests.items()}")
+        self.logger.debug(f"Scheduled misc: {self.scheduled_tasks.misc_tasks.items()}")
         self.logger.debug(f"Raw Scheduler jobs: {self.scheduler.get_jobs()}")
 
     def configure_fixed_tasks(self):
@@ -135,143 +148,151 @@ class Tasker:
                 interval=task_period,
                 start_date=datetime.now() + timedelta(seconds=10),
             )
-            self.misc_tasks[task_ident] = TaskDefinition(
+            self.scheduled_tasks.misc_tasks[task_ident] = TaskDefinition(
                 id=task_ident, task_obj=new_task, definition=None
             )
         # self.misc_tasks['debug_tick'] = TaskDefinition(id="DebugTickTask",definition={}, task_obj=Re)
         # self.scheduler.add_job(self.debug_tick_task, 'interval', seconds=2)
         self.scheduler.add_job(self.debug_dump_task, "interval", seconds=10)
 
-    def configure_ping_targets(
-        self, event: actions_domain.Commands.ConfigurePingTargets
+    # This is a decorator function, so it doesn't follow the type rules quite how MyPy expects
+    def configure_test(  # type: ignore
+            task_type_name:str, task_schedule_name:str, event_type = actions_domain.Commands.ConfigureSipTests,
     ):
-        # Configure ping targets based on agent config payload, delivered to this as an event.
-        for target in event.targets:
-            composite_id = f"{target.id}:{target.interface}"
-            if composite_id in self.scheduled_ping_targets:
-                existing_task_def: TaskDefinition = self.scheduled_ping_targets[
-                    composite_id
-                ]
+        def decorator_configure_test(func:Callable):
+            @functools.wraps(func)
+            def wrapper_configure_test(self, event: event_type):
+                task_schedule = self.scheduled_tasks.__getattribute__(task_schedule_name)
+                for target in event.targets:
+                    composite_id = f"{target.id}:{target.interface}"
 
-                if existing_task_def.definition == target:
-                    # Nothing needed, tasks should match
-                    self.logger.debug(
-                        f'Task "{composite_id}" (from event {event.__class__}) already exists and matches target configuration. Skipping...'
-                    )
-                    continue
-                else:
-                    # Tasks exists but the configuration does not match. Update it.
-                    self.logger.warning(
-                        "Task modification not supported yet! Replacing task."
-                    )
+                    if composite_id in task_schedule:
+                        existing_task_def: TaskDefinition = task_schedule[
+                            composite_id
+                        ]
 
-                    # Cancel/stop the task
-                    existing_task = self.scheduled_ping_targets[composite_id]
-                    existing_task.task_obj.end_task()
+                        if existing_task_def.definition == target:
+                            # Nothing needed, tasks should match
+                            self.logger.debug(
+                                f'Task "{composite_id}" (from event {event.__class__}) already exists and matches target configuration. Skipping...'
+                            )
+                            continue
+                        else:
+                            # Tasks exists but the configuration does not match. Update it.
+                            self.logger.warning(
+                                "Task modification not supported yet! Replacing task."
+                            )
 
-            async def execute(exec_def: actions_domain.Data.PingTarget = target):
-                self.logger.info(
-                    f"Executing PingTarget: {target.model_dump(mode='json')}"
-                )
-                ping_command = actions_domain.Commands.Ping(
-                    host=exec_def.host,
-                    count=exec_def.count,
-                    interval=exec_def.interval,
-                    # TTL isn't present on ping target
-                    # TODO: Implement timeout logic
-                    interface=exec_def.interface,
-                )
-                # TODO: Do something better than just triggering DHCP and DNS tests here.
-                command_bus.handle(
-                    actions_domain.Commands.DhcpTest(
-                        interface=exec_def.interface, timeout=10
-                    )
-                )
-                command_bus.handle(
-                    actions_domain.Commands.Dig(
-                        host=exec_def.host, interface=exec_def.interface
-                    )
-                )
+                            # Cancel/stop the task
+                            existing_task = task_schedule[composite_id]
+                            existing_task.task_obj.end_task()
 
-                res = await command_bus.handle(ping_command)
-                self.logger.debug(f"Execution complete: {res}")
-                message_bus.handle(
-                    actions_domain.Messages.PingComplete(
-                        id=exec_def.id, result=res, request=ping_command
-                    )
-                )
+                            # Create new task to replace it with
 
-            new_task = RepeatingTask(
-                self.scheduler,
-                "PingTarget",
-                identifier=composite_id,
-                task_executor=execute,
-                interval=target.period,
+                    # Accept decorated function as executor
+                    def executor_function():
+                        self.logger.info(
+                            f"Executing {task_type_name}: {target.model_dump(mode='json')}"
+                        )
+                        return func(self, exec_def=target)
+
+                    execute = executor_function
+
+                    interval = target.period
+                    if period_unit := getattr(target, 'period_unit', None):
+                        if period_unit == 'seconds':
+                            pass
+                        elif period_unit == 'minutes':
+                            interval = target.period * 60
+                        elif period_unit == 'hours':
+                            interval = target.period * 60 * 60
+                        elif period_unit == 'days':
+                            interval = target.period * 60 * 60 * 24
+                        elif period_unit == 'weeks':
+                            interval = target.period * 60 * 60 * 24 * 7
+                        else:
+                            self.logger.warning(f"Unknown period unit: {period_unit}")
+                    new_task = RepeatingTask(
+                        self.scheduler,
+                        task_type_name,
+                        identifier=composite_id,
+                        task_executor=execute,
+                        interval=interval,
+                    )
+                    task_schedule[composite_id] = TaskDefinition(
+                        id=composite_id, task_obj=new_task, definition=target
+                    )
+            return wrapper_configure_test
+        return decorator_configure_test
+
+    @configure_test("SipTest", "sip_tests", event_type=actions_domain.Commands.ConfigureSipTests)
+    async def configured_sip_tests(self, exec_def: actions_domain.Data.SipTest):
+        self.logger.warning("I'm Not a real boy!!!")
+        command = actions_domain.Commands.SipTest(
+            **exec_def.model_dump(by_alias=True),
+        )
+        res = await command_bus.handle(command)
+        self.logger.debug(f"Execution complete: {res}")
+        # message_bus.handle(
+        #     actions_domain.Messages.SipTestComplete(
+        #         id=exec_def.id, result=res, request=command
+        #     )
+        # )
+
+    @configure_test("PingTarget", "ping_targets", event_type=actions_domain.Commands.ConfigurePingTargets)
+    async def configured_ping_targets (self, exec_def: actions_domain.Data.PingTarget):
+        self.logger.warning("BRINGUS THE PINGUS!")
+        ping_command = actions_domain.Commands.Ping(
+            host=exec_def.host,
+            count=exec_def.count,
+            interval=exec_def.interval,
+            # TTL isn't present on ping target
+            # TODO: Implement timeout logic
+            interface=exec_def.interface,
+        )
+        # TODO: Do something better than just triggering DHCP and DNS tests here.
+        results = await asyncio.gather(
+            command_bus.handle(
+                actions_domain.Commands.DhcpTest(
+                    interface=exec_def.interface, timeout=10
+                )
+            ),
+            command_bus.handle(
+                actions_domain.Commands.Dig(
+                    host=exec_def.host, interface=exec_def.interface
+                )
+            ),
+            command_bus.handle(ping_command)
+        , return_exceptions=True)
+
+        self.logger.debug(f"Execution ping, dig, and dhcp tests complete: {results}")
+
+        message_bus.handle(
+            actions_domain.Messages.PingComplete(
+                id=exec_def.id, result=results[2], request=ping_command
             )
+        )
 
-            self.scheduled_ping_targets[composite_id] = TaskDefinition(
-                id=composite_id, task_obj=new_task, definition=target
-            )
 
-    def configure_traceroutes(
-        self, event: actions_domain.Commands.ConfigureTraceroutes
+    @configure_test("TraceRoute", "traceroutes", event_type=actions_domain.Commands.ConfigureTraceroutes)
+    async def configured_traceroutes(
+        self, exec_def: actions_domain.Data.Traceroute
     ):
-        for target in event.targets:
-            composite_id = f"{target.id}:{target.interface}"
-
-            if composite_id in self.scheduled_traceroutes:
-                existing_task_def: TaskDefinition = self.scheduled_traceroutes[
-                    composite_id
-                ]
-
-                if existing_task_def.definition == target:
-                    # Nothing needed, tasks should match
-                    self.logger.debug(
-                        f'Task "{composite_id}" (from event {event.__class__}) already exists and matches target configuration. Skipping...'
-                    )
-                    continue
-                else:
-                    # Tasks exists but the configuration does not match. Update it.
-                    self.logger.warning(
-                        "Task modification not supported yet! Replacing task."
-                    )
-
-                    # Cancel/stop the task
-                    existing_task = self.scheduled_traceroutes[composite_id]
-                    existing_task.task_obj.end_task()
-
-                    # Create new task to replace it with
-
-            async def execute(exec_def: actions_domain.Data.Traceroute = target):
-                self.logger.info(
-                    f"Executing TraceRoute: {target.model_dump(mode='json')}"
-                )
-                tr_command = actions_domain.Commands.Traceroute(
-                    host=exec_def.host,
-                    interface=exec_def.interface,
-                    # bypass_routing is unused
-                    queries=exec_def.queries,
-                )
-                res: actions_domain.Messages.TracerouteResponse = (
-                    await command_bus.handle(tr_command)
-                )
-                self.logger.debug(f"Execution complete: {res}")
-                message_bus.handle(
-                    actions_domain.Messages.TracerouteComplete(
-                        id=exec_def.id, result=res, request=tr_command
-                    )
-                )
-
-            new_task = RepeatingTask(
-                self.scheduler,
-                "TraceRoute",
-                identifier=composite_id,
-                task_executor=execute,
-                interval=target.period,
+        tr_command = actions_domain.Commands.Traceroute(
+            host=exec_def.host,
+            interface=exec_def.interface,
+            # bypass_routing is unused
+            queries=exec_def.queries,
+        )
+        res: actions_domain.Messages.TracerouteResponse = (
+            await command_bus.handle(tr_command)
+        )
+        self.logger.debug(f"Execution complete: {res}")
+        message_bus.handle(
+            actions_domain.Messages.TracerouteComplete(
+                id=exec_def.id, result=res, request=tr_command
             )
-            self.scheduled_traceroutes[composite_id] = TaskDefinition(
-                id=composite_id, task_obj=new_task, definition=target
-            )
+        )
 
     def configure_speed_tests(self, event: actions_domain.Commands.ConfigureSpeedTests):
         self.logger.warning(

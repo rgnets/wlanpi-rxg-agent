@@ -224,7 +224,7 @@ class RxgSupplicant:
         try:
             resp = await api_client.check_device(ip)
 
-        except (ConnectTimeout, ConnectionError, ReadTimeout) as e:
+        except (ConnectTimeout, ConnectionError, ReadTimeout, asyncio.TimeoutError) as e:
             self.logger.warning(f"Testing of address {ip} failed: {e}")
             return False
 
@@ -243,16 +243,20 @@ class RxgSupplicant:
         if self.override_server and await self.test_address_for_rxg(
             self.override_server
         ):
+            self.logger.info(f"Override server {self.override_server} is valid. Using it.")
             return self.override_server
-
+        self.logger.debug("No valid override server configured. Checking default routes. Starting with first gateway on eth0.")
         first_gateway = utils.get_default_gateways().get("eth0", None)
 
         if not first_gateway:
             raise RXGAgentException("Unable to find first gateway on eth0")
 
+        self.logger.debug(f"First gateway on eth0: {first_gateway}")
         if await self.test_address_for_rxg(first_gateway):
+            self.logger.debug(f"First gateway on eth0 is a valid rXg: {first_gateway}")
             return first_gateway
 
+        self.logger.debug("First gateway on eth0 is not a valid rXg. Looking for a valid rXg on a route to google.com.")
         raw_hop_data: list[dict] = utils.trace_route("google.com")["hops"]
         filtered_hops: list[dict] = list(
             filter(lambda e: len(e["probes"]), raw_hop_data)
@@ -265,15 +269,19 @@ class RxgSupplicant:
         ]
 
         for i, address in enumerate(hop_addresses):
+            self.logger.debug(f"Checking address {address} for rXg")
             if i < max_hops and await self.test_address_for_rxg(address):
+                self.logger.debug(f"Address {address} is a valid rXg")
                 return address
 
+        self.logger.debug("No valid rXg found. Checking for configured fallback server.")
         # Todo: insert fallback here
         if self.fallback_server and await self.test_address_for_rxg(
             self.fallback_server
         ):
+            self.logger.debug("Fallback server is valid. Using it.")
             return self.fallback_server
-
+        self.logger.error("Unable find a valid rXg. Throwing in the towel.")
         raise RXGAgentException("Unable to find an rXg.")
 
     async def get_client_cert(self, server_ip):
@@ -420,7 +428,7 @@ class RxgSupplicant:
                 message_bus.handle(supplicant_domain.Messages.RegistrationFailed())
                 return False
             return False
-        except (ConnectTimeout, ConnectionError) as e:
+        except (ConnectTimeout, ConnectionError, asyncio.TimeoutError) as e:
             self.logger.warning(f"Configuring {self.active_server} failed: {e}")
             message_bus.handle(supplicant_domain.Messages.Error(e))
             return False

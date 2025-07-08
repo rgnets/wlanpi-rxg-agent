@@ -107,6 +107,7 @@ class RxgMqttClient:
             (actions_domain.Messages.Iperf3Complete, self.iperf3_complete_handler),
             (actions_domain.Messages.DigTestComplete, self.dig_test_complete_handler),
             (actions_domain.Messages.DhcpTestComplete, self.dhcp_test_complete_handler),
+            (actions_domain.Messages.SipTestComplete, self.sip_test_complete_handler),
         ]
 
         self.setup_listeners()
@@ -260,6 +261,14 @@ class RxgMqttClient:
             payload=json.dumps(event.model_dump(), default=str),
         )
 
+    async def sip_test_complete_handler(
+            self, event: actions_domain.Messages.SipTestComplete
+    ):
+        await self.publish_with_retry(
+            topic=f"{self.my_base_topic}/ingest/sip",
+            payload=json.dumps(event.model_dump(), default=str),
+        )
+
     async def stop(self):
         self.logger.info("Stopping MQTTBridge")
         self.run = False
@@ -342,7 +351,7 @@ class RxgMqttClient:
                         payload = msg.payload
                 else:
                     payload = None
-                self.logger.warning(
+                self.logger.info(
                     f"Received message on topic '{msg.topic}': {str(msg.payload)}"
                 )
                 self.logger.debug(f"Payload: {payload}")

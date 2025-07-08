@@ -14,6 +14,7 @@ from busses import command_bus, message_bus
 from core_client import CoreClient
 from kismet_control import KismetControl
 from lib.configuration.bootloader_config_file import BootloaderConfigFile
+from lib.sip_control.sip_test_baresip import SipTestBaresip
 
 
 class AgentActions:
@@ -55,6 +56,7 @@ class AgentActions:
             (actions_domain.Commands.TCPDump, self.handle_tcp_dump_on_interface),
             (actions_domain.Commands.Iperf2, self.run_iperf2),
             (actions_domain.Commands.Iperf3, self.run_iperf3),
+            (actions_domain.Commands.SipTest, self.run_sip_test),
         )
 
         for command, handler in pairs:
@@ -114,6 +116,10 @@ class AgentActions:
         # Then Speed Tests
         command_bus.handle(
             actions_domain.Commands.ConfigureSpeedTests(targets=event.speed_tests)
+        )
+        # Then Sip Tests
+        command_bus.handle(
+            actions_domain.Commands.ConfigureSipTests(targets=event.sip_tests)
         )
 
     async def configure_radios(self, event: actions_domain.Commands.ConfigureRadios):
@@ -361,19 +367,27 @@ class AgentActions:
 
     async def run_dig_test(
         self, event: actions_domain.Commands.Dig
-    ) -> actions_domain.Messages.DigResponse:
+    ) -> actions_domain.Messages.DigTestComplete:
         self.logger.info(f"Running dig test: {event}")
         res = await self.core_client.execute_async_request(
             "post", "api/v1/utils/dns/dig", data=event.model_dump()
         )
+
         res_json = res.json()
-        result_payload = actions_domain.Messages.DigResponse(**res.json()[0])
-        message_bus.handle(result_payload)
+        if len(res_json) == 0:
+            error = "No results returned from dig, probably a timeout."
+        else:
+            error = None
+            result_payload = actions_domain.Messages.DigResponse(**res_json[0])
+            message_bus.handle(result_payload)
         # Extra: emit a test complete message too, for now, since these don't have identifiable rXg models
+        payload = actions_domain.Messages.DigTestComplete(error=error, request=event, result=res_json)
         message_bus.handle(
-            actions_domain.Messages.DigTestComplete(request=event, result=res.json())
+            payload
         )
-        return result_payload
+        return payload
+
+
 
     async def run_dhcp_test(
         self, event: actions_domain.Commands.DhcpTest
@@ -382,10 +396,33 @@ class AgentActions:
         res = await self.core_client.execute_async_request(
             "post", "api/v1/utils/dhcp/test", data=event.model_dump()
         )
-        result_payload = actions_domain.Messages.DhcpTestResponse(**res.json())
+        res_json = res.json()
+        result_payload = actions_domain.Messages.DhcpTestResponse(**res_json)
         message_bus.handle(result_payload)
         # Extra: emit a test complete message too, for now, since these don't have identifiable rXg models
         message_bus.handle(
-            actions_domain.Messages.DhcpTestComplete(request=event, result=res.json())
+            actions_domain.Messages.DhcpTestComplete(request=event, result=res_json)
         )
+        return result_payload
+
+    async def run_sip_test(self, event: actions_domain.Commands.SipTest) -> actions_domain.Messages.SipTestComplete:
+        self.logger.info(f"Running sip test: {event}")
+
+
+        try:
+            conf_path = f"/tmp/bs_sip_test__{event.id}/"
+            await SipTestBaresip.deploy_config(conf_path)
+            sip_test = SipTestBaresip(gateway=event.sip_account.host, password=event.sip_account.auth_pass,
+                                      user=event.sip_account.user, config_path=conf_path, debug=True)
+
+            sip_result = await sip_test.execute(callee=event.callee, post_connect=event.post_connect,
+                                                call_timeout=event.call_timeout)
+            summary = actions_domain.Data.SipTestRtcpSummary.from_baresip_summary(sip_result)
+
+            result_payload = actions_domain.Messages.SipTestComplete(request=event, result=summary)
+        except Exception as e:
+            self.logger.warning(f"SIP test failed: {e}", exc_info=True)
+            result_payload = actions_domain.Messages.SipTestComplete(request=event, error=str(e))
+        # res_json = res.json()
+        message_bus.handle(result_payload)
         return result_payload

@@ -18,13 +18,15 @@ class Data:
 
     class RadioConfiguration(BaseModel):
         interface: t.Optional[str] = Field(default=None)
+        # iface_mac: t.Optional[str] = Field(default=None)
         mode: str = Field()
         wlan: t.Optional[Data.WifiConfiguration] = Field()
 
-    class PingTarget(BaseModel):
-        id: int = Field()  #                    :integer          not null, primary key
-        count: int = Field(default=3)  #              :integer
 
+    class TestBase(BaseModel):
+        '''Implements all the attributes that are required for scheduled tests'''
+        id: int = Field()  # :integer          not null, primary key
+        name: t.Optional[str] = Field(default=None)  #                  :string
         interval: float = Field(
             default=1.0
         )  #              :decimal(7, 2)    default(1.0)
@@ -32,37 +34,93 @@ class Data:
             default=None,
             description="If specified, will schedule the ping to run periodically after the first attempt, in seconds.",
         )  #              :decimal(7, 2)    default(1.0)
-        name: t.Optional[str] = Field(default=None)  #                  :string
+        start_date: t.Optional[datetime] = Field(
+            # default_factory=datetime.now,
+            default=None,
+            description="The date and time when the test should start.",
+        )
+        interface: t.Optional[str] = Field(default=None)
+        ssid: t.Optional[str] = Field(default=None)
+        psk: t.Optional[str] = Field(default=None)
+
+        # iface_mac: t.Optional[str] = Field(default=None)
+        # iface_vlan: t.Optional[int] = Field(default=None)
+
+
+    class PingTarget(TestBase):
+        count: int = Field(default=3)  #              :integer
         note: t.Optional[str] = Field(default=None)  #                  :text
         host: str = Field()  #                :string
         timeout: float = Field()  #               :decimal(4, 2)
         traceroute_interval: t.Optional[float] = Field(default=None)  #   :decimal(7, 2)
 
-        interface: t.Optional[str] = Field(default=None)
-        ssid: t.Optional[str] = Field(default=None)
-        psk: t.Optional[str] = Field(default=None)
-
-    class SpeedTest(BaseModel):
-        id: int = Field()  # :integer          not null, primary key
+    class SpeedTest(TestBase):
         host: str = Field()  # :string
         port: int = Field()
         udp: bool = Field()
 
-        period: t.Optional[int] = Field(
-            default=None,
-            description="If specified, will schedule the speed test to run periodically after the first attempt, in seconds.",
-        )
-        start_date: t.Optional[datetime] = Field(
-            default_factory=datetime.now,
-            description="The date and time when the speed test or test periods should start.",
-        )
 
-        interface: t.Optional[str] = Field(default=None)
-        ssid: t.Optional[str] = Field(default=None)
-        psk: t.Optional[str] = Field(default=None)
+    class SipAccount(BaseModel, extra="ignore"):
+        id: int = Field()
+        name: t.Optional[str] = Field(default=None)
+        host: str = Field()
+        port: int = Field()
+        user: str = Field()
+        auth_user: str = Field()
+        auth_pass: str = Field()
+        transport: str = Field(default="udp")
+        packet_time: t.Optional[int] = Field(default=None)
+        registration_interval: t.Optional[int] = Field(default=3600)
+        relative_wait: t.Optional[int] = Field(default=None)
+        outbound: t.Optional[str] = Field(default=None)
+        outbound2: t.Optional[str] = Field(default=None)
+        extra: t.Optional[str] = Field(default=None)
+
+
+    class SipTest(TestBase, extra="allow"):
+        sip_account: Data.SipAccount = Field()
+        callee: str = Field(alias="extension", alias_priority=0)
+        post_connect: t.Optional[str] = Field()
+        call_timeout: t.Optional[int] = Field(default=None)
+
+    class SipTestRtcpSummary(BaseModel):
+        reporter: str           = Field(description="Reporter Identifier" )
+        call_setup_ms: int      = Field(description="Call Setup in ms" )
+        call_duration_sec: int  = Field(description="Call Duration in sec" )
+        rx_pkts: int            = Field(description="Packets RX" )
+        tx_pkts: int            = Field(description="Packets TX" )
+        tx_pkts_lost: int       = Field(description="Packets Lost TX" )
+        rx_pkts_lost: int       = Field(description="Packets Lost RX" )
+        tx_pkts_discarded:int   = Field(description="Packets Discarded, TX" )
+        rx_pkts_discarded:int   = Field(description="Packets Discarded, RX ")
+        tx_jitter:float         = Field(description="Jitter TX in ms" )
+        rx_jitter:float         = Field(description="Jitter RX in ms" )
+        rtt:float               = Field(description="RTT in ms" )
+        local_ip:str            = Field(description="Local IP" )
+        remote_ip:str           = Field(description="Remote IP" )
+        mos_score:float         = Field(description="Mean Opinion Score, as calculated by reporter" )
+
+        @staticmethod
+        def from_baresip_summary(summary:dict[str,str]):
+            return Data.SipTestRtcpSummary(
+                reporter=str(summary['EX']),
+                call_setup_ms=int(summary['CS']),
+                call_duration_sec=int(summary['CD']),
+                tx_pkts=int(summary['PS']),
+                rx_pkts=int(summary['PR']),
+                tx_pkts_lost=int(summary['PL'].split(',')[1]),
+                rx_pkts_lost=int(summary['PL'].split(',')[0]),
+                tx_pkts_discarded=int(summary['PD'].split(',')[1]),
+                rx_pkts_discarded=int(summary['PD'].split(',')[0]),
+                tx_jitter=float(summary['JI'].split(',')[1]),
+                rx_jitter=float(summary['JI'].split(',')[0]),
+                rtt=float(summary['DL']),
+                local_ip=str(summary['IP'].split(',')[0]),
+                remote_ip=str(summary['IP'].split(',')[1]),
+                mos_score=float(summary['MOS']),
+            )
 
     # Ping
-
     class PingRequest(BaseModel):
         host: str = Field(examples=["google.com", "192.168.1.1"])
         count: int = Field(
@@ -83,6 +141,8 @@ class Data:
             description="The interface the ping should originate from",
             default=None,
         )
+        # iface_mac: t.Optional[str] = Field(default=None)
+        # iface_vlan: t.Optional[int] = Field(default=None)
 
     class PingResponse(BaseModel):
         type: str = Field()
@@ -198,17 +258,13 @@ class Data:
     class Iperf3Test(Iperf3ClientRequest):
         id: int = Field()
 
-    class Traceroute(BaseModel):
-        id: int = Field()  # :integer          not null, primary key
+    class Traceroute(TestBase):
         queries: int = Field(default=1, description="Queries per hop")
         period: t.Optional[int] = Field(
             default=None,
             description="If specified, will schedule the traceroute to run periodically after the first attempt, in seconds.",
         )  #
         host: str = Field()  # :string
-        interface: t.Optional[str] = Field(default=None)
-        ssid: t.Optional[str] = Field(default=None)
-        psk: t.Optional[str] = Field(default=None)
 
     # Traceroute
     # Most of these reflect the API definitions in Core
@@ -342,6 +398,8 @@ class Messages:
         result: t.Optional[Data.DhcpTestResponse] = Field(default=None)
         request: Data.DhcpTestRequest = Field()
 
+    class SipTestComplete(TestCompleteMessage):
+        pass
 
 class Commands:
     class Reboot(BaseModel):
@@ -369,6 +427,9 @@ class Commands:
     class ConfigureRadios(BaseModel):
         interfaces: dict[str, Data.RadioConfiguration] = Field(default={})
 
+    class ConfigureTestBase(BaseModel):
+        targets: list[Data.Traceroute] = Field()
+
     class ConfigureTraceroutes(BaseModel):
         targets: list[Data.Traceroute] = Field()
 
@@ -378,11 +439,15 @@ class Commands:
     class ConfigurePingTargets(BaseModel):
         targets: list[Data.PingTarget] = Field()
 
+    class ConfigureSipTests(BaseModel):
+        targets: list[Data.SipTest] = Field()
+
     class ConfigureAgent(BaseModel):
         wifi: dict[str, Data.RadioConfiguration] = Field(default={})
         ping_targets: list[Data.PingTarget] = Field(default=[])
         traceroute_targets: list[Data.Traceroute] = Field(default=[])
         speed_tests: list[Data.SpeedTest] = Field(default=[])
+        sip_tests: list[Data.SipTest] = Field(default=[])
 
     class Ping(Data.PingRequest):
         pass
@@ -401,3 +466,7 @@ class Commands:
 
     class DhcpTest(Data.DhcpTestRequest):
         pass
+
+    class SipTest(Data.SipTest):
+        pass
+
