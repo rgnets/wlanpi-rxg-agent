@@ -413,7 +413,7 @@ class AgentActions:
             conf_path = f"/tmp/bs_sip_test__{event.id}/"
             await SipTestBaresip.deploy_config(conf_path)
             sip_test = SipTestBaresip(gateway=event.sip_account.host, password=event.sip_account.auth_pass,
-                                      user=event.sip_account.user, config_path=conf_path, debug=True)
+                                      user=event.sip_account.user, config_path=conf_path, debug=True, interface=event.interface)
 
             sip_result = await sip_test.execute(callee=event.callee, post_connect=event.post_connect,
                                                 call_timeout=event.call_timeout)

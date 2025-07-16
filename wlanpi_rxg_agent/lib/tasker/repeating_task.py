@@ -64,7 +64,7 @@ class RepeatingTask:
     # Technically, jobs can be modified in place. Currently not doing that.
 
     async def run_once(self):
-        self.logger.debug(f"Executing task: {self.identifier} | {self.task_executor.__name__}")
+        self.logger.debug(f"Executing task: {self.identifier} | {self.task_executor}")
         try:
             res = self.task_executor()
             if isinstance(res, asyncio.Task):

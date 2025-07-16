@@ -73,11 +73,11 @@ logging.getLogger("api_client").setLevel(logging.INFO)
 logging.getLogger("lib.event_bus._messagebus").setLevel(logging.INFO)
 logging.getLogger("lib.event_bus._commandbus").setLevel(logging.INFO)
 logging.getLogger("lib.rxg_supplicant.supplicant").setLevel(logging.INFO)
-logging.getLogger("lib.wifi_control.wifi_control_wpa_supplicant").setLevel(logging.INFO)
+logging.getLogger("lib.wifi_control.wifi_control_wpa_supplicant").setLevel(logging.DEBUG)
 logging.getLogger("rxg_mqtt_client").setLevel(logging.INFO)
 logging.getLogger("lib.sip_control.mdk_baresip").setLevel(logging.INFO)
 # logging.getLogger("apscheduler.scheduler").setLevel(logging.INFO)
-# logging.getLogger("lib.tasker.tasker").setLevel(logging.INFO)
+logging.getLogger("lib.tasker.tasker").setLevel(logging.DEBUG)
 
 
 class RXGAgent:

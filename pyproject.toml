@@ -62,7 +62,10 @@ dependencies = [
     "jc",
     "aiohttp",
     "baresipy",
-    "pyee"
+    "pyee",
+    "baresipy",
+    "pexpect",
+    "pyroute2"
 ]
 #
 #[project.scripts]

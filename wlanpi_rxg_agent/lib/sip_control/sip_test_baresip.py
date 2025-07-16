@@ -19,6 +19,7 @@ class SipTestBaresip(SipTest):
                  extra_login_args: Optional[str] = None,
                  debug: bool=False,
                  config_path: Optional[PathLike] = None,
+                 interface: Optional[str] = None,
                  ):
         self.logger = logging.getLogger(__name__)
         self.logger.info(f"Initializing {__name__}")
@@ -29,6 +30,7 @@ class SipTestBaresip(SipTest):
         self._debug = debug
         self._extra_login_args = extra_login_args
         self._config_path = config_path
+        self._interface = interface
         self.logger.info("SipTestBaresip initialized")
 
 
@@ -44,7 +46,8 @@ class SipTestBaresip(SipTest):
             # Construct the full path to the source and destination files
             source_file = os.path.join(script_dir, 'baresip.conf')
 
-            os.mkdir(dest)
+            if not os.path.exists(dest):
+                os.mkdir(dest)
 
             # Read the content from the source file
             with open(source_file, 'r') as src:
@@ -68,7 +71,7 @@ class SipTestBaresip(SipTest):
     async def execute(self, callee: str, post_connect: Optional[str] = None, call_timeout: Optional[int] = None,
                       summary_callback: Optional[Callable] = None):
         await MdkBareSIP.setup_pi() # Set up dummy sound device
-        async with MdkBareSIP(gateway=self._gateway, user=self._user, pwd=self._password, debug=self._debug, extra_login_args=self._extra_login_args, config_path=self._config_path) as bs:
+        async with MdkBareSIP(gateway=self._gateway, user=self._user, pwd=self._password, debug=self._debug, extra_login_args=self._extra_login_args, config_path=self._config_path, interface=self._interface) as bs:
             self.logger.info(f"Executing test against {callee}")
 
 

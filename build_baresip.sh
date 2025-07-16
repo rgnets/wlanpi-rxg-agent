@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 
+set -e
 # Get the absolute path of the directory where the script is located
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 
@@ -33,17 +34,20 @@ sudo apt-get update && sudo apt-get install -y \
 cd $SCRIPT_DIR
 
 rm -rf  "${SCRIPT_DIR}/re"
-git clone --depth 1 --branch rgnets-custom git@github.com:rgnets/re.git "${SCRIPT_DIR}/re"
+#git clone --depth 1 --branch rgnets-custom git@github.com:rgnets/re.git "${SCRIPT_DIR}/re"
+git clone --depth 2 --branch rgnets-custom git@github.com:rgnets/re.git "${SCRIPT_DIR}/re"
+
 cd "${SCRIPT_DIR}/re"
+git checkout HEAD~1
 
 cmake -B build -DCMAKE_BUILD_TYPE=Release #-DSTATIC=ON
 cmake --build build -t retest -j
 cmake --build build -j
 #make RELEASE=1
 #
+./build/test/retest
 cd build && cpack -G DEB
-
-sudo apt remove -my libre libre-dev ; true
+sudo apt remove -my libre libre-dev baresip libbaresip libbaresip-dev || true
 #ls ./re/build/*.deb | xargs -I {} sudo apt install -y {}
 sudo apt install -y $(ls ./*.deb)
 #sudo apt install ./re/build/*.deb
@@ -62,8 +66,11 @@ cd "${SCRIPT_DIR}/baresip"
 
 cmake -B build -DAPP_MODULES_DIR=./modules -DAPP_MODULES="rgrtcpsummary"
 cmake --build build -j
-cd build && cpack -G DEB
-sudo apt remove -my baresip libbaresip libbaresip-dev
+
+cd build
+#./test/selftest
+cpack -G DEB
+sudo apt remove -my baresip libbaresip libbaresip-dev || true
 sudo apt install -y $(ls ./*.deb)
 
 # baresip baresip-core baresip-ffmpeg baresip-gstreamer baresip-gtk baresip-x11 libdirectfb-1.7-7 libomxil-bellagio-bin libomxil-bellagio0 libopenaptx0 libportaudio2 librem0 libvo-amrwbenc0

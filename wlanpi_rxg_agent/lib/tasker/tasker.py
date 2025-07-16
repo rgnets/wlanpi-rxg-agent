@@ -163,7 +163,8 @@ class Tasker:
             @functools.wraps(func)
             def wrapper_configure_test(self, event: event_type):
                 task_schedule = self.scheduled_tasks.__getattribute__(task_schedule_name)
-                for target in event.targets:
+                for new_target in event.targets:
+                    target = new_target.__deepcopy__()
                     composite_id = f"{target.id}:{target.interface}"
 
                     if composite_id in task_schedule:
@@ -196,7 +197,7 @@ class Tasker:
                         )
                         return func(self, exec_def=target)
 
-                    execute = executor_function
+                    execute = functools.partial(func,self, exec_def=target)
 
                     interval = target.period
                     if period_unit := getattr(target, 'period_unit', None):
@@ -227,7 +228,8 @@ class Tasker:
 
     @configure_test("SipTest", "sip_tests", event_type=actions_domain.Commands.ConfigureSipTests)
     async def configured_sip_tests(self, exec_def: actions_domain.Data.SipTest):
-        self.logger.warning("I'm Not a real boy!!!")
+
+        self.logger.warning(f"Executing SIP test {exec_def}")
         command = actions_domain.Commands.SipTest(
             **exec_def.model_dump(by_alias=True),
         )

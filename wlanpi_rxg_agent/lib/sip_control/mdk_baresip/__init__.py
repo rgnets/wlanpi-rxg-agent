@@ -41,7 +41,7 @@ class MdkBareSIP():
         QUIT = "quit"
         TIMEOUT = "timeout"
 
-    def __init__(self, user, pwd, gateway, tts=None, debug=False, extra_login_args: Optional[str] = None, config_path: Optional[str] = None):
+    def __init__(self, user, pwd, gateway, tts=None, debug=False, extra_login_args: Optional[str] = None, config_path: Optional[str] = None, interface: Optional[str] = None):
         self.logger = logging.getLogger(__name__)
         self.logger.info(f"Initializing {__name__}")
 
@@ -72,10 +72,13 @@ class MdkBareSIP():
         self.audio = None
         self._ts = None
 
-        self._bs_args = []
+        self._bs_args = ['-c']
 
         if config_path:
             self._bs_args.extend(['-f',config_path])
+
+        if interface:
+            self._bs_args.extend(['-n',interface])
 
         self.baresip = pexpect.spawn('baresip', args=self._bs_args)
 

@@ -2,9 +2,10 @@ import asyncio
 import time
 from typing import Optional
 
-import event_emitter
+
 import pexpect
 from baresipy import BareSIP, LOG
+from pyee import EventEmitter
 from responsive_voice import ResponsiveVoice
 
 
@@ -18,7 +19,7 @@ class CustomBaresipy(BareSIP):
         self.user = user
         self.pwd = pwd
         self.gateway = gateway
-        self.em = event_emitter.EventEmitter()
+        self.em = EventEmitter()
         if tts:
             self.tts = tts
         else:

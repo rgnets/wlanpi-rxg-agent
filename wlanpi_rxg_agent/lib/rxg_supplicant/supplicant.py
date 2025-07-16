@@ -434,8 +434,16 @@ class RxgSupplicant:
             return False
 
 
-# if __name__ == "__main__":
-#     supp = RxgSupplicant()
-#     # supp.fallback_server = "192.168.20.81"
-#     res = supp.find_rxg()
-#     print(res)
+if __name__ == "__main__":
+
+    async def main():
+        supp = RxgSupplicant(verify_ssl=False)
+        # supp.fallback_server = "192.168.20.81"
+        # res = await supp.find_rxg()
+        res = await supp.test_address_for_rxg("gcr.rxgs.ketchel.xyz")
+        print(res)
+
+    asyncio.get_event_loop().run_until_complete(main())
+
+
+

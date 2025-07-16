@@ -94,7 +94,7 @@ class WifiInterface:
                     )
                 )
             else:
-                self.logger.debug(f"Unhandled event on {self.name}: {result}")
+                self.logger.warning(f"Unhandled event on {self.name}: {result}")
                 message_bus.handle(
                     wifi_domain.Messages.WpaSupplicantEvent(
                         interface=self.name, details=result
