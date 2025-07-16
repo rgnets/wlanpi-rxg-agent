@@ -2,7 +2,7 @@ import re
 from pathlib import Path
 from typing import Union, Optional
 
-from lib.network_control.models import DHCPLease, DHCPLeaseDate, DHCPOption
+from .models import DHCPLease, DHCPLeaseDate, DHCPOption
 
 
 class DHCPLeaseParser:
@@ -15,8 +15,7 @@ class DHCPLeaseParser:
 
         leases = self.lease_path.read_text().split("lease {")
         last = leases[-1]
-        data: dict[str, Union[str, DHCPLeaseDate]] = {
-        }
+        data: dict[str, Union[str, DHCPLeaseDate]] = {}
 
         options: dict[str, DHCPOption] = {}
 
@@ -39,14 +38,12 @@ class DHCPLeaseParser:
             if match:
                 keyword = match.group(1).strip().replace("-", "_")
                 options[keyword] = DHCPOption(
-                    keyword=keyword,
-                    data= match.group(2).strip()
-                                             )
+                    keyword=keyword, data=match.group(2).strip()
+                )
 
-        for date_key in ('renew', 'rebind', 'expire'):
+        for date_key in ("renew", "rebind", "expire"):
             if date_key in data:
                 data[date_key] = DHCPLeaseDate.from_dhcp_date(data[date_key])
-
 
         return DHCPLease(**data, options=options)
 

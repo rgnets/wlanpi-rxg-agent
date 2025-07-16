@@ -1,7 +1,7 @@
 import logging
 
-from lib.event_bus import CommandBus, MessageBus
-from lib.event_bus.middleware.logger import (
+from wlanpi_rxg_agent.lib.event_bus import CommandBus, MessageBus
+from wlanpi_rxg_agent.lib.event_bus.middleware.logger import (
     LoggingMiddlewareConfig,
     get_logger_middleware,
 )

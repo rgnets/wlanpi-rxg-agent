@@ -22,45 +22,10 @@ from utils import aevery
 
 from wlanpi_rxg_agent.bridge_control import BridgeControl
 
-# https://talyian.github.io/ansicolors/
-class CustomFormatter(logging.Formatter):
-    red = "\x1b[31;20m"
-    green = "\x1b[32;20m"
-    yellow = "\x1b[33;20m"
-    blue = "\x1b[34;20m"
-    magenta = "\x1b[35;20m"
-    cyan = "\x1b[36;20m"
-    white = "\x1b[38;5;255m"
-    grey = "\x1b[38;20m"
-
-    dark_grey = "\x1b[38;5;244m"
-    orange = "\x1b[38;5;208m"
-
-    bold_red = "\x1b[31;1m"
-    reset = "\x1b[0m"
-    format = "%(asctime)s | %(levelname)8s | %(name)s: %(message)s (%(filename)s:%(lineno)d)"
-
-    USE_COLOR = utils.supports_color()
-
-    FORMATS = {
-        logging.DEBUG: dark_grey + format + reset,
-        logging.INFO: white + format + reset,
-        logging.WARNING: orange + format + reset,
-        logging.ERROR: red + format + reset,
-        logging.CRITICAL: bold_red + format + reset
-    }
-
-    def format(self, record):
-
-        log_fmt = self.FORMATS.get(record.levelno) if self.USE_COLOR else self.format
-        formatter = logging.Formatter(log_fmt)
-        return formatter.format(record)
-
+from lib.logging_utils import create_console_handler
 
 # create console handler with a higher log level
-ch = logging.StreamHandler()
-ch.setLevel(logging.DEBUG)
-ch.setFormatter(CustomFormatter())
+ch = create_console_handler(logging.DEBUG)
 
 
 logger = logging.getLogger(__name__)

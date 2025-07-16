@@ -24,17 +24,19 @@ class DHCPLeaseDate(BaseModel):
             if match:
                 return cls(value=datetime.fromtimestamp(int(match.group(1).strip())))
             else:
-                raise ValidationError("Date appears to be epoch but couldn't be parsed.")
+                raise ValidationError(
+                    "Date appears to be epoch but couldn't be parsed."
+                )
 
         # The common date format is 'W YYYY/MM/DD HH:MM:SS', where W is the day of the week.
         # For example: '3 2024/07/17 10:30:00'
         return cls(value=datetime.strptime(date_string, "%w %Y/%m/%d %H:%M:%S"))
 
 
-
 class DHCPOption(BaseModel):
     keyword: str = Field()
     data: str = Field()
+
 
 class DHCPLease(BaseModel):
     fixed_address: str = Field()
