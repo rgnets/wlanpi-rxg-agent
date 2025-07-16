@@ -21,6 +21,7 @@ from rxg_mqtt_client import RxgMqttClient
 from utils import aevery
 
 from wlanpi_rxg_agent.bridge_control import BridgeControl
+from wlanpi_rxg_agent.lib.network_control import NetworkControlManager
 
 from lib.logging_utils import create_console_handler
 
@@ -140,6 +141,11 @@ async def lifespan(app: FastAPI):
     agent_actions = AgentActions()
     supplicant = RxgSupplicant()
     rxg_mqtt_client = RxgMqttClient(identifier=eth0_mac)
+    
+    # Initialize network control manager for wireless interfaces
+    wireless_interfaces = {'wlan0', 'wlan1', 'wlan2', 'wlan3'}
+    network_control = NetworkControlManager(wireless_interfaces=wireless_interfaces)
+    await network_control.start()
 
     async def heartbeat_task():
         logger.debug("Heartbeat!")
@@ -151,6 +157,7 @@ async def lifespan(app: FastAPI):
     yield
     message_bus.handle(agent_domain.Messages.ShutdownStarted())
     await rxg_mqtt_client.stop()
+    await network_control.stop()
     wifi_control.shutdown()
     # Clean up the ML models and release the resources
     # ml_models.clear()

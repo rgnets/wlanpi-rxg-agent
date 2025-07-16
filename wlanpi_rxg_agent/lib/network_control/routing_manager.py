@@ -194,7 +194,7 @@ class RoutingManager:
             return True
 
         except Exception as e:
-            self.logger.error(f"Error setting up routing for {interface.name}: {e}")
+            self.logger.error(f"Error setting up routing for {interface.name}: {e}", exc_info=True)
             return False
 
     async def _remove_interface_routing(
