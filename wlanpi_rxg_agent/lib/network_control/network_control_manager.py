@@ -156,8 +156,14 @@ class NetworkControlManager:
                 
             self.logger.info(f"WiFi disconnection detected on {interface_name}")
             
-            # Clean up routing and DHCP for this interface
-            await self._cleanup_interface_on_disconnect(interface_name)
+            # Ensure we're running in the correct event loop context
+            try:
+                loop = asyncio.get_running_loop()
+                # Schedule the cleanup as a task in the current loop
+                loop.create_task(self._cleanup_interface_on_disconnect(interface_name))
+            except RuntimeError:
+                # No running loop, fall back to direct await
+                await self._cleanup_interface_on_disconnect(interface_name)
             
         except Exception as e:
             self.logger.error(f"Error handling WiFi disconnection: {e}")
@@ -174,14 +180,28 @@ class NetworkControlManager:
                 
             self.logger.debug(f"WiFi state change on {interface_name}: {state}")
             
-            # Handle disconnected/inactive states
-            if state.lower() in ["disconnected", "inactive", "interface_disabled"]:
-                self.logger.info(f"WiFi connection lost on {interface_name} (state: {state})")
-                await self._cleanup_interface_on_disconnect(interface_name)
-            elif state.lower() == "completed":
-                self.logger.info(f"WiFi connection established on {interface_name}")
-                # Note: We don't need to do anything here since netlink events will handle
-                # IP address assignment and routing configuration
+            # Ensure we're running in the correct event loop context
+            try:
+                loop = asyncio.get_running_loop()
+                
+                # Handle disconnected/inactive states
+                if state.lower() in ["disconnected", "inactive", "interface_disabled"]:
+                    self.logger.info(f"WiFi connection lost on {interface_name} (state: {state})")
+                    loop.create_task(self._cleanup_interface_on_disconnect(interface_name))
+                elif state.lower() == "completed":
+                    self.logger.info(f"WiFi connection established on {interface_name}")
+                    # Trigger DHCP and route setup since interface may remain administratively up
+                    # during connectivity loss, preventing netlink events from properly detecting reconnection
+                    loop.create_task(self._setup_interface_on_connect(interface_name))
+                    
+            except RuntimeError:
+                # No running loop, fall back to direct await
+                if state.lower() in ["disconnected", "inactive", "interface_disabled"]:
+                    self.logger.info(f"WiFi connection lost on {interface_name} (state: {state})")
+                    await self._cleanup_interface_on_disconnect(interface_name)
+                elif state.lower() == "completed":
+                    self.logger.info(f"WiFi connection established on {interface_name}")
+                    await self._setup_interface_on_connect(interface_name)
                 
         except Exception as e:
             self.logger.error(f"Error handling WiFi state change: {e}")
@@ -209,6 +229,31 @@ class NetworkControlManager:
                 
         except Exception as e:
             self.logger.error(f"Error cleaning up interface {interface_name}: {e}")
+
+    async def _setup_interface_on_connect(self, interface_name: str):
+        """Setup interface routing and DHCP on WiFi connect"""
+        try:
+            self.logger.info(f"Setting up {interface_name} after WiFi connection")
+            
+            # Get current interface info
+            interface_info = await self.netlink_monitor._get_interface_info(interface_name)
+            if not interface_info:
+                self.logger.error(f"Interface {interface_name} not found during setup")
+                return
+            
+            # Update managed interfaces
+            self.managed_interfaces[interface_name] = interface_info
+            
+            # Start DHCP client to get IP address
+            await self._trigger_dhcp(interface_name)
+            
+            # If interface already has IP (cached/static), configure routing immediately
+            if interface_info.ip_address:
+                gateway = await self._get_gateway_from_lease(interface_name)
+                await self._configure_interface_routing(interface_info, gateway)
+                
+        except Exception as e:
+            self.logger.error(f"Error setting up interface {interface_name}: {e}")
 
     async def _handle_link_event(self, msg_type: int, interface_info: InterfaceInfo):
         """Handle interface link up/down events"""

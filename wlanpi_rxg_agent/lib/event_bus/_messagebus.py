@@ -105,6 +105,12 @@ class MessageBus(api.MessageBus):
     def _trigger_handler(message: object, handler: t.Callable) -> t.Any:
         # Check if it's a coroutine function, and execute it with create_task() if so
         if asyncio.iscoroutinefunction(handler):
-            return asyncio.create_task(handler(message))
+            try:
+                # Try to get the running event loop
+                loop = asyncio.get_running_loop()
+                return loop.create_task(handler(message))
+            except RuntimeError:
+                # No running loop, just return the coroutine
+                return handler(message)
         else:
             return handler(message)

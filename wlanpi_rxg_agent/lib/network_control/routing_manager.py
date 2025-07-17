@@ -170,6 +170,7 @@ class RoutingManager:
                         dst = attrs.get("RTA_DST", "default")
                         gateway = attrs.get("RTA_GATEWAY")
                         oif = attrs.get("RTA_OIF")
+                        proto = route.get("proto")
 
                         delete_args = {"table": table_id}
                         if dst != "default":
@@ -180,6 +181,18 @@ class RoutingManager:
                             delete_args["gateway"] = gateway
                         if oif:
                             delete_args["oif"] = oif
+                        if proto:
+                            delete_args["proto"] = proto
+
+                        # Add prefix length for non-default routes
+                        if 'dst' in delete_args and delete_args['dst'] != "default":
+                            if route.get('prefixlen'):
+                                prefixlen = route.get('prefixlen')
+                            elif route.get('dst_len'):
+                                prefixlen = route.get('dst_len')
+                            else:
+                                prefixlen = 32  # Default to /32 for host routes
+                            delete_args['dst'] = f"{delete_args['dst']}/{prefixlen}"
 
                         await ipr.route("del", **delete_args)
                         self.logger.debug(f"Removed route for table {table_id}: {delete_args}")
@@ -265,7 +278,7 @@ class RoutingManager:
                 )
 
             self.logger.debug(
-                f"Configured routing for {interface.name}: table={table_id}, "
+            f"Configured routing for {interface.name}: table={table_id}, "
                 f"network={network}, gateway={gateway}"
             )
             return True
@@ -373,16 +386,18 @@ class RoutingManager:
                                     if oif:
                                         delete_args["oif"] = oif
 
-                                    if 'dst' in delete_args:
+                                    if 'dst' in delete_args and delete_args['dst'] != "default":
                                         if route.get('prefixlen'):
                                             prefixlen = route.get('prefixlen')
                                         elif route.get('dst_len'):
                                             prefixlen = route.get('dst_len')
+                                        else:
+                                            prefixlen = 32  # Default to /32 for host routes
                                         delete_args['dst'] = f"{delete_args['dst']}/{prefixlen}"
                                     await ipr.route("del", **delete_args)
                                     
                                 except Exception as e:
-                                    self.logger.debug(f"Error deleting route in table {table_id}: {e}")
+                                    self.logger.error(f"Error deleting route in table {table_id}: {e}")
                     except Exception:
                         # Table doesn't exist or no routes, skip
                         pass
