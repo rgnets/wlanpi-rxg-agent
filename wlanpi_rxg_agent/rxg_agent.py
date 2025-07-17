@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import os
 import signal
 import subprocess
 import sys
@@ -24,7 +25,7 @@ from wlanpi_rxg_agent.utils import aevery
 from wlanpi_rxg_agent.bridge_control import BridgeControl
 from wlanpi_rxg_agent.lib.network_control import NetworkControlManager
 
-from lib.logging_utils import setup_logging
+from wlanpi_rxg_agent.lib.logging_utils import setup_logging
 
 # Setup logging with custom formatter
 setup_logging(level=logging.DEBUG)
@@ -156,9 +157,12 @@ async def lifespan(app: FastAPI):
     message_bus.handle(agent_domain.Messages.StartupComplete())
     # asyncio.create_task(every(2, lambda : print("Ping")))
     heartbeat_task_handle = asyncio.create_task(aevery(3, heartbeat_task))
-    
+
     try:
         yield
+    except Exception as e:
+        logger.error(f"Error during application lifecycle: {e}")
+        raise
     finally:
         try:
             # Wrap entire shutdown in a timeout to prevent hanging
@@ -232,18 +236,6 @@ async def lifespan(app: FastAPI):
         finally:
             logger.info("Shutdown process finished")
 
-
-# Global shutdown event for signal handling
-shutdown_event = asyncio.Event()
-
-def signal_handler(signum, _frame):
-    """Handle SIGINT and SIGTERM for graceful shutdown"""
-    logger.info(f"Received signal {signum}. Initiating graceful shutdown...")
-    shutdown_event.set()
-
-# Register signal handlers
-signal.signal(signal.SIGINT, signal_handler)
-signal.signal(signal.SIGTERM, signal_handler)
 
 app = FastAPI(lifespan=lifespan)
 

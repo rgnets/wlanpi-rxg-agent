@@ -9,7 +9,7 @@ import time
 from typing import Any, Optional
 
 import dpkt
-import kismet_capture
+from wlanpi_rxg_agent import kismet_capture
 import kismet_rest  # type: ignore
 from wlanpi_rxg_agent.models.runcommand_error import RunCommandError
 from scapy.data import DLT_EN10MB, DLT_IEEE802_11

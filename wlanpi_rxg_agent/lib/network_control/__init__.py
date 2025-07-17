@@ -16,7 +16,7 @@ Main components:
 - DHCPLeaseParser: DHCP lease file parsing
 
 Usage:
-    from lib.network_control import NetworkControlManager
+    from wlanpi_rxg_agent.lib.network_control import NetworkControlManager
 
     # Create manager for specific wireless interfaces
     manager = NetworkControlManager(wireless_interfaces={'wlan0', 'wlan1'})

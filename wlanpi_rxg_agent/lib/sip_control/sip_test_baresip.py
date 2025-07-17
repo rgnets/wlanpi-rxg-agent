@@ -4,10 +4,10 @@ import os
 from os import PathLike
 from typing import Optional, Callable
 
-import utils
-from lib.sip_control.custom_baresipy import CustomBaresipy
-from lib.sip_control.mdk_baresip import MdkBareSIP
-from lib.sip_control.sip_test import SipTest
+from wlanpi_rxg_agent import utils
+from wlanpi_rxg_agent.lib.sip_control.custom_baresipy import CustomBaresipy
+from wlanpi_rxg_agent.lib.sip_control.mdk_baresip import MdkBareSIP
+from wlanpi_rxg_agent.lib.sip_control.sip_test import SipTest
 
 
 class SipTestBaresip(SipTest):

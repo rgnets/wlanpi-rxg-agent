@@ -15,7 +15,7 @@ import logging
 import subprocess
 from threading import Thread
 
-from utils import run_command_async
+from wlanpi_rxg_agent.utils import run_command_async
 
 # from .utils import create_daemon
 

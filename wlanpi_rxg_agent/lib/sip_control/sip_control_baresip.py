@@ -5,8 +5,8 @@ from asyncio import sleep
 from symbol import while_stmt
 from typing import Optional
 
-from lib.sip_control.custom_baresipy import CustomBaresipy
-from lib.sip_control.sip_control import SipControl, SipInstance
+from wlanpi_rxg_agent.lib.sip_control.custom_baresipy import CustomBaresipy
+from wlanpi_rxg_agent.lib.sip_control.sip_control import SipControl, SipInstance
 
 class SipInstanceBaresip(SipInstance):
 

@@ -25,7 +25,7 @@ class CustomBaresipy(BareSIP):
         else:
             self.tts = ResponsiveVoice(gender=ResponsiveVoice.MALE)
 
-        # /uanew sip:pi2@192.168.7.15;regint=30;auth_pass=pitest;outbound=sip:192.168.7.15;sipnat=outbound
+        # a
         self._login = f"sip:{self.user}@{self.gateway};auth_pass={self.pwd}"
         if extra_login_args:
             self._login += f";{extra_login_args}"

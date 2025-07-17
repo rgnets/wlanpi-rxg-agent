@@ -1,8 +1,8 @@
 import asyncio
 import logging
 from typing import Optional, Callable
-from lib.sip_control.custom_baresipy import CustomBaresipy
-from lib.sip_control.mdk_baresip import MdkBareSIP
+from wlanpi_rxg_agent.lib.sip_control.custom_baresipy import CustomBaresipy
+from wlanpi_rxg_agent.lib.sip_control.mdk_baresip import MdkBareSIP
 from abc import ABC, abstractmethod
 
 class SipTest(ABC):
