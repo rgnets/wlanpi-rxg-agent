@@ -5,7 +5,7 @@ from typing import Any, Optional
 import requests
 from aiohttp import ClientSession
 from requests import JSONDecodeError
-from structures import FlatResponse
+from wlanpi_rxg_agent.structures import FlatResponse
 
 
 class CoreClient:

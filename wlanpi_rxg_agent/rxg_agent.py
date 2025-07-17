@@ -41,7 +41,8 @@ logging.getLogger("lib.wifi_control.wifi_control_wpa_supplicant").setLevel(loggi
 logging.getLogger("rxg_mqtt_client").setLevel(logging.INFO)
 logging.getLogger("lib.sip_control.mdk_baresip").setLevel(logging.INFO)
 # logging.getLogger("apscheduler.scheduler").setLevel(logging.INFO)
-logging.getLogger("lib.tasker.tasker").setLevel(logging.DEBUG)
+logging.getLogger("lib.tasker.tasker").setLevel(logging.INFO)
+logging.getLogger("wlanpi_rxg_agent.lib.network_control.network_control_manager").setLevel(logging.DEBUG)
 
 
 class RXGAgent:
@@ -140,9 +141,10 @@ async def lifespan(app: FastAPI):
     supplicant = RxgSupplicant()
     rxg_mqtt_client = RxgMqttClient(identifier=eth0_mac)
     
-    # Initialize network control manager for wireless interfaces
-    wireless_interfaces = {'wlan0', 'wlan1', 'wlan2', 'wlan3'}
-    network_control = NetworkControlManager(wireless_interfaces=wireless_interfaces)
+    # Get discovered wireless interfaces from WiFi control and initialize network control manager
+    discovered_wireless_interfaces = set(wifi_control.get_discovered_wireless_interfaces())
+    logger.info(f"Using discovered wireless interfaces for network control: {discovered_wireless_interfaces}")
+    network_control = NetworkControlManager(wireless_interfaces=discovered_wireless_interfaces)
     await network_control.start()
 
     async def heartbeat_task():

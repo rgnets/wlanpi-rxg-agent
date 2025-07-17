@@ -113,7 +113,9 @@ class NetworkControlManager:
                         interface_info.state == InterfaceState.UP
                         and interface_info.ip_address
                     ):
-                        await self._configure_interface_routing(interface_info)
+                        # Get gateway from DHCP lease
+                        gateway = await self._get_gateway_from_lease(interface_name)
+                        await self._configure_interface_routing(interface_info, gateway)
 
         except Exception as e:
             self.logger.error(f"Error discovering interfaces: {e}")
