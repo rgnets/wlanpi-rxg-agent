@@ -293,6 +293,7 @@ class RoutingManager:
 
     async def _cleanup_all_managed_tables(self) -> bool:
         """Clean up all rules and routes in our managed table range"""
+        # https://man7.org/linux/man-pages/man7/rtnetlink.7.html
         try:
             async with AsyncIPRoute() as ipr:
                 # Get all rules and find ones in our table range
@@ -371,7 +372,13 @@ class RoutingManager:
                                         delete_args["gateway"] = gateway
                                     if oif:
                                         delete_args["oif"] = oif
-                                        
+
+                                    if 'dst' in delete_args:
+                                        if route.get('prefixlen'):
+                                            prefixlen = route.get('prefixlen')
+                                        elif route.get('dst_len'):
+                                            prefixlen = route.get('dst_len')
+                                        delete_args['dst'] = f"{delete_args['dst']}/{prefixlen}"
                                     await ipr.route("del", **delete_args)
                                     
                                 except Exception as e:
