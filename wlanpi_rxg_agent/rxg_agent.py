@@ -13,7 +13,7 @@ import wlanpi_rxg_agent.lib.rxg_supplicant.domain as supplicant_domain
 
 # import wlanpi_rxg_agent.utils as utils
 from wlanpi_rxg_agent.busses import message_bus
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from wlanpi_rxg_agent.lib.agent_actions.actions import AgentActions
 from wlanpi_rxg_agent.lib.configuration.bridge_config_file import BridgeConfigFile
 from wlanpi_rxg_agent.lib.rxg_supplicant.supplicant import RxgSupplicant
@@ -26,6 +26,7 @@ from wlanpi_rxg_agent.bridge_control import BridgeControl
 from wlanpi_rxg_agent.lib.network_control import NetworkControlManager
 
 from wlanpi_rxg_agent.lib.logging_utils import setup_logging
+from wlanpi_rxg_agent.models.api_models import DevShutdownRequest
 
 # Setup logging with custom formatter
 setup_logging(level=logging.DEBUG)
@@ -180,14 +181,14 @@ async def lifespan(app: FastAPI):
                 
                 # Shutdown components with timeout and error handling
                 shutdown_tasks = [
-                    ("RXG MQTT Client", rxg_mqtt_client.stop()),
-                    ("Network Control Manager", network_control.stop()),
+                    ("RXG MQTT Client", rxg_mqtt_client.stop),
+                    ("Network Control Manager", network_control.stop),
                 ]
                 
-                for component_name, shutdown_coro in shutdown_tasks:
+                for component_name, shutdown_func in shutdown_tasks:
                     try:
                         logger.info(f"Shutting down {component_name}...")
-                        await asyncio.wait_for(shutdown_coro, timeout=10.0)
+                        await asyncio.wait_for(shutdown_func(), timeout=10.0)
                         logger.info(f"{component_name} shutdown completed")
                     except asyncio.TimeoutError:
                         logger.warning(f"Timeout waiting for {component_name} to shutdown")
@@ -248,6 +249,18 @@ async def root():
 @app.get("/reload_agent")
 async def reload_agent():
     message_bus.handle(agent_domain.Messages.AgentConfigUpdated())
+
+
+@app.post("/dev_shutdown")
+async def dev_shutdown(request: DevShutdownRequest):
+    """Development endpoint to shutdown the application via SIGTERM."""
+    if request.CONFIRM != 1:
+        return {"message": "You must confirm the request by setting CONFIRM to 1"}
+    
+    logger.info("Dev shutdown requested - sending SIGTERM to own PID")
+    os.kill(os.getpid(), signal.SIGTERM)
+    
+    return {"message": "Shutdown signal sent"}
 
 
 #

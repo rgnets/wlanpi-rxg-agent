@@ -111,7 +111,7 @@ class RxgMqttClient:
         ]
 
         self.setup_listeners()
-        self.mqtt_listener_task: Any = None
+        self.mqtt_listener_coro: Any = None
 
     def setup_listeners(self):
         self.logger.info("Setting up listeners")
@@ -128,10 +128,7 @@ class RxgMqttClient:
         if self.run:
             await self.stop()
 
-    async def listen(self, client: aiomqtt.Client):
-        async for message in self.mqtt_client.messages:
-            # self.logger.info(f"Got message {message}: {message.payload}")
-            await self.handle_message(self.mqtt_client, message)
+
 
     async def restart_client_handler(
         self, event: supplicant_domain.Messages.RestartInternalMqtt
@@ -142,17 +139,18 @@ class RxgMqttClient:
             self.logger.error(f"restart_client_handler: Missing host or port in event!\n {event}")
 
     async def start_client(self, host, port, tls_config: TLSConfig = None):
-        try:
-            async with aiomqtt.Client(
+
+        self.mqtt_client = aiomqtt.Client(
                 host,
                 port=port,
                 tls_params=TLSParameters(**tls_config.__dict__) if tls_config else None,
                 will=aiomqtt.Will(
                     f"{self.my_base_topic}/status", "Abnormally Disconnected", 1, True
                 ),
-            ) as c:
+            )
+        try:
+            async with self.mqtt_client:
                 # Make client globally available
-                self.mqtt_client = c
                 self.logger.info(
                     f"Connected to MQTT server at {self.mqtt_server}:{self.mqtt_port}."
                 )
@@ -170,11 +168,25 @@ class RxgMqttClient:
 
                 self.connected = True
 
-                loop = asyncio.get_event_loop()
-                self.mqtt_listener_task = loop.create_task(
-                    self.listen(self.mqtt_client)
-                )
-                await self.mqtt_listener_task
+                while self.run:
+                    try:
+                        self.mqtt_listener_coro = asyncio.wait_for(self.mqtt_client.messages.__anext__(), 1)
+                        message = await self.mqtt_listener_coro
+                        await self.handle_message(self.mqtt_client, message)
+                    except asyncio.TimeoutError:
+                        continue
+                    except StopAsyncIteration:
+                        break
+                    except asyncio.CancelledError as e:
+                        self.logger.info("MQTT listener coroutine was cancelled.")
+                        break
+                    except Exception as e:
+                        err_msg = "There was an error in the MQTT Listener. Refusing to die so we don't lose connection"
+                        self.logger.exception(err_msg, exc_info=True)
+                        message_bus.handle(agent_domain.Messages.MqttError(err_msg, e))
+
+
+                # Reaching here will cause a disconnect as we leave the context.
 
         except (aiomqtt.exceptions.MqttError, aiomqtt.exceptions.MqttCodeError) as e:
             err_msg = "There was an error in the MQTT Listener"
@@ -270,26 +282,40 @@ class RxgMqttClient:
         )
 
     async def stop(self):
-        self.logger.info("Stopping MQTTBridge")
-        self.run = False
+        self.logger.info("Stopping MQTT Client")
+
+        self.logger.info("Tearing down bus listeners...")
+        self.teardown_listeners()
+
         try:
-            await self.mqtt_client.publish(
+            self.logger.info("Sending disconnect message to MQTT server...")
+
+            await asyncio.wait_for(self.mqtt_client.publish(
                 f"{self.my_base_topic}/status", "Disconnected", 1, True
-            )
-        except (aiomqtt.exceptions.MqttError, aiomqtt.exceptions.MqttCodeError) as e:
-            self.logger.warning(f"Failed to stop Agent MQTT: {e}", exc_info=True)
-        if self.mqtt_listener_task is None:
+            ), 5)
+        except (aiomqtt.exceptions.MqttError, aiomqtt.exceptions.MqttCodeError, asyncio.CancelledError) as e:
+            self.logger.warning(f"Failed to send disconnect: {e}", exc_info=True)
+
+        self.run = False
+        if self.mqtt_listener_coro is None:
+            self.logger.info("No MQTT listener coroutine to cancel.")
             return
-        # Cancel the task
-        self.mqtt_listener_task.cancel()
-        # Wait for the task to be cancelled
+
         try:
-            await self.mqtt_listener_task
+            # Cancel the task
+            self.logger.info("Cancelling MQTT listener coroutine...")
+            self.mqtt_listener_coro.throw(asyncio.CancelledError)
+            # Wait for the task to be cancelled
+            self.logger.info("MQTT listener coroutine has finished.")
+            return
         except (aiomqtt.exceptions.MqttError, aiomqtt.exceptions.MqttCodeError) as e:
             err_msg = "There was an error in the MQTT Listener, but we were stopping it, so we don't care."
             self.logger.warn(err_msg, exc_info=True)
+            return
         except asyncio.CancelledError:
-            pass
+            self.logger.info("MQTT listener coroutine was cancelled.")
+            return
+
 
     async def add_subscription(self, topic) -> bool:
         """
@@ -587,7 +613,6 @@ class RxgMqttClient:
                 self.logger.warning(f"Failed to stop Agent MQTT: {e}", exc_info=True)
 
     def __del__(self):
-        self.teardown_listeners()
         if self.run:
             try:
                 self.stop()
