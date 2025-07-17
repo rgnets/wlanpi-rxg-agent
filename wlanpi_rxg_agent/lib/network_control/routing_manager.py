@@ -17,6 +17,27 @@ class RoutingManager:
         self.interface_tables: Dict[str, int] = {}
         self.configured_interfaces: Set[str] = set()
         self.lock = asyncio.Lock()
+        self._startup_complete = False
+
+    async def startup_cleanup(self, interface_names: Set[str]):
+        """Clean up any existing routes for our interfaces on startup"""
+        async with self.lock:
+            if self._startup_complete:
+                return
+                
+            try:
+                self.logger.info("Performing startup route cleanup for managed interfaces")
+                
+                # For each interface we'll manage, clean up any existing routes in our table range
+                for interface_name in interface_names:
+                    table_id = self._get_table_id(interface_name)
+                    await self._cleanup_table_and_rules(interface_name, table_id)
+                    
+                self._startup_complete = True
+                self.logger.info("Startup route cleanup completed")
+                
+            except Exception as e:
+                self.logger.error(f"Error during startup cleanup: {e}")
 
     async def configure_interface_routing(
         self, interface: InterfaceInfo, gateway: Optional[IPv4Address] = None
@@ -83,10 +104,58 @@ class RoutingManager:
                 return False
 
     async def flush_table(self, table_id: int) -> bool:
-        """Flush all routes from a routing table"""
+        """Flush all routes and rules from a routing table"""
         try:
             async with AsyncIPRoute() as ipr:
-                # Get all routes in the table
+                # First, remove all IP rules for this table
+                rules = []
+                async for rule in await ipr.rule("dump"):
+                    rule_table = rule.get("table", 0)
+                    if rule_table == table_id:
+                        rules.append(rule)
+
+                self.logger.debug(f"Found {len(rules)} rules for table {table_id}")
+
+                for rule in rules:
+                    try:
+                        attrs = dict(rule.get("attrs", []))
+                        rule_args = {"table": table_id}
+
+                        # Handle all possible rule attributes
+                        if "FRA_SRC" in attrs:
+                            rule_args["src"] = attrs["FRA_SRC"]
+                        if "FRA_DST" in attrs:
+                            rule_args["dst"] = attrs["FRA_DST"]
+                        if "FRA_PRIORITY" in attrs:
+                            rule_args["priority"] = attrs["FRA_PRIORITY"]
+                        if "FRA_FWMARK" in attrs:
+                            rule_args["fwmark"] = attrs["FRA_FWMARK"]
+                        if "FRA_FWMASK" in attrs:
+                            rule_args["fwmask"] = attrs["FRA_FWMASK"]
+                        if "FRA_IIFNAME" in attrs:
+                            rule_args["iif"] = attrs["FRA_IIFNAME"]
+                        if "FRA_OIFNAME" in attrs:
+                            rule_args["oif"] = attrs["FRA_OIFNAME"]
+
+                        # Log what we're trying to delete
+                        self.logger.debug(f"Attempting to remove rule: {rule_args}")
+                        await ipr.rule("del", **rule_args)
+                        self.logger.debug(f"Successfully removed rule for table {table_id}")
+
+                    except Exception as e:
+                        # Try alternative approach: delete by table and priority only
+                        try:
+                            if "FRA_PRIORITY" in attrs:
+                                alt_args = {"table": table_id, "priority": attrs["FRA_PRIORITY"]}
+                                self.logger.debug(f"Retry with priority-only rule deletion: {alt_args}")
+                                await ipr.rule("del", **alt_args)
+                                self.logger.debug(f"Successfully removed rule with priority-only approach")
+                            else:
+                                self.logger.warning(f"Could not delete rule for table {table_id}: {e}")
+                        except Exception as e2:
+                            self.logger.warning(f"Failed to delete rule for table {table_id}: {e} (retry also failed: {e2})")
+
+                # Then, get all routes in the table
                 routes = []
                 async for route in await ipr.route("dump", table=table_id):
                     routes.append(route)
@@ -110,11 +179,12 @@ class RoutingManager:
                             delete_args["oif"] = oif
 
                         await ipr.route("del", **delete_args)
+                        self.logger.debug(f"Removed route for table {table_id}: {delete_args}")
 
                     except Exception as e:
                         self.logger.debug(f"Error deleting route: {e}")
 
-            self.logger.info(f"Flushed routing table {table_id}")
+            self.logger.info(f"Flushed routing table {table_id} (removed both rules and routes)")
             return True
 
         except Exception as e:
@@ -197,50 +267,48 @@ class RoutingManager:
             self.logger.error(f"Error setting up routing for {interface.name}: {e}", exc_info=True)
             return False
 
+    async def _cleanup_table_and_rules(self, interface_name: str, table_id: int) -> bool:
+        """Clean up both rules and routes for a table (used by startup and shutdown cleanup)"""
+        try:
+            # Use flush_table which now handles both rules and routes
+            success = await self.flush_table(table_id)
+            
+            if success:
+                self.logger.debug(
+                    f"Cleaned up table and rules for {interface_name} (table {table_id})"
+                )
+            
+            return success
+
+        except Exception as e:
+            self.logger.error(f"Error cleaning up table for {interface_name}: {e}")
+            return False
+
     async def _remove_interface_routing(
         self, interface_name: str, table_id: int
     ) -> bool:
         """Remove routing rules and routes for an interface"""
-        try:
-            async with AsyncIPRoute() as ipr:
-                # Remove all rules associated with this table
-                rules = []
-                async for rule in await ipr.rule("dump"):
-                    rule_table = rule.get("table", 0)
-                    if rule_table == table_id:
-                        rules.append(rule)
-
-                for rule in rules:
-                    try:
-                        attrs = dict(rule.get("attrs", []))
-                        rule_args = {"table": table_id}
-
-                        if "FRA_SRC" in attrs:
-                            rule_args["src"] = attrs["FRA_SRC"]
-                        if "FRA_DST" in attrs:
-                            rule_args["dst"] = attrs["FRA_DST"]
-                        if "FRA_PRIORITY" in attrs:
-                            rule_args["priority"] = attrs["FRA_PRIORITY"]
-
-                        await ipr.rule("del", **rule_args)
-
-                    except Exception as e:
-                        self.logger.debug(f"Error removing rule: {e}")
-
-                # Flush the routing table
-                await self.flush_table(table_id)
-
-            self.logger.debug(
-                f"Removed routing for {interface_name} (table {table_id})"
-            )
-            return True
-
-        except Exception as e:
-            self.logger.error(f"Error removing routing for {interface_name}: {e}")
-            return False
+        return await self._cleanup_table_and_rules(interface_name, table_id)
 
     async def cleanup(self):
-        """Clean up all configured routing"""
+        """Clean up all configured routing on shutdown"""
         async with self.lock:
-            for interface_name in list(self.configured_interfaces):
-                await self.remove_interface_routing(interface_name)
+            try:
+                self.logger.info("Starting routing cleanup for shutdown")
+                
+                # Clean up all interfaces we've configured
+                for interface_name in list(self.configured_interfaces):
+                    await self.remove_interface_routing(interface_name)
+                
+                # Additional cleanup: ensure all our table range is clean
+                for interface_name, table_id in list(self.interface_tables.items()):
+                    await self._cleanup_table_and_rules(interface_name, table_id)
+                    
+                # Clear our tracking data
+                self.configured_interfaces.clear()
+                self.interface_tables.clear()
+                
+                self.logger.info("Routing cleanup completed")
+                
+            except Exception as e:
+                self.logger.error(f"Error during routing cleanup: {e}")
