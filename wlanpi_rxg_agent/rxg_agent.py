@@ -1,16 +1,17 @@
 import asyncio
 import json
 import logging
+import signal
 import subprocess
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 
 import lib.domain as agent_domain
 import lib.rxg_supplicant.domain as supplicant_domain
-import utils
 
 # import wlanpi_rxg_agent.utils as utils
-from busses import command_bus, message_bus
+from busses import message_bus
 from fastapi import FastAPI
 from lib.agent_actions.actions import AgentActions
 from lib.configuration.bridge_config_file import BridgeConfigFile
@@ -153,15 +154,95 @@ async def lifespan(app: FastAPI):
 
     message_bus.handle(agent_domain.Messages.StartupComplete())
     # asyncio.create_task(every(2, lambda : print("Ping")))
-    asyncio.create_task(aevery(3, heartbeat_task))
-    yield
-    message_bus.handle(agent_domain.Messages.ShutdownStarted())
-    await rxg_mqtt_client.stop()
-    await network_control.stop()
-    wifi_control.shutdown()
-    # Clean up the ML models and release the resources
-    # ml_models.clear()
+    heartbeat_task_handle = asyncio.create_task(aevery(3, heartbeat_task))
+    
+    try:
+        yield
+    finally:
+        try:
+            # Wrap entire shutdown in a timeout to prevent hanging
+            async def shutdown_sequence():
+                logger.info("Starting application shutdown...")
+                message_bus.handle(agent_domain.Messages.ShutdownStarted())
+                
+                # Cancel background tasks first
+                logger.info("Cancelling background tasks...")
+                heartbeat_task_handle.cancel()
+                try:
+                    await heartbeat_task_handle
+                except asyncio.CancelledError:
+                    pass
+                
+                # Shutdown components with timeout and error handling
+                shutdown_tasks = [
+                    ("RXG MQTT Client", rxg_mqtt_client.stop()),
+                    ("Network Control Manager", network_control.stop()),
+                ]
+                
+                for component_name, shutdown_coro in shutdown_tasks:
+                    try:
+                        logger.info(f"Shutting down {component_name}...")
+                        await asyncio.wait_for(shutdown_coro, timeout=10.0)
+                        logger.info(f"{component_name} shutdown completed")
+                    except asyncio.TimeoutError:
+                        logger.warning(f"Timeout waiting for {component_name} to shutdown")
+                    except Exception as e:
+                        logger.error(f"Error shutting down {component_name}: {e}")
+                
+                # Shutdown synchronous components
+                try:
+                    logger.info("Shutting down WiFi Control...")
+                    wifi_control.shutdown()
+                    logger.info("WiFi Control shutdown completed")
+                except Exception as e:
+                    logger.error(f"Error shutting down WiFi Control: {e}")
+                    
+                # Clean up other components if they have cleanup methods
+                for component_name, component in [
+                    ("Tasker", tasker),
+                    ("Supplicant", supplicant),
+                ]:
+                    if hasattr(component, 'shutdown'):
+                        try:
+                            logger.info(f"Shutting down {component_name}...")
+                            component.shutdown()
+                            logger.info(f"{component_name} shutdown completed")
+                        except Exception as e:
+                            logger.error(f"Error shutting down {component_name}: {e}")
+                    elif hasattr(component, 'cleanup'):
+                        try:
+                            logger.info(f"Cleaning up {component_name}...")
+                            cleanup_result = component.cleanup()
+                            if asyncio.iscoroutine(cleanup_result):
+                                await asyncio.wait_for(cleanup_result, timeout=5.0)
+                            logger.info(f"{component_name} cleanup completed")
+                        except Exception as e:
+                            logger.error(f"Error cleaning up {component_name}: {e}")
+                
+                logger.info("Application shutdown completed")
+            
+            # Give the entire shutdown process a maximum of 30 seconds
+            await asyncio.wait_for(shutdown_sequence(), timeout=30.0)
+            
+        except asyncio.TimeoutError:
+            logger.error("Shutdown sequence timed out after 30 seconds. Forcing exit.")
+        except Exception as e:
+            logger.error(f"Unexpected error during shutdown: {e}")
+        finally:
+            logger.info("Shutdown process finished")
 
+
+# Global shutdown event for signal handling
+shutdown_event = asyncio.Event()
+
+def signal_handler(signum, _frame):
+    """Handle SIGINT and SIGTERM for graceful shutdown"""
+    logger.info(f"Received signal {signum}. Initiating graceful shutdown...")
+    shutdown_event.set()
+
+# Register signal handlers
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
 
 app = FastAPI(lifespan=lifespan)
 
