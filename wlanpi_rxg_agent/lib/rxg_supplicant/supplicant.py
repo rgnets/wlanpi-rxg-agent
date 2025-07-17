@@ -5,16 +5,16 @@ import os
 from enum import Enum
 from typing import Literal, Optional
 
-import lib.domain as agent_domain
-import lib.rxg_supplicant.domain as supplicant_domain
-from api_client import ApiClient
-from busses import command_bus, message_bus
-from certificate_tool import CertificateTool
-from constants import CONFIG_DIR
-from lib.configuration.agent_config_file import AgentConfigFile
-from models.exceptions import RXGAgentException
+import wlanpi_rxg_agent.lib.domain as agent_domain
+import wlanpi_rxg_agent.lib.rxg_supplicant.domain as supplicant_domain
+from wlanpi_rxg_agent.api_client import ApiClient
+from wlanpi_rxg_agent.busses import command_bus, message_bus
+from wlanpi_rxg_agent.certificate_tool import CertificateTool
+from wlanpi_rxg_agent.constants import CONFIG_DIR
+from wlanpi_rxg_agent.lib.configuration.agent_config_file import AgentConfigFile
+from wlanpi_rxg_agent.models.exceptions import RXGAgentException
 from requests import ConnectTimeout, ReadTimeout
-from structures import FlatResponse
+from wlanpi_rxg_agent.structures import FlatResponse
 
 import wlanpi_rxg_agent.utils as utils
 

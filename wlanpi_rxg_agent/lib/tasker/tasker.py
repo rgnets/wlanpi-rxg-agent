@@ -4,13 +4,13 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any, Generic, TypeVar, Union, Callable
 
-import lib.domain as agent_domain
+import wlanpi_rxg_agent.lib.domain as agent_domain
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from busses import command_bus, message_bus
-from lib.agent_actions import domain as actions_domain
-from lib.tasker.one_shot_task import OneShotTask
-from lib.tasker.repeating_task import RepeatingTask
-from lib.wifi_control import domain as wifi_domain
+from wlanpi_rxg_agent.busses import command_bus, message_bus
+from wlanpi_rxg_agent.lib.agent_actions import domain as actions_domain
+from wlanpi_rxg_agent.lib.tasker.one_shot_task import OneShotTask
+from wlanpi_rxg_agent.lib.tasker.repeating_task import RepeatingTask
+from wlanpi_rxg_agent.lib.wifi_control import domain as wifi_domain
 from pydantic import BaseModel, ConfigDict, Field
 
 TaskDefDataType = TypeVar("TaskDefDataType")

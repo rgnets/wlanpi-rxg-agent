@@ -5,16 +5,17 @@ import string
 import typing as t
 from json import JSONDecodeError
 
-import lib.agent_actions.domain as actions_domain
-import lib.domain as agent_domain
-import lib.rxg_supplicant.domain as supplicant_domain
-import utils
-from api_client import ApiClient
-from busses import command_bus, message_bus
-from core_client import CoreClient
-from kismet_control import KismetControl
-from lib.configuration.bootloader_config_file import BootloaderConfigFile
-from lib.sip_control.sip_test_baresip import SipTestBaresip
+import wlanpi_rxg_agent.lib.agent_actions.domain as actions_domain
+import wlanpi_rxg_agent.lib.domain as agent_domain
+import wlanpi_rxg_agent.lib.rxg_supplicant.domain as supplicant_domain
+import wlanpi_rxg_agent.lib.wifi_control.domain as wifi_domain
+import wlanpi_rxg_agent.utils as utils
+from wlanpi_rxg_agent.api_client import ApiClient
+from wlanpi_rxg_agent.busses import command_bus, message_bus
+from wlanpi_rxg_agent.core_client import CoreClient
+from wlanpi_rxg_agent.kismet_control import KismetControl
+from wlanpi_rxg_agent.lib.configuration.bootloader_config_file import BootloaderConfigFile
+from wlanpi_rxg_agent.lib.sip_control.sip_test_baresip import SipTestBaresip
 
 
 class AgentActions:
@@ -123,8 +124,6 @@ class AgentActions:
         )
 
     async def configure_radios(self, event: actions_domain.Commands.ConfigureRadios):
-        import lib.wifi_control.domain as wifi_domain  # type: ignore
-
         self.logger.info(f"Configuring radios: New payload: {event}")
         for interface_name, config in event.interfaces.items():
             # if not interface_name in self.kismet_control.available_kismet_interfaces().keys():

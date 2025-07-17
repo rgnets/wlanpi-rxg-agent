@@ -16,23 +16,23 @@ from ssl import SSLCertVerificationError
 from typing import Any, Callable, Coroutine, Optional, Union
 
 import aiomqtt
-import lib.agent_actions.domain as actions_domain
-import lib.domain as agent_domain
-import lib.rxg_supplicant.domain as supplicant_domain
+import wlanpi_rxg_agent.lib.agent_actions.domain as actions_domain
+import wlanpi_rxg_agent.lib.domain as agent_domain
+import wlanpi_rxg_agent.lib.rxg_supplicant.domain as supplicant_domain
 import paho.mqtt.client as mqtt
-import utils
+import wlanpi_rxg_agent.utils as utils
 from aiomqtt import MqttCodeError, MqttError, TLSParameters
 from aiomqtt.types import PayloadType
-from api_client import ApiClient
-from busses import command_bus, message_bus
-from kismet_control import KismetControl
-from lib.configuration.agent_config_file import AgentConfigFile
-from lib.configuration.bootloader_config_file import BootloaderConfigFile
-from lib.configuration.bridge_config_file import BridgeConfigFile
-from lib.wifi_control.wifi_control_wpa_supplicant import WiFiControlWpaSupplicant
+from wlanpi_rxg_agent.api_client import ApiClient
+from wlanpi_rxg_agent.busses import command_bus, message_bus
+from wlanpi_rxg_agent.kismet_control import KismetControl
+from wlanpi_rxg_agent.lib.configuration.agent_config_file import AgentConfigFile
+from wlanpi_rxg_agent.lib.configuration.bootloader_config_file import BootloaderConfigFile
+from wlanpi_rxg_agent.lib.configuration.bridge_config_file import BridgeConfigFile
+from wlanpi_rxg_agent.lib.wifi_control.wifi_control_wpa_supplicant import WiFiControlWpaSupplicant
 from paho.mqtt.properties import Properties
-from structures import MQTTRestResponse, TLSConfig
-from utils import run_command_async
+from wlanpi_rxg_agent.structures import MQTTRestResponse, TLSConfig
+from wlanpi_rxg_agent.utils import run_command_async
 
 
 class RxgMqttClient:

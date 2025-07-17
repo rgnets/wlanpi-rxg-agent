@@ -309,19 +309,40 @@ class RoutingManager:
                     try:
                         attrs = dict(rule.get("attrs", []))
                         rule_args = {"table": table_id}
-                        
+
+                        # Handle all possible rule attributes for proper identification
                         if "FRA_SRC" in attrs:
                             rule_args["src"] = attrs["FRA_SRC"]
                         if "FRA_DST" in attrs:
                             rule_args["dst"] = attrs["FRA_DST"]
                         if "FRA_PRIORITY" in attrs:
                             rule_args["priority"] = attrs["FRA_PRIORITY"]
-                            
+                        if "FRA_FWMARK" in attrs:
+                            rule_args["fwmark"] = attrs["FRA_FWMARK"]
+                        if "FRA_FWMASK" in attrs:
+                            rule_args["fwmask"] = attrs["FRA_FWMASK"]
+                        if "FRA_IIFNAME" in attrs:
+                            rule_args["iif"] = attrs["FRA_IIFNAME"]
+                        if "FRA_OIFNAME" in attrs:
+                            rule_args["oif"] = attrs["FRA_OIFNAME"]
+
+                        # Log what we're trying to delete for debugging
+                        self.logger.debug(f"Attempting to remove rule: {rule_args}")
                         await ipr.rule("del", **rule_args)
-                        self.logger.debug(f"Removed rule for table {table_id}")
+                        self.logger.debug(f"Successfully removed rule for table {table_id}")
                         
                     except Exception as e:
-                        self.logger.debug(f"Error removing rule for table {table_id}: {e}")
+                        # Try alternative approach: delete by table and priority only
+                        try:
+                            if "FRA_PRIORITY" in attrs:
+                                alt_args = {"table": table_id, "priority": attrs["FRA_PRIORITY"]}
+                                self.logger.debug(f"Retry with priority-only rule deletion: {alt_args}")
+                                await ipr.rule("del", **alt_args)
+                                self.logger.debug(f"Successfully removed rule with priority-only approach for table {table_id}")
+                            else:
+                                self.logger.warning(f"Could not delete rule for table {table_id}: {e}")
+                        except Exception as e2:
+                            self.logger.warning(f"Failed to delete rule for table {table_id}: {e} (retry also failed: {e2})")
                 
                 # Get all tables in our range and clean routes
                 tables_with_routes = set()

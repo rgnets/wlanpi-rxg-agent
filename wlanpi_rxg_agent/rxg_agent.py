@@ -7,19 +7,19 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 
-import lib.domain as agent_domain
-import lib.rxg_supplicant.domain as supplicant_domain
+import wlanpi_rxg_agent.lib.domain as agent_domain
+import wlanpi_rxg_agent.lib.rxg_supplicant.domain as supplicant_domain
 
 # import wlanpi_rxg_agent.utils as utils
-from busses import message_bus
+from wlanpi_rxg_agent.busses import message_bus
 from fastapi import FastAPI
-from lib.agent_actions.actions import AgentActions
-from lib.configuration.bridge_config_file import BridgeConfigFile
-from lib.rxg_supplicant.supplicant import RxgSupplicant
-from lib.tasker.tasker import Tasker
-from lib.wifi_control.wifi_control_wpa_supplicant import WiFiControlWpaSupplicant
-from rxg_mqtt_client import RxgMqttClient
-from utils import aevery
+from wlanpi_rxg_agent.lib.agent_actions.actions import AgentActions
+from wlanpi_rxg_agent.lib.configuration.bridge_config_file import BridgeConfigFile
+from wlanpi_rxg_agent.lib.rxg_supplicant.supplicant import RxgSupplicant
+from wlanpi_rxg_agent.lib.tasker.tasker import Tasker
+from wlanpi_rxg_agent.lib.wifi_control.wifi_control_wpa_supplicant import WiFiControlWpaSupplicant
+from wlanpi_rxg_agent.rxg_mqtt_client import RxgMqttClient
+from wlanpi_rxg_agent.utils import aevery
 
 from wlanpi_rxg_agent.bridge_control import BridgeControl
 from wlanpi_rxg_agent.lib.network_control import NetworkControlManager
@@ -35,14 +35,15 @@ logger = logging.getLogger(__name__)
 logging.getLogger("wlanpi_rxg_agent.rxg_agent").setLevel(logging.INFO)
 logging.getLogger("rxg_agent").setLevel(logging.INFO)
 logging.getLogger("api_client").setLevel(logging.INFO)
-logging.getLogger("lib.event_bus._messagebus").setLevel(logging.INFO)
-logging.getLogger("lib.event_bus._commandbus").setLevel(logging.INFO)
-logging.getLogger("lib.rxg_supplicant.supplicant").setLevel(logging.INFO)
-logging.getLogger("lib.wifi_control.wifi_control_wpa_supplicant").setLevel(logging.DEBUG)
+logging.getLogger("apscheduler.scheduler").setLevel(logging.INFO)
+logging.getLogger("wlanpi_rxg_agent.lib.event_bus._messagebus").setLevel(logging.INFO)
+logging.getLogger("wlanpi_rxg_agent.lib.event_bus._commandbus").setLevel(logging.INFO)
+logging.getLogger("wlanpi_rxg_agent.lib.rxg_supplicant.supplicant").setLevel(logging.INFO)
+logging.getLogger("wlanpi_rxg_agent.lib.wifi_control.wifi_control_wpa_supplicant").setLevel(logging.DEBUG)
 logging.getLogger("rxg_mqtt_client").setLevel(logging.INFO)
-logging.getLogger("lib.sip_control.mdk_baresip").setLevel(logging.INFO)
+logging.getLogger("wlanpi_rxg_agent.lib.sip_control.mdk_baresip").setLevel(logging.INFO)
 # logging.getLogger("apscheduler.scheduler").setLevel(logging.INFO)
-logging.getLogger("lib.tasker.tasker").setLevel(logging.INFO)
+logging.getLogger("wlanpi_rxg_agent.lib.tasker.tasker").setLevel(logging.INFO)
 logging.getLogger("wlanpi_rxg_agent.lib.network_control.network_control_manager").setLevel(logging.DEBUG)
 
 
@@ -134,10 +135,10 @@ async def lifespan(app: FastAPI):
         # event_bus=event_bus,
     )
 
-    tasker = Tasker()
 
     # Wifi control currently has no dependencies
     wifi_control = WiFiControlWpaSupplicant()
+    tasker = Tasker()
     agent_actions = AgentActions()
     supplicant = RxgSupplicant()
     rxg_mqtt_client = RxgMqttClient(identifier=eth0_mac)

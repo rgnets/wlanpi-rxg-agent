@@ -2,8 +2,8 @@ import typing as t
 from dataclasses import dataclass
 from enum import Enum
 
-from lib import domain as agent_domain
-from structures import TLSConfig
+from wlanpi_rxg_agent.lib import domain as agent_domain
+from wlanpi_rxg_agent.structures import TLSConfig
 
 PREFIX = "RXG_SUPPLICANT_"
 

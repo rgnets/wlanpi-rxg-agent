@@ -1,9 +1,9 @@
 import logging
 
 import dbus
-import lib.domain as agent_domain
-import lib.rxg_supplicant.domain as supplicant_domain
-from busses import command_bus, message_bus
+import wlanpi_rxg_agent.lib.domain as agent_domain
+import wlanpi_rxg_agent.lib.rxg_supplicant.domain as supplicant_domain
+from wlanpi_rxg_agent.busses import command_bus, message_bus
 
 
 class BridgeControl:

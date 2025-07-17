@@ -6,7 +6,7 @@ import requests
 import urllib3
 from aiohttp import ClientResponse, ClientSession
 from requests import Response
-from structures import FlatResponse
+from wlanpi_rxg_agent.structures import FlatResponse
 
 from wlanpi_rxg_agent.utils import get_eth0_mac, get_interface_ip_addr
 
