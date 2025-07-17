@@ -1,10 +1,29 @@
 import logging
-try:
-    import wlanpi_rxg_agent.utils as utils
-    USE_COLOR = utils.supports_color()
-except ImportError:
-    # Fallback for when utils module has issues
-    USE_COLOR = True
+import os
+import sys
+
+def supports_color():
+    """
+    Returns True if the running system's terminal supports color, and False otherwise.
+    """
+    # Check for explicit override
+    if os.environ.get('FORCE_COLOR', '').lower() in ('1', 'true', 'yes'):
+        return True
+    if os.environ.get('NO_COLOR', '').lower() in ('1', 'true', 'yes'):
+        return False
+    
+    plat = sys.platform
+    supported_platform = plat != 'Pocket PC' and (plat != 'win32' or 'ANSICON' in os.environ)
+
+    # isatty is not always implemented, but also check for common development environments
+    is_a_tty = hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()
+    
+    # PyCharm and other IDEs often support color even when not a TTY
+    ide_support = any(env in os.environ for env in ['PYCHARM_HOSTED', 'VSCODE_PID', 'TERM_PROGRAM'])
+    
+    return supported_platform and (is_a_tty or ide_support)
+
+USE_COLOR = supports_color()
 
 
 # https://talyian.github.io/ansicolors/

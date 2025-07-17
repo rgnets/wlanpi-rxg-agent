@@ -203,20 +203,14 @@ class AgentActions:
                         )
 
                         try:
-
                             await wlan_if.connect(
                                 ssid=wlan_data.ssid, psk=wlan_data.psk
                             )
                             self.logger.info(
-                                f"Connection state of {interface_name} is complete. Renewing dhcp."
+                                f"Connection to {wlan_data.ssid} completed. DHCP and routing will be handled automatically by NetworkControlManager."
                             )
-                            await wlan_if.renew_dhcp()
-                            # self.logger.info(f"Waiting for dhcp to settle.")
-                            # await asyncio.sleep(5)
-                            self.logger.info(
-                                f"Adding default routes for {interface_name}."
-                            )
-                            await wlan_if.add_default_routes()
+                            # Note: DHCP renewal and route configuration are now handled automatically 
+                            # by NetworkControlManager when it detects the interface IP change via netlink events
                         except TimeoutError:
                             self.logger.error(
                                 f"Connection to {wlan_data.ssid} timed out."

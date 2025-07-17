@@ -23,16 +23,14 @@ from utils import aevery
 from wlanpi_rxg_agent.bridge_control import BridgeControl
 from wlanpi_rxg_agent.lib.network_control import NetworkControlManager
 
-from lib.logging_utils import create_console_handler
+from lib.logging_utils import setup_logging
 
-# create console handler with a higher log level
-ch = create_console_handler(logging.DEBUG)
-
+# Setup logging with custom formatter
+setup_logging(level=logging.DEBUG)
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(encoding="utf-8", level=logging.DEBUG, handlers=[ch])
-logging.getLogger("requests").setLevel(logging.WARNING)
-logging.getLogger("urllib3").setLevel(logging.WARNING)
+
+# Set specific log levels for various components
 logging.getLogger("wlanpi_rxg_agent.rxg_agent").setLevel(logging.INFO)
 logging.getLogger("rxg_agent").setLevel(logging.INFO)
 logging.getLogger("api_client").setLevel(logging.INFO)
