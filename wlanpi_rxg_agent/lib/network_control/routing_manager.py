@@ -1,9 +1,9 @@
 import asyncio
 import logging
 from ipaddress import IPv4Address, IPv4Interface, IPv4Network
-from typing import Dict, Optional, Set
+from typing import Dict, List, Optional, Set
 
-from pyroute2 import AsyncIPRoute, NetlinkError
+from pyroute2 import AsyncIPRoute, NetlinkError, NDB
 
 from .domain import InterfaceInfo
 
@@ -18,6 +18,7 @@ class RoutingManager:
         self.base_table_id = base_table_id
         self.interface_tables: Dict[str, int] = {}
         self.configured_interfaces: Set[str] = set()
+        self.main_table_routes: Dict[str, List[dict]] = {}
         self.lock = asyncio.Lock()
         self._startup_complete = False
 
@@ -284,6 +285,40 @@ class RoutingManager:
                     self.logger.debug(
                         f"Default route added successfully for {interface.name}"
                     )
+
+                    # 2a. Also add gateway to main table with lower metric for poorly designed programs
+                    try:
+                        main_metric = await self._get_main_table_metric()
+                        self.logger.debug(f"Attempting to add main table route: dst: default, gateway:{str(gateway)}, metric: {main_metric}, oif: {interface.index}, table: {254} ")
+                        await ipr.route(
+                            "add",
+                            dst="default",
+                            gateway=str(gateway),
+                            oif=interface.index,
+                            table=254,  # Main table
+                            metric=main_metric,
+                        )
+
+                        # Track this route for cleanup
+                        if interface.name not in self.main_table_routes:
+                            self.main_table_routes[interface.name] = []
+
+                        main_route_info = {
+                            "dst": "default",
+                            "gateway": str(gateway),
+                            "oif": interface.index,
+                            "metric": main_metric,
+                        }
+                        self.main_table_routes[interface.name].append(main_route_info)
+
+                        self.logger.info(
+                            f"Added gateway {gateway} to main table for {interface.name} with metric {main_metric}"
+                        )
+                    except Exception as e:
+                        self.logger.warning(
+                            f"Failed to add gateway to main table for {interface.name}: {e}"
+                        )
+                        # Continue setup even if main table route fails
                 else:
                     self.logger.warning(
                         f"No gateway provided for {interface.name}, skipping default route"
@@ -468,10 +503,86 @@ class RoutingManager:
             self.logger.error(f"Error during cleanup of managed tables: {e}")
             return False
 
+    async def _remove_main_table_routes(self, interface_name: str) -> bool:
+        """Remove main table routes for an interface
+
+        NOTE: This only removes default gateway routes and host routes we explicitly added.
+        We do NOT remove subnet routes (e.g., 192.168.6.0/24 dev wlan1 proto kernel)
+        as those are managed by system hooks and kernel protocols.
+        If we later decide to take full control, we would need to modify this.
+        """
+        try:
+            routes_to_remove = self.main_table_routes.get(interface_name, [])
+            if not routes_to_remove:
+                return True
+
+            async with AsyncIPRoute() as ipr:
+                for route_info in routes_to_remove:
+                    try:
+                        # Only remove routes we explicitly added (default gateways and host routes)
+                        # Skip subnet routes which are managed by kernel/system hooks
+                        dst = route_info.get("dst", "")
+                        if not (dst == "default" or dst.endswith("/32")):
+                            self.logger.debug(
+                                f"Skipping subnet route for {interface_name}: {route_info}"
+                            )
+                            continue
+
+                        # Remove the main table route (gateway or host route)
+                        delete_args = {
+                            "table": 254,  # Main table
+                            "dst": route_info["dst"],
+                            "oif": route_info["oif"],
+                        }
+
+                        # Add gateway if specified (for default routes)
+                        if "gateway" in route_info:
+                            delete_args["gateway"] = route_info["gateway"]
+
+                        # Add metric if it was specified
+                        if "metric" in route_info:
+                            delete_args["metric"] = route_info["metric"]
+
+                        await ipr.route("del", **delete_args)
+                        self.logger.debug(
+                            f"Removed main table route for {interface_name}: {delete_args}"
+                        )
+                    except NetlinkError as e:
+                        # Route might not exist, which is fine for removal
+                        if "No such file or directory" in str(
+                            e
+                        ) or "No such process" in str(e):
+                            self.logger.debug(
+                                f"Main table route for {interface_name} was already removed"
+                            )
+                        else:
+                            self.logger.warning(
+                                f"Error removing main table route for {interface_name}: {e}"
+                            )
+                    except Exception as e:
+                        self.logger.warning(
+                            f"Error removing main table route for {interface_name}: {e}"
+                        )
+
+            # Clear tracking for this interface
+            self.main_table_routes.pop(interface_name, None)
+            self.logger.info(f"Cleaned up main table routes for {interface_name}")
+            return True
+
+        except Exception as e:
+            self.logger.error(
+                f"Error cleaning up main table routes for {interface_name}: {e}"
+            )
+            return False
+
     async def _remove_interface_routing(
         self, interface_name: str, table_id: int
     ) -> bool:
         """Remove routing rules and routes for an interface"""
+        # First clean up main table routes (only gateways and host routes we added)
+        await self._remove_main_table_routes(interface_name)
+
+        # Then clean up dedicated table
         return await self._cleanup_table_and_rules(interface_name, table_id)
 
     async def cleanup(self):
@@ -488,9 +599,14 @@ class RoutingManager:
                 for interface_name, table_id in list(self.interface_tables.items()):
                     await self._cleanup_table_and_rules(interface_name, table_id)
 
+                # Clean up any remaining main table routes
+                for interface_name in list(self.main_table_routes.keys()):
+                    await self._remove_main_table_routes(interface_name)
+
                 # Clear our tracking data
                 self.configured_interfaces.clear()
                 self.interface_tables.clear()
+                self.main_table_routes.clear()
 
                 self.logger.info("Routing cleanup completed")
 
@@ -522,7 +638,35 @@ class RoutingManager:
             self.logger.error(f"Failed to resolve {host}: {e}")
             return None
 
-    async def add_host_route(self, host_ip: str, interface_name: str, table_id: Optional[int] = None) -> bool:
+    async def _get_main_table_metric(self) -> int:
+        """Get an appropriate metric for main table routes (lower priority than existing)"""
+        try:
+            min_metric = 1024  # Default high metric
+            async with AsyncIPRoute() as ipr:
+                # Check existing default routes in main table (254)
+                async for route in await ipr.route("dump", table=254):
+                    attrs = dict(route.get("attrs", []))
+                    dst = attrs.get("RTA_DST", "default")
+                    if dst == "default" or not dst:  # Default route
+                        metric = attrs.get("RTA_PRIORITY", 0)
+                        if metric and metric < min_metric:
+                            min_metric = metric
+
+                # Return a metric that's 100 higher than the lowest existing metric
+                # This ensures our routes have lower priority
+                return min_metric + 100
+
+        except Exception as e:
+            self.logger.warning(f"Error determining main table metric: {e}")
+            return 1200  # Safe fallback value
+
+    async def add_host_route(
+        self,
+        host_ip: str,
+        interface_name: str,
+        table_id: Optional[int] = None,
+        src_ip: Optional[str] = None,
+    ) -> bool:
         """Add a /32 route to a specific host via an interface"""
         async with self.lock:
             try:
@@ -536,28 +680,49 @@ class RoutingManager:
                     )
                     return False
 
-                # Get interface index
+                # Get interface index and IP if src_ip not provided
                 interface_index = None
+                interface_ip = None
                 async with AsyncIPRoute() as ipr:
-                    # Find interface index
+                    # Find interface index and get IP address if needed
                     async for link in await ipr.link("dump"):
                         attrs = dict(link.get("attrs", []))
                         if attrs.get("IFLA_IFNAME") == interface_name:
                             interface_index = link["index"]
                             break
 
+                    # Get interface IP address if src_ip not provided
+                    if src_ip is None:
+                        async for addr in await ipr.addr("dump", index=interface_index):
+                            attrs = dict(addr.get("attrs", []))
+                            if "IFA_ADDRESS" in attrs:
+                                interface_ip = attrs["IFA_ADDRESS"]
+                                break
+
                 if interface_index is None:
                     self.logger.error(f"Interface {interface_name} not found")
                     return False
 
-                # Add host route (/32) to the interface's routing table
-                async with AsyncIPRoute() as ipr:
-                    await ipr.route(
-                        "add", dst=f"{host_ip}/32", oif=interface_index, table=table_id
-                    )
+                # Use provided src_ip or detected interface IP
+                source_ip = src_ip or interface_ip
 
+                # Add host route (/32) to the interface's routing table
+                route_args = {
+                    "dst": f"{host_ip}/32",
+                    "oif": interface_index,
+                    "table": table_id,
+                }
+
+                # Add source IP if specified or detected
+                if source_ip:
+                    route_args["src"] = source_ip
+
+                async with AsyncIPRoute() as ipr:
+                    await ipr.route("add", **route_args)
+
+                src_info = f" src={source_ip}" if source_ip else ""
                 self.logger.debug(
-                    f"Added host route: {host_ip}/32 via {interface_name} (table {table_id})"
+                    f"Added host route: {host_ip}/32 via {interface_name} (table {table_id}){src_info}"
                 )
                 return True
 
@@ -567,7 +732,9 @@ class RoutingManager:
                 )
                 return False
 
-    async def remove_host_route(self, host_ip: str, interface_name: str, table_id: Optional[int] = None) -> bool:
+    async def remove_host_route(
+        self, host_ip: str, interface_name: str, table_id: Optional[int] = None
+    ) -> bool:
         """Remove a /32 route to a specific host from an interface"""
         async with self.lock:
             try:

@@ -172,3 +172,8 @@ Integration tests require:
 - System permissions for network configuration (root or CAP_NET_ADMIN)
 - Access to netlink, DHCP, and wireless subsystems
 - Wireless interfaces (wlan0, wlan1, etc.) for testing
+
+## Memories
+
+### Testing Guidance
+- Any major, reusable integration tests should be added to our tests/integration directory so we can use them later.

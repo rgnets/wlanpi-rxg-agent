@@ -419,7 +419,9 @@ class AgentActions:
                         )
                         route_main_result = await command_bus.handle(
                             network_control_domain.Commands.AddHostRoute(
-                                host=event.sip_account.host, interface_name=event.interface, table_id=254
+                                host=event.sip_account.host,
+                                interface_name=event.interface,
+                                table_id=254,
                             )
                         )
 
@@ -436,7 +438,8 @@ class AgentActions:
 
                         route_result = await command_bus.handle(
                             network_control_domain.Commands.AddHostRoute(
-                                host=event.sip_account.host, interface_name=event.interface
+                                host=event.sip_account.host,
+                                interface_name=event.interface,
                             )
                         )
 
@@ -494,7 +497,9 @@ class AgentActions:
 
                     cleanup_main_result = await command_bus.handle(
                         network_control_domain.Commands.RemoveHostRoute(
-                            host=event.sip_account.host, interface_name=event.interface, table_id=254
+                            host=event.sip_account.host,
+                            interface_name=event.interface,
+                            table_id=254,
                         )
                     )
 

@@ -8,6 +8,7 @@ This directory contains integration tests designed to run on actual Raspberry Pi
 - **`test_simple_connectivity_loss.py`**: Tests WiFi connectivity loss detection and cleanup
 - **`test_network_control_hardware.py`**: Tests hardware interaction with real network interfaces
 - **`test_connectivity_loss_simple.py`**: Standalone test script (can run directly with Python)
+- **`test_enhanced_routing.py`**: Tests enhanced routing features (host routes with source IP, main table gateway management, cleanup)
 
 ### Test Markers
 - `@pytest.mark.integration`: General integration tests
@@ -36,6 +37,9 @@ python -m pytest wlanpi_rxg_agent/tests/integration/test_simple_connectivity_los
 # Run standalone test
 python wlanpi_rxg_agent/tests/integration/test_connectivity_loss_simple.py
 
+# Run enhanced routing tests (requires root/sudo for routing table manipulation)
+sudo -E env PATH=$PATH python -m pytest wlanpi_rxg_agent/tests/integration/test_enhanced_routing.py -v
+
 # Skip hardware-dependent tests
 pytest -m "integration and not hardware"
 
@@ -62,6 +66,15 @@ ssh wlanpi@dev-wlanpi2 "cd /tmp/pycharm_project_577 && source ~/.virtualenvs/wla
 ✅ **Netlink Monitoring**: Verifies real-time netlink event monitoring  
 ✅ **System Requirements**: Checks for required system paths and commands  
 ✅ **Extended Monitoring**: Long-running tests for manual interface manipulation  
+
+### Enhanced Routing (`test_enhanced_routing.py`)
+✅ **Host Route Source IP**: Tests automatic source IP detection and explicit source IP specification  
+✅ **Main Table Gateway**: Verifies default gateway addition to main table with appropriate metrics  
+✅ **Metric Assignment**: Tests smart metric calculation to ensure lower priority than existing routes  
+✅ **Selective Cleanup**: Confirms only our managed routes are removed, preserving system routes  
+✅ **Main Table Host Routes**: Tests SIP test scenario with host routes in main table  
+✅ **Comprehensive Cleanup**: Validates full cleanup across dedicated and main routing tables  
+✅ **Full Lifecycle**: End-to-end test of setup → route addition → cleanup workflow  
 
 ## Test Requirements
 
