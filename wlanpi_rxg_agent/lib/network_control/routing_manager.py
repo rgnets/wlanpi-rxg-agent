@@ -290,14 +290,9 @@ class RoutingManager:
                     try:
                         main_metric = await self._get_main_table_metric()
                         self.logger.debug(f"Attempting to add main table route: dst: default, gateway:{str(gateway)}, metric: {main_metric}, oif: {interface.index}, table: {254} ")
-                        await ipr.route(
-                            "add",
-                            dst="default",
-                            gateway=str(gateway),
-                            oif=interface.index,
-                            table=254,  # Main table
-                            metric=main_metric,
-                        )
+                        
+                        # Use NDB for main table default route since AsyncIPRoute has issues with multiple default routes
+                        await self._add_main_table_default_route_ndb(gateway, interface, main_metric)
 
                         # Track this route for cleanup
                         if interface.name not in self.main_table_routes:
@@ -637,6 +632,34 @@ class RoutingManager:
         except socket.gaierror as e:
             self.logger.error(f"Failed to resolve {host}: {e}")
             return None
+
+    async def _add_main_table_default_route_ndb(self, gateway: IPv4Address, interface: InterfaceInfo, metric: int):
+        """Add a default route to main table using NDB (works around AsyncIPRoute limitations)"""
+        import concurrent.futures
+        
+        def add_route_with_ndb():
+            try:
+                with NDB() as ndb:
+                    main_route = ndb.routes.create(
+                        dst="default",
+                        gateway=str(gateway),
+                        oif=interface.index,
+                        table=254,  # Main table
+                        priority=metric
+                    )
+                    main_route.commit()
+                    return True
+            except Exception as e:
+                self.logger.error(f"NDB route addition failed: {e}")
+                return False
+        
+        # Run in thread pool to avoid asyncio conflicts
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future = executor.submit(add_route_with_ndb)
+            success = future.result()
+            
+        if not success:
+            raise Exception("Failed to add main table default route via NDB")
 
     async def _get_main_table_metric(self) -> int:
         """Get an appropriate metric for main table routes (lower priority than existing)"""

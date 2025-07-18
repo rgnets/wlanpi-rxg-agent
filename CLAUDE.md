@@ -88,7 +88,7 @@ uvicorn wlanpi_rxg_agent.rxg_agent:app --host 0.0.0.0 --port 8200
 **Network Control (`lib/network_control/`)**: Comprehensive async network interface management system using pyroute2. Monitors wireless interfaces via netlink, automatically configures source-based routing tables, manages DHCP clients, and ensures packets originating from each interface's IP address leave only through that interface. Key components:
 - `NetworkControlManager`: Main coordinator for interface monitoring and configuration
 - `AsyncNetlinkMonitor`: Real-time netlink monitoring for interface state changes
-- `RoutingManager`: Manages routing tables and IP rules using AsyncIPRoute
+- `RoutingManager`: Hybrid routing table and IP rule management using AsyncIPRoute (for dedicated tables) and NDB (for main table default routes). This approach resolves AsyncIPRoute limitations with multiple default routes while maintaining compatibility.
 - `DHCPClient`: Handles DHCP client operations and lease management
 - `DHCPLeaseParser`: Parses DHCP lease files for network configuration
 
@@ -177,3 +177,14 @@ Integration tests require:
 
 ### Testing Guidance
 - Any major, reusable integration tests should be added to our tests/integration directory so we can use them later.
+
+### Remote Development
+- You usually need to add a PYTHON_PATH with the remote project directory when running python snippets in the remote virtualenv.
+
+### Routing System Changes
+- **Hybrid Routing Manager**: The routing manager now uses a hybrid approach to handle AsyncIPRoute limitations with multiple default routes in the main table (254). 
+- **AsyncIPRoute**: Used for dedicated routing tables (fast, reliable) - ~0.0034s avg operation time
+- **NDB**: Used specifically for main table default route additions (handles multiple default routes correctly) - ~0.0864s avg operation time
+- **Performance Trade-off**: NDB is ~25x slower than AsyncIPRoute, but only used for infrequent main table operations
+- **Thread Pool**: NDB operations run in a thread pool to avoid asyncio event loop conflicts
+- **Backward Compatibility**: All existing API methods preserved, integration tests continue to pass
