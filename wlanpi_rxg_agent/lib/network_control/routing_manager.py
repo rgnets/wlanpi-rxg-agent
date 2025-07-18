@@ -729,6 +729,37 @@ class RoutingManager:
                 # Use provided src_ip or detected interface IP
                 source_ip = src_ip or interface_ip
 
+                # Get gateway from DHCP lease information for this interface
+                gateway_ip = None
+                try:
+                    from .dhcp_lease_parser import DHCPLeaseParser
+                    lease_parser = DHCPLeaseParser(interface_name)
+                    lease = lease_parser.latest_lease()
+                    
+                    if lease and "routers" in lease.options:
+                        # Extract the first router from the DHCP lease
+                        routers_data = lease.options["routers"].data
+                        gateway_ip = routers_data.split()[0]  # Take first router IP
+                        self.logger.debug(f"Found gateway {gateway_ip} for {interface_name} from DHCP lease")
+                    else:
+                        self.logger.debug(f"No DHCP lease or routers option found for {interface_name}")
+                        
+                except Exception as e:
+                    self.logger.debug(f"Could not get gateway from DHCP lease for {interface_name}: {e}")
+
+                # Fallback: Get gateway from the interface's routing table if DHCP failed
+                if not gateway_ip:
+                    async with AsyncIPRoute() as ipr:
+                        # Look for default route in the interface's table to get gateway
+                        async for route in await ipr.route("dump", table=table_id):
+                            attrs = dict(route.get("attrs", []))
+                            dst = attrs.get("RTA_DST", "default")
+                            if dst == "default" or not dst:  # Default route
+                                gateway_ip = attrs.get("RTA_GATEWAY")
+                                if gateway_ip:
+                                    self.logger.debug(f"Found gateway {gateway_ip} for {interface_name} in table {table_id} (fallback)")
+                                    break
+
                 # Add host route (/32) to the interface's routing table
                 route_args = {
                     "dst": f"{host_ip}/32",
@@ -740,12 +771,18 @@ class RoutingManager:
                 if source_ip:
                     route_args["src"] = source_ip
 
+                # Add gateway if found
+                if gateway_ip:
+                    route_args["gateway"] = gateway_ip
+                    self.logger.debug(f"Using gateway {gateway_ip} for host route to {host_ip}")
+
                 async with AsyncIPRoute() as ipr:
                     await ipr.route("add", **route_args)
 
                 src_info = f" src={source_ip}" if source_ip else ""
+                gateway_info = f" gateway={gateway_ip}" if gateway_ip else ""
                 self.logger.debug(
-                    f"Added host route: {host_ip}/32 via {interface_name} (table {table_id}){src_info}"
+                    f"Added host route: {host_ip}/32 via {interface_name} (table {table_id}){src_info}{gateway_info}"
                 )
                 return True
 
