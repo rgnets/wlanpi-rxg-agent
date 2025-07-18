@@ -5,6 +5,7 @@ from typing import Any, Optional
 import requests
 from aiohttp import ClientSession
 from requests import JSONDecodeError
+
 from wlanpi_rxg_agent.structures import FlatResponse
 
 
@@ -92,7 +93,9 @@ class CoreClient:
                     try:
                         response.get_encoding()
                     except RuntimeError as e:
-                        self.logger.error(f"Unable to determine encoding: {e}", exc_info=True)
+                        self.logger.error(
+                            f"Unable to determine encoding: {e}", exc_info=True
+                        )
                 return FlatResponse(
                     headers=response.headers,
                     url=str(response.url),

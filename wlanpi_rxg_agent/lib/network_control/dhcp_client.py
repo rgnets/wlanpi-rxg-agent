@@ -1,10 +1,11 @@
 import asyncio
 import logging
 import subprocess
-from typing import Optional
 from pathlib import Path
-from .domain import InterfaceInfo
+from typing import Optional
+
 from .dhcp_lease_parser import DHCPLeaseParser
+from .domain import InterfaceInfo
 
 
 class DHCPClient:

@@ -5,18 +5,18 @@ import os
 from enum import Enum
 from typing import Literal, Optional
 
+from requests import ConnectTimeout, ReadTimeout
+
 import wlanpi_rxg_agent.lib.domain as agent_domain
 import wlanpi_rxg_agent.lib.rxg_supplicant.domain as supplicant_domain
+import wlanpi_rxg_agent.utils as utils
 from wlanpi_rxg_agent.api_client import ApiClient
 from wlanpi_rxg_agent.busses import command_bus, message_bus
 from wlanpi_rxg_agent.certificate_tool import CertificateTool
 from wlanpi_rxg_agent.constants import CONFIG_DIR
 from wlanpi_rxg_agent.lib.configuration.agent_config_file import AgentConfigFile
 from wlanpi_rxg_agent.models.exceptions import RXGAgentException
-from requests import ConnectTimeout, ReadTimeout
 from wlanpi_rxg_agent.structures import FlatResponse
-
-import wlanpi_rxg_agent.utils as utils
 
 
 class RxgSupplicantState(Enum):
@@ -224,7 +224,12 @@ class RxgSupplicant:
         try:
             resp = await api_client.check_device(ip)
 
-        except (ConnectTimeout, ConnectionError, ReadTimeout, asyncio.TimeoutError) as e:
+        except (
+            ConnectTimeout,
+            ConnectionError,
+            ReadTimeout,
+            asyncio.TimeoutError,
+        ) as e:
             self.logger.warning(f"Testing of address {ip} failed: {e}")
             return False
 
@@ -243,9 +248,13 @@ class RxgSupplicant:
         if self.override_server and await self.test_address_for_rxg(
             self.override_server
         ):
-            self.logger.info(f"Override server {self.override_server} is valid. Using it.")
+            self.logger.info(
+                f"Override server {self.override_server} is valid. Using it."
+            )
             return self.override_server
-        self.logger.debug("No valid override server configured. Checking default routes. Starting with first gateway on eth0.")
+        self.logger.debug(
+            "No valid override server configured. Checking default routes. Starting with first gateway on eth0."
+        )
         first_gateway = utils.get_default_gateways().get("eth0", None)
 
         if not first_gateway:
@@ -256,7 +265,9 @@ class RxgSupplicant:
             self.logger.debug(f"First gateway on eth0 is a valid rXg: {first_gateway}")
             return first_gateway
 
-        self.logger.debug("First gateway on eth0 is not a valid rXg. Looking for a valid rXg on a route to google.com.")
+        self.logger.debug(
+            "First gateway on eth0 is not a valid rXg. Looking for a valid rXg on a route to google.com."
+        )
         raw_hop_data: list[dict] = utils.trace_route("google.com")["hops"]
         filtered_hops: list[dict] = list(
             filter(lambda e: len(e["probes"]), raw_hop_data)
@@ -274,7 +285,9 @@ class RxgSupplicant:
                 self.logger.debug(f"Address {address} is a valid rXg")
                 return address
 
-        self.logger.debug("No valid rXg found. Checking for configured fallback server.")
+        self.logger.debug(
+            "No valid rXg found. Checking for configured fallback server."
+        )
         # Todo: insert fallback here
         if self.fallback_server and await self.test_address_for_rxg(
             self.fallback_server
@@ -444,6 +457,3 @@ if __name__ == "__main__":
         print(res)
 
     asyncio.get_event_loop().run_until_complete(main())
-
-
-

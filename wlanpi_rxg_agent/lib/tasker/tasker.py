@@ -2,16 +2,17 @@ import asyncio
 import functools
 import logging
 from datetime import datetime, timedelta
-from typing import Any, Generic, TypeVar, Union, Callable
+from typing import Any, Callable, Generic, TypeVar, Union
+
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from pydantic import BaseModel, ConfigDict, Field
 
 import wlanpi_rxg_agent.lib.domain as agent_domain
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from wlanpi_rxg_agent.busses import command_bus, message_bus
 from wlanpi_rxg_agent.lib.agent_actions import domain as actions_domain
 from wlanpi_rxg_agent.lib.tasker.one_shot_task import OneShotTask
 from wlanpi_rxg_agent.lib.tasker.repeating_task import RepeatingTask
 from wlanpi_rxg_agent.lib.wifi_control import domain as wifi_domain
-from pydantic import BaseModel, ConfigDict, Field
 
 TaskDefDataType = TypeVar("TaskDefDataType")
 
@@ -26,18 +27,10 @@ class TaskDefinition(BaseModel, Generic[TaskDefDataType]):
 class Tasker:
 
     class ScheduledTasks:
-        ping_targets: dict[
-            str, TaskDefinition[actions_domain.Data.PingTarget]
-        ] = {}
-        traceroutes: dict[
-            str, TaskDefinition[actions_domain.Data.Traceroute]
-        ] = {}
-        speed_tests: dict[
-            str, TaskDefinition[actions_domain.Data.SpeedTest]
-        ] = {}
-        sip_tests: dict[
-            str, TaskDefinition[actions_domain.Data.SipTest]
-        ] = {}
+        ping_targets: dict[str, TaskDefinition[actions_domain.Data.PingTarget]] = {}
+        traceroutes: dict[str, TaskDefinition[actions_domain.Data.Traceroute]] = {}
+        speed_tests: dict[str, TaskDefinition[actions_domain.Data.SpeedTest]] = {}
+        sip_tests: dict[str, TaskDefinition[actions_domain.Data.SipTest]] = {}
         misc_tasks: dict[str, TaskDefinition[Any]] = {}
 
     def __init__(self):
@@ -49,7 +42,6 @@ class Tasker:
         self.loop = asyncio.get_event_loop()
         self.scheduler = AsyncIOScheduler(loop=self.loop, misfire_grace_time=30)
         self.scheduler.start()
-
 
         self.scheduled_tasks: Tasker.ScheduledTasks = Tasker.ScheduledTasks()
 
@@ -109,8 +101,12 @@ class Tasker:
         self.logger.debug(
             f"Scheduled TraceRoutes: {self.scheduled_tasks.traceroutes.items()}"
         )
-        self.logger.debug(f"Scheduled SpeedTests: {self.scheduled_tasks.speed_tests.items()}")
-        self.logger.debug(f"Scheduled SipTests: {self.scheduled_tasks.sip_tests.items()}")
+        self.logger.debug(
+            f"Scheduled SpeedTests: {self.scheduled_tasks.speed_tests.items()}"
+        )
+        self.logger.debug(
+            f"Scheduled SipTests: {self.scheduled_tasks.sip_tests.items()}"
+        )
         self.logger.debug(f"Scheduled misc: {self.scheduled_tasks.misc_tasks.items()}")
         self.logger.debug(f"Raw Scheduler jobs: {self.scheduler.get_jobs()}")
 
@@ -157,20 +153,22 @@ class Tasker:
 
     # This is a decorator function, so it doesn't follow the type rules quite how MyPy expects
     def configure_test(  # type: ignore
-            task_type_name:str, task_schedule_name:str, event_type = actions_domain.Commands.ConfigureSipTests,
+        task_type_name: str,
+        task_schedule_name: str,
+        event_type=actions_domain.Commands.ConfigureSipTests,
     ):
-        def decorator_configure_test(func:Callable):
+        def decorator_configure_test(func: Callable):
             @functools.wraps(func)
             def wrapper_configure_test(self, event: event_type):
-                task_schedule = self.scheduled_tasks.__getattribute__(task_schedule_name)
+                task_schedule = self.scheduled_tasks.__getattribute__(
+                    task_schedule_name
+                )
                 for new_target in event.targets:
                     target = new_target.__deepcopy__()
                     composite_id = f"{target.id}:{target.interface}"
 
                     if composite_id in task_schedule:
-                        existing_task_def: TaskDefinition = task_schedule[
-                            composite_id
-                        ]
+                        existing_task_def: TaskDefinition = task_schedule[composite_id]
 
                         if existing_task_def.definition == target:
                             # Nothing needed, tasks should match
@@ -197,19 +195,19 @@ class Tasker:
                         )
                         return func(self, exec_def=target)
 
-                    execute = functools.partial(func,self, exec_def=target)
+                    execute = functools.partial(func, self, exec_def=target)
 
                     interval = target.period
-                    if period_unit := getattr(target, 'period_unit', None):
-                        if period_unit == 'seconds':
+                    if period_unit := getattr(target, "period_unit", None):
+                        if period_unit == "seconds":
                             pass
-                        elif period_unit == 'minutes':
+                        elif period_unit == "minutes":
                             interval = target.period * 60
-                        elif period_unit == 'hours':
+                        elif period_unit == "hours":
                             interval = target.period * 60 * 60
-                        elif period_unit == 'days':
+                        elif period_unit == "days":
                             interval = target.period * 60 * 60 * 24
-                        elif period_unit == 'weeks':
+                        elif period_unit == "weeks":
                             interval = target.period * 60 * 60 * 24 * 7
                         else:
                             self.logger.warning(f"Unknown period unit: {period_unit}")
@@ -223,10 +221,14 @@ class Tasker:
                     task_schedule[composite_id] = TaskDefinition(
                         id=composite_id, task_obj=new_task, definition=target
                     )
+
             return wrapper_configure_test
+
         return decorator_configure_test
 
-    @configure_test("SipTest", "sip_tests", event_type=actions_domain.Commands.ConfigureSipTests)
+    @configure_test(
+        "SipTest", "sip_tests", event_type=actions_domain.Commands.ConfigureSipTests
+    )
     async def configured_sip_tests(self, exec_def: actions_domain.Data.SipTest):
 
         self.logger.warning(f"Executing SIP test {exec_def}")
@@ -241,8 +243,12 @@ class Tasker:
         #     )
         # )
 
-    @configure_test("PingTarget", "ping_targets", event_type=actions_domain.Commands.ConfigurePingTargets)
-    async def configured_ping_targets (self, exec_def: actions_domain.Data.PingTarget):
+    @configure_test(
+        "PingTarget",
+        "ping_targets",
+        event_type=actions_domain.Commands.ConfigurePingTargets,
+    )
+    async def configured_ping_targets(self, exec_def: actions_domain.Data.PingTarget):
         self.logger.warning("BRINGUS THE PINGUS!")
         ping_command = actions_domain.Commands.Ping(
             host=exec_def.host,
@@ -264,8 +270,9 @@ class Tasker:
                     host=exec_def.host, interface=exec_def.interface
                 )
             ),
-            command_bus.handle(ping_command)
-        , return_exceptions=True)
+            command_bus.handle(ping_command),
+            return_exceptions=True,
+        )
 
         self.logger.debug(f"Execution ping, dig, and dhcp tests complete: {results}")
 
@@ -275,19 +282,20 @@ class Tasker:
             )
         )
 
-
-    @configure_test("TraceRoute", "traceroutes", event_type=actions_domain.Commands.ConfigureTraceroutes)
-    async def configured_traceroutes(
-        self, exec_def: actions_domain.Data.Traceroute
-    ):
+    @configure_test(
+        "TraceRoute",
+        "traceroutes",
+        event_type=actions_domain.Commands.ConfigureTraceroutes,
+    )
+    async def configured_traceroutes(self, exec_def: actions_domain.Data.Traceroute):
         tr_command = actions_domain.Commands.Traceroute(
             host=exec_def.host,
             interface=exec_def.interface,
             # bypass_routing is unused
             queries=exec_def.queries,
         )
-        res: actions_domain.Messages.TracerouteResponse = (
-            await command_bus.handle(tr_command)
+        res: actions_domain.Messages.TracerouteResponse = await command_bus.handle(
+            tr_command
         )
         self.logger.debug(f"Execution complete: {res}")
         message_bus.handle(

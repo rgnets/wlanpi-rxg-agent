@@ -7,6 +7,6 @@ This package contains:
 - Network tests: Live network interaction testing
 
 Integration tests are designed to run on actual hardware (Raspberry Pi)
-and test real system interactions like netlink monitoring, DHCP, and 
+and test real system interactions like netlink monitoring, DHCP, and
 wireless interface management.
 """

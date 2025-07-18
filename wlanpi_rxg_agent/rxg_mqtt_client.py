@@ -16,21 +16,26 @@ from ssl import SSLCertVerificationError
 from typing import Any, Callable, Coroutine, Optional, Union
 
 import aiomqtt
+import paho.mqtt.client as mqtt
+from aiomqtt import MqttCodeError, MqttError, TLSParameters
+from aiomqtt.types import PayloadType
+from paho.mqtt.properties import Properties
+
 import wlanpi_rxg_agent.lib.agent_actions.domain as actions_domain
 import wlanpi_rxg_agent.lib.domain as agent_domain
 import wlanpi_rxg_agent.lib.rxg_supplicant.domain as supplicant_domain
-import paho.mqtt.client as mqtt
 import wlanpi_rxg_agent.utils as utils
-from aiomqtt import MqttCodeError, MqttError, TLSParameters
-from aiomqtt.types import PayloadType
 from wlanpi_rxg_agent.api_client import ApiClient
 from wlanpi_rxg_agent.busses import command_bus, message_bus
 from wlanpi_rxg_agent.kismet_control import KismetControl
 from wlanpi_rxg_agent.lib.configuration.agent_config_file import AgentConfigFile
-from wlanpi_rxg_agent.lib.configuration.bootloader_config_file import BootloaderConfigFile
+from wlanpi_rxg_agent.lib.configuration.bootloader_config_file import (
+    BootloaderConfigFile,
+)
 from wlanpi_rxg_agent.lib.configuration.bridge_config_file import BridgeConfigFile
-from wlanpi_rxg_agent.lib.wifi_control.wifi_control_wpa_supplicant import WiFiControlWpaSupplicant
-from paho.mqtt.properties import Properties
+from wlanpi_rxg_agent.lib.wifi_control.wifi_control_wpa_supplicant import (
+    WiFiControlWpaSupplicant,
+)
 from wlanpi_rxg_agent.structures import MQTTRestResponse, TLSConfig
 from wlanpi_rxg_agent.utils import run_command_async
 
@@ -128,26 +133,26 @@ class RxgMqttClient:
         if self.run:
             await self.stop()
 
-
-
     async def restart_client_handler(
         self, event: supplicant_domain.Messages.RestartInternalMqtt
     ):
         if event.host and event.port:
             return await self.start_client(event.host, event.port, event.tls_config)
-        else :
-            self.logger.error(f"restart_client_handler: Missing host or port in event!\n {event}")
+        else:
+            self.logger.error(
+                f"restart_client_handler: Missing host or port in event!\n {event}"
+            )
 
     async def start_client(self, host, port, tls_config: TLSConfig = None):
 
         self.mqtt_client = aiomqtt.Client(
-                host,
-                port=port,
-                tls_params=TLSParameters(**tls_config.__dict__) if tls_config else None,
-                will=aiomqtt.Will(
-                    f"{self.my_base_topic}/status", "Abnormally Disconnected", 1, True
-                ),
-            )
+            host,
+            port=port,
+            tls_params=TLSParameters(**tls_config.__dict__) if tls_config else None,
+            will=aiomqtt.Will(
+                f"{self.my_base_topic}/status", "Abnormally Disconnected", 1, True
+            ),
+        )
         try:
             async with self.mqtt_client:
                 # Make client globally available
@@ -170,7 +175,9 @@ class RxgMqttClient:
 
                 while self.run:
                     try:
-                        self.mqtt_listener_coro = asyncio.wait_for(self.mqtt_client.messages.__anext__(), 1)
+                        self.mqtt_listener_coro = asyncio.wait_for(
+                            self.mqtt_client.messages.__anext__(), 1
+                        )
                         message = await self.mqtt_listener_coro
                         await self.handle_message(self.mqtt_client, message)
                     except asyncio.TimeoutError:
@@ -184,7 +191,6 @@ class RxgMqttClient:
                         err_msg = "There was an error in the MQTT Listener. Refusing to die so we don't lose connection"
                         self.logger.exception(err_msg, exc_info=True)
                         message_bus.handle(agent_domain.Messages.MqttError(err_msg, e))
-
 
                 # Reaching here will cause a disconnect as we leave the context.
 
@@ -222,7 +228,9 @@ class RxgMqttClient:
         )
         self.mqtt_server = event.host
         self.mqtt_port = event.port
-        self.logger.info(f"Starting client with {event.host}:{event.port}, {self.tls_config}")
+        self.logger.info(
+            f"Starting client with {event.host}:{event.port}, {self.tls_config}"
+        )
         await self.start_client(
             host=event.host, port=event.port, tls_config=self.tls_config
         )
@@ -274,7 +282,7 @@ class RxgMqttClient:
         )
 
     async def sip_test_complete_handler(
-            self, event: actions_domain.Messages.SipTestComplete
+        self, event: actions_domain.Messages.SipTestComplete
     ):
         await self.publish_with_retry(
             topic=f"{self.my_base_topic}/ingest/sip",
@@ -290,10 +298,17 @@ class RxgMqttClient:
         try:
             self.logger.info("Sending disconnect message to MQTT server...")
 
-            await asyncio.wait_for(self.mqtt_client.publish(
-                f"{self.my_base_topic}/status", "Disconnected", 1, True
-            ), 5)
-        except (aiomqtt.exceptions.MqttError, aiomqtt.exceptions.MqttCodeError, asyncio.CancelledError) as e:
+            await asyncio.wait_for(
+                self.mqtt_client.publish(
+                    f"{self.my_base_topic}/status", "Disconnected", 1, True
+                ),
+                5,
+            )
+        except (
+            aiomqtt.exceptions.MqttError,
+            aiomqtt.exceptions.MqttCodeError,
+            asyncio.CancelledError,
+        ) as e:
             self.logger.warning(f"Failed to send disconnect: {e}", exc_info=True)
 
         self.run = False
@@ -315,7 +330,6 @@ class RxgMqttClient:
         except asyncio.CancelledError:
             self.logger.info("MQTT listener coroutine was cancelled.")
             return
-
 
     async def add_subscription(self, topic) -> bool:
         """
@@ -536,8 +550,10 @@ class RxgMqttClient:
 
             if not self.mqtt_server or not self.mqtt_port:
                 stack_trace_list = traceback.format_stack()
-                stack_trace_string = ''.join(stack_trace_list[-3:-1])
-                self.logger.warning(f"Client is not properly configured yet, but we tried to publish! Stack: {stack_trace_string}")
+                stack_trace_string = "".join(stack_trace_list[-3:-1])
+                self.logger.warning(
+                    f"Client is not properly configured yet, but we tried to publish! Stack: {stack_trace_string}"
+                )
                 await asyncio.sleep(3)
                 continue
 

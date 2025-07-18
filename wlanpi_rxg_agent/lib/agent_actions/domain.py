@@ -22,9 +22,9 @@ class Data:
         mode: str = Field()
         wlan: t.Optional[Data.WifiConfiguration] = Field()
 
-
     class TestBase(BaseModel):
-        '''Implements all the attributes that are required for scheduled tests'''
+        """Implements all the attributes that are required for scheduled tests"""
+
         id: int = Field()  # :integer          not null, primary key
         name: t.Optional[str] = Field(default=None)  #                  :string
         interval: float = Field(
@@ -46,7 +46,6 @@ class Data:
         # iface_mac: t.Optional[str] = Field(default=None)
         # iface_vlan: t.Optional[int] = Field(default=None)
 
-
     class PingTarget(TestBase):
         count: int = Field(default=3)  #              :integer
         note: t.Optional[str] = Field(default=None)  #                  :text
@@ -58,7 +57,6 @@ class Data:
         host: str = Field()  # :string
         port: int = Field()
         udp: bool = Field()
-
 
     class SipAccount(BaseModel, extra="ignore"):
         id: int = Field()
@@ -76,7 +74,6 @@ class Data:
         outbound2: t.Optional[str] = Field(default=None)
         extra: t.Optional[str] = Field(default=None)
 
-
     class SipTest(TestBase, extra="allow"):
         sip_account: Data.SipAccount = Field()
         callee: str = Field(alias="extension", alias_priority=0)
@@ -84,40 +81,42 @@ class Data:
         call_timeout: t.Optional[int] = Field(default=None)
 
     class SipTestRtcpSummary(BaseModel):
-        reporter: str           = Field(description="Reporter Identifier" )
-        call_setup_ms: int      = Field(description="Call Setup in ms" )
-        call_duration_sec: int  = Field(description="Call Duration in sec" )
-        rx_pkts: int            = Field(description="Packets RX" )
-        tx_pkts: int            = Field(description="Packets TX" )
-        tx_pkts_lost: int       = Field(description="Packets Lost TX" )
-        rx_pkts_lost: int       = Field(description="Packets Lost RX" )
-        tx_pkts_discarded:int   = Field(description="Packets Discarded, TX" )
-        rx_pkts_discarded:int   = Field(description="Packets Discarded, RX ")
-        tx_jitter:float         = Field(description="Jitter TX in ms" )
-        rx_jitter:float         = Field(description="Jitter RX in ms" )
-        rtt:float               = Field(description="RTT in ms" )
-        local_ip:str            = Field(description="Local IP" )
-        remote_ip:str           = Field(description="Remote IP" )
-        mos_score:float         = Field(description="Mean Opinion Score, as calculated by reporter" )
+        reporter: str = Field(description="Reporter Identifier")
+        call_setup_ms: int = Field(description="Call Setup in ms")
+        call_duration_sec: int = Field(description="Call Duration in sec")
+        rx_pkts: int = Field(description="Packets RX")
+        tx_pkts: int = Field(description="Packets TX")
+        tx_pkts_lost: int = Field(description="Packets Lost TX")
+        rx_pkts_lost: int = Field(description="Packets Lost RX")
+        tx_pkts_discarded: int = Field(description="Packets Discarded, TX")
+        rx_pkts_discarded: int = Field(description="Packets Discarded, RX ")
+        tx_jitter: float = Field(description="Jitter TX in ms")
+        rx_jitter: float = Field(description="Jitter RX in ms")
+        rtt: float = Field(description="RTT in ms")
+        local_ip: str = Field(description="Local IP")
+        remote_ip: str = Field(description="Remote IP")
+        mos_score: float = Field(
+            description="Mean Opinion Score, as calculated by reporter"
+        )
 
         @staticmethod
-        def from_baresip_summary(summary:dict[str,str]):
+        def from_baresip_summary(summary: dict[str, str]):
             return Data.SipTestRtcpSummary(
-                reporter=str(summary['EX']),
-                call_setup_ms=int(summary['CS']),
-                call_duration_sec=int(summary['CD']),
-                tx_pkts=int(summary['PS']),
-                rx_pkts=int(summary['PR']),
-                tx_pkts_lost=int(summary['PL'].split(',')[1]),
-                rx_pkts_lost=int(summary['PL'].split(',')[0]),
-                tx_pkts_discarded=int(summary['PD'].split(',')[1]),
-                rx_pkts_discarded=int(summary['PD'].split(',')[0]),
-                tx_jitter=float(summary['JI'].split(',')[1]),
-                rx_jitter=float(summary['JI'].split(',')[0]),
-                rtt=float(summary['DL']),
-                local_ip=str(summary['IP'].split(',')[0]),
-                remote_ip=str(summary['IP'].split(',')[1]),
-                mos_score=float(summary['MOS']),
+                reporter=str(summary["EX"]),
+                call_setup_ms=int(summary["CS"]),
+                call_duration_sec=int(summary["CD"]),
+                tx_pkts=int(summary["PS"]),
+                rx_pkts=int(summary["PR"]),
+                tx_pkts_lost=int(summary["PL"].split(",")[1]),
+                rx_pkts_lost=int(summary["PL"].split(",")[0]),
+                tx_pkts_discarded=int(summary["PD"].split(",")[1]),
+                rx_pkts_discarded=int(summary["PD"].split(",")[0]),
+                tx_jitter=float(summary["JI"].split(",")[1]),
+                rx_jitter=float(summary["JI"].split(",")[0]),
+                rtt=float(summary["DL"]),
+                local_ip=str(summary["IP"].split(",")[0]),
+                remote_ip=str(summary["IP"].split(",")[1]),
+                mos_score=float(summary["MOS"]),
             )
 
     # Ping
@@ -401,6 +400,7 @@ class Messages:
     class SipTestComplete(TestCompleteMessage):
         pass
 
+
 class Commands:
     class Reboot(BaseModel):
         pass
@@ -469,4 +469,3 @@ class Commands:
 
     class SipTest(Data.SipTest):
         pass
-

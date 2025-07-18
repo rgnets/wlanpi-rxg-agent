@@ -1,7 +1,7 @@
 """
 Integration tests for wlanpi-rxg-agent
 
-These tests are designed to run on actual hardware and test real system 
+These tests are designed to run on actual hardware and test real system
 interactions. They require:
 - Linux network namespaces or actual wireless interfaces
 - System permissions for network configuration

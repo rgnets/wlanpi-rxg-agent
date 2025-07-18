@@ -1,19 +1,19 @@
 import asyncio
 import enum
+import logging
+import subprocess
+import tempfile
+from os.path import expanduser, join
+from threading import Thread
 from time import sleep, time
-from typing import Optional, Coroutine
+from typing import Coroutine, Optional
 
 import pexpect
-from os.path import join, expanduser
 from opentone import ToneGenerator
+from pydub import AudioSegment
 from pyee import EventEmitter
 from pyee.asyncio import AsyncIOEventEmitter
 from responsive_voice import ResponsiveVoice
-from pydub import AudioSegment
-import tempfile
-import logging
-import subprocess
-from threading import Thread
 
 from wlanpi_rxg_agent.utils import run_command_async
 
@@ -23,8 +23,7 @@ logging.getLogger("urllib3.connectionpool").setLevel("WARN")
 logging.getLogger("pydub.converter").setLevel("WARN")
 
 
-
-class MdkBareSIP():
+class MdkBareSIP:
     class Events(enum.Enum):
         ESTABLISHED = "call_established"
         CALL_STATUS = "call_status"
@@ -41,7 +40,17 @@ class MdkBareSIP():
         QUIT = "quit"
         TIMEOUT = "timeout"
 
-    def __init__(self, user, pwd, gateway, tts=None, debug=False, extra_login_args: Optional[str] = None, config_path: Optional[str] = None, interface: Optional[str] = None):
+    def __init__(
+        self,
+        user,
+        pwd,
+        gateway,
+        tts=None,
+        debug=False,
+        extra_login_args: Optional[str] = None,
+        config_path: Optional[str] = None,
+        interface: Optional[str] = None,
+    ):
         self.logger = logging.getLogger(__name__)
         self.logger.info(f"Initializing {__name__}")
 
@@ -72,18 +81,18 @@ class MdkBareSIP():
         self.audio = None
         self._ts = None
 
-        self._bs_args = ['-c']
+        self._bs_args = ["-c"]
 
         if config_path:
-            self._bs_args.extend(['-f',config_path])
+            self._bs_args.extend(["-f", config_path])
 
         if interface:
-            self._bs_args.extend(['-n',interface])
+            self._bs_args.extend(["-n", interface])
 
-        self.baresip = pexpect.spawn('baresip', args=self._bs_args)
+        self.baresip = pexpect.spawn("baresip", args=self._bs_args)
 
         # Patch in an async readline method
-        async def readline_async(self:pexpect.pty_spawn.spawn, size=-1):
+        async def readline_async(self: pexpect.pty_spawn.spawn, size=-1):
             if size == 0:
                 return self.string_type()
             # delimiter default is EOF
@@ -93,16 +102,17 @@ class MdkBareSIP():
             else:
                 return self.before
 
-        bound_readline_async = readline_async.__get__(self.baresip, pexpect.pty_spawn.spawn)
-        setattr(self.baresip, 'readline_async', bound_readline_async)
+        bound_readline_async = readline_async.__get__(
+            self.baresip, pexpect.pty_spawn.spawn
+        )
+        setattr(self.baresip, "readline_async", bound_readline_async)
         self.logger.debug("Baresip initialized!")
 
         self.run_task: Optional[Coroutine] = None
 
-
     @staticmethod
     async def setup_pi():
-        ''' Performs some setup steps required for doing this on a headless pi'''
+        """Performs some setup steps required for doing this on a headless pi"""
         dummy_sound = "modprobe snd-dummy fake_buffer=0"
         await run_command_async(dummy_sound)
 
@@ -274,9 +284,10 @@ class MdkBareSIP():
         else:
             return subprocess.Popen(play_mp3_cmd)
 
-    ''' Event handlers'''
+    """ Event handlers"""
     if True:
-        ''' Event handlers'''
+        """Event handlers"""
+
         # events
         def handle_incoming_call(self, number):
             self.logger.info("Incoming call: " + number)
@@ -361,37 +372,74 @@ class MdkBareSIP():
                         self.ee.emit(str(self.Events.READY), raw=out, bs_instance=self)
                     elif "account: No SIP accounts found" in out:
                         self._handle_no_accounts()
-                        self.ee.emit(str(self.Events.NO_ACCOUNTS), raw=out, bs_instance=self)
+                        self.ee.emit(
+                            str(self.Events.NO_ACCOUNTS), raw=out, bs_instance=self
+                        )
                     elif "All 1 useragent registered successfully!" in out:
                         self.ready = True
                         self.handle_login_success()
-                        self.ee.emit(str(self.Events.LOGIN_SUCCESS), raw=out, bs_instance=self)
-                    elif "ua: SIP register failed:" in out or \
-                            "401 Unauthorized" in out or \
-                            "Register: Destination address required" in out or \
-                            "Register: Connection timed out" in out:
+                        self.ee.emit(
+                            str(self.Events.LOGIN_SUCCESS), raw=out, bs_instance=self
+                        )
+                    elif (
+                        "ua: SIP register failed:" in out
+                        or "401 Unauthorized" in out
+                        or "Register: Destination address required" in out
+                        or "Register: Connection timed out" in out
+                    ):
                         self.handle_error(out)
-                        self.ee.emit(str(self.Events.ERROR), error=out, raw=out, bs_instance=self)
+                        self.ee.emit(
+                            str(self.Events.ERROR), error=out, raw=out, bs_instance=self
+                        )
                         self.handle_login_failure()
-                        self.ee.emit(str(self.Events.LOGIN_FAILURE), raw=out, bs_instance=self)
+                        self.ee.emit(
+                            str(self.Events.LOGIN_FAILURE), raw=out, bs_instance=self
+                        )
                     elif "Incoming call from: " in out:
-                        num = out.split("Incoming call from: ")[
-                            1].split(" - (press 'a' to accept)")[0].strip()
+                        num = (
+                            out.split("Incoming call from: ")[1]
+                            .split(" - (press 'a' to accept)")[0]
+                            .strip()
+                        )
                         self.current_call = num
                         self._call_status = "INCOMING"
-                        self.ee.emit(str(self.Events.CALL_STATUS), status=self._call_status, raw=out, bs_instance=self)
+                        self.ee.emit(
+                            str(self.Events.CALL_STATUS),
+                            status=self._call_status,
+                            raw=out,
+                            bs_instance=self,
+                        )
                         self.handle_incoming_call(num)
-                        self.ee.emit(str(self.Events.REJECTING), num=num, raw=out, bs_instance=self)
+                        self.ee.emit(
+                            str(self.Events.REJECTING),
+                            num=num,
+                            raw=out,
+                            bs_instance=self,
+                        )
                     elif "call: rejecting incoming call from " in out:
-                        num = out.split("rejecting incoming call from ")[1].split(" ")[0].strip()
+                        num = (
+                            out.split("rejecting incoming call from ")[1]
+                            .split(" ")[0]
+                            .strip()
+                        )
                         self.handle_call_rejected(num)
-                        self.ee.emit(str(self.Events.REJECTING), num=num, raw=out, bs_instance=self)
+                        self.ee.emit(
+                            str(self.Events.REJECTING),
+                            num=num,
+                            raw=out,
+                            bs_instance=self,
+                        )
                     elif "call: SIP Progress: 180 Ringing" in out:
                         self.handle_call_ringing()
                         status = "RINGING"
                         self.handle_call_status(status)
                         self._call_status = status
-                        self.ee.emit(str(self.Events.CALL_STATUS), status=self._call_status, raw=out, bs_instance=self)
+                        self.ee.emit(
+                            str(self.Events.CALL_STATUS),
+                            status=self._call_status,
+                            raw=out,
+                            bs_instance=self,
+                        )
                     elif "call: connecting to " in out:
                         n = out.split("call: connecting to '")[1].split("'")[0]
                         self.current_call = n
@@ -399,32 +447,58 @@ class MdkBareSIP():
                         status = "OUTGOING"
                         self.handle_call_status(status)
                         self._call_status = status
-                        self.ee.emit(str(self.Events.CALL_STATUS), status=self._call_status, raw=out, bs_instance=self)
+                        self.ee.emit(
+                            str(self.Events.CALL_STATUS),
+                            status=self._call_status,
+                            raw=out,
+                            bs_instance=self,
+                        )
                     elif "Call established:" in out:
 
                         status = "ESTABLISHED"
                         self.handle_call_status(status)
                         self._call_status = status
                         await asyncio.sleep(0.5)
-                        self.ee.emit(str(self.Events.CALL_STATUS), status=self._call_status, raw=out, bs_instance=self)
+                        self.ee.emit(
+                            str(self.Events.CALL_STATUS),
+                            status=self._call_status,
+                            raw=out,
+                            bs_instance=self,
+                        )
                         self.handle_call_established()
-                        self.ee.emit(str(self.Events.ESTABLISHED), raw=out, bs_instance=self)
+                        self.ee.emit(
+                            str(self.Events.ESTABLISHED), raw=out, bs_instance=self
+                        )
                     elif "call: hold " in out:
                         n = out.split("call: hold ")[1]
                         status = "ON HOLD"
                         self.handle_call_status(status)
                         self._call_status = status
-                        self.ee.emit(str(self.Events.CALL_STATUS), status=self._call_status, raw=out, bs_instance=self)
-                    elif "Call with " in out and \
-                            "terminated (duration: " in out:
+                        self.ee.emit(
+                            str(self.Events.CALL_STATUS),
+                            status=self._call_status,
+                            raw=out,
+                            bs_instance=self,
+                        )
+                    elif "Call with " in out and "terminated (duration: " in out:
                         status = "DISCONNECTED"
                         duration = out.split("terminated (duration: ")[1][:-1]
                         self.handle_call_status(status)
                         self._call_status = status
-                        self.ee.emit(str(self.Events.CALL_STATUS), status=self._call_status, raw=out, bs_instance=self)
+                        self.ee.emit(
+                            str(self.Events.CALL_STATUS),
+                            status=self._call_status,
+                            raw=out,
+                            bs_instance=self,
+                        )
                         self.handle_call_timestamp(duration)
                         self.mic_muted = False
-                        self.ee.emit(str(self.Events.TERMINATED), duration=duration, raw=out, bs_instance=self)
+                        self.ee.emit(
+                            str(self.Events.TERMINATED),
+                            duration=duration,
+                            raw=out,
+                            bs_instance=self,
+                        )
                     elif "call muted" in out:
                         self.mic_muted = True
                         self.handle_mic_muted()
@@ -436,32 +510,57 @@ class MdkBareSIP():
                         status = "DISCONNECTED"
                         self.handle_call_status(status)
                         self._call_status = status
-                        self.ee.emit(str(self.Events.CALL_STATUS), status=self._call_status, raw=out, bs_instance=self)
+                        self.ee.emit(
+                            str(self.Events.CALL_STATUS),
+                            status=self._call_status,
+                            raw=out,
+                            bs_instance=self,
+                        )
                         self.handle_call_ended(reason)
                         self.mic_muted = False
-                        self.ee.emit(str(self.Events.SESSION_CLOSED), reason=reason, raw=out, bs_instance=self)
+                        self.ee.emit(
+                            str(self.Events.SESSION_CLOSED),
+                            reason=reason,
+                            raw=out,
+                            bs_instance=self,
+                        )
                     elif "(no active calls)" in out:
                         status = "DISCONNECTED"
                         self.handle_call_status(status)
                         self._call_status = status
-                        self.ee.emit(str(self.Events.CALL_STATUS), status=self._call_status, raw=out, bs_instance=self)
+                        self.ee.emit(
+                            str(self.Events.CALL_STATUS),
+                            status=self._call_status,
+                            raw=out,
+                            bs_instance=self,
+                        )
                     elif "===== Call debug " in out:
                         status = out.split("(")[1].split(")")[0]
                         self.handle_call_status(status)
                         self._call_status = status
-                        self.ee.emit(str(self.Events.CALL_STATUS), status=self._call_status, raw=out, bs_instance=self)
-                    elif "--- List of active calls (1): ---" in \
-                            self._prev_output:
+                        self.ee.emit(
+                            str(self.Events.CALL_STATUS),
+                            status=self._call_status,
+                            raw=out,
+                            bs_instance=self,
+                        )
+                    elif "--- List of active calls (1): ---" in self._prev_output:
                         if "ESTABLISHED" in out and self.current_call in out:
-                            ts = out.split("ESTABLISHED")[0].split(
-                                "[line 1]")[1].strip()
+                            ts = (
+                                out.split("ESTABLISHED")[0].split("[line 1]")[1].strip()
+                            )
                             if ts != self._ts:
                                 self._ts = ts
                                 self.handle_call_timestamp(ts)
                     elif "failed to set audio-source (No such device)" in out:
                         error = "failed to set audio-source (No such device)"
                         self.handle_error(error)
-                        self.ee.emit(str(self.Events.ERROR), error=error, raw=out, bs_instance=self)
+                        self.ee.emit(
+                            str(self.Events.ERROR),
+                            error=error,
+                            raw=out,
+                            bs_instance=self,
+                        )
                     elif "EX=BareSip;" in out:
                         summary_data = {}
                         elements = out.split(";")
@@ -471,16 +570,21 @@ class MdkBareSIP():
                                 summary_data[key] = value
 
                         self.handle_rtcp_summary(summary_data)
-                        self.ee.emit(str(self.Events.SUMMARY), summary=summary_data, raw=out, bs_instance=self)
+                        self.ee.emit(
+                            str(self.Events.SUMMARY),
+                            summary=summary_data,
+                            raw=out,
+                            bs_instance=self,
+                        )
 
                     self._prev_output = out
             except pexpect.exceptions.EOF:
                 # baresip exited
                 self.quit()
-                self.ee.emit(str(self.Events.QUIT), raw='', bs_instance=self)
+                self.ee.emit(str(self.Events.QUIT), raw="", bs_instance=self)
             except pexpect.exceptions.TIMEOUT:
                 # nothing happened for a while
-                self.ee.emit(str(self.Events.TIMEOUT), raw='', bs_instance=self)
+                self.ee.emit(str(self.Events.TIMEOUT), raw="", bs_instance=self)
                 pass
 
     async def async_wait_until_ready(self):
@@ -492,6 +596,7 @@ class MdkBareSIP():
 
     def handle_rtcp_summary(self, summary_data: dict):
         self.logger.info(f"Received RTCP summary: {summary_data}")
+
     def wait_until_ready(self):
         while not self.ready:
             sleep(0.1)
@@ -514,8 +619,9 @@ class MdkBareSIP():
             await self.ee.wait_for_complete()
             await self.run_task
         except:
-            self.logger.warning("self-cleanup error; baresip may already have been quit.", exc_info=True)
-
+            self.logger.warning(
+                "self-cleanup error; baresip may already have been quit.", exc_info=True
+            )
 
     async def wait_for_event(self, event_type: Events, event_data):
         pass

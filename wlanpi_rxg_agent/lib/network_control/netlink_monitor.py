@@ -1,21 +1,23 @@
 import asyncio
 import logging
+from ipaddress import IPv4Address, IPv4Interface
 from typing import Callable, Optional, Set
+
 from pyroute2 import AsyncIPRoute, NetlinkError
 from pyroute2.netlink.rtnl import (
-    RTM_NEWADDR,
     RTM_DELADDR,
-    RTM_NEWLINK,
     RTM_DELLINK,
-    RTM_NEWROUTE,
     RTM_DELROUTE,
+    RTM_NEWADDR,
+    RTM_NEWLINK,
+    RTM_NEWROUTE,
 )
+
 from .domain import InterfaceInfo, InterfaceState, InterfaceType
-from ipaddress import IPv4Interface, IPv4Address
 
 # Linux kernel interface flag constants
 # These are standard kernel constants defined in if.h
-IFF_UP = 0x1       # Interface is up
+IFF_UP = 0x1  # Interface is up
 IFF_RUNNING = 0x40  # Interface is running (resources allocated)
 
 

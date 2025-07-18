@@ -288,7 +288,12 @@ def get_model_info() -> dict[str, str]:
     for a, b in split_model_info:
         model_dict[a.strip()] = b.strip()
     if "Model" not in model_dict:
-        model_dict["Model"] = run_command(["grep", "Model", "/proc/cpuinfo"]).stdout.strip().split(":")[1].strip()
+        model_dict["Model"] = (
+            run_command(["grep", "Model", "/proc/cpuinfo"])
+            .stdout.strip()
+            .split(":")[1]
+            .strip()
+        )
     return model_dict
 
 
@@ -315,15 +320,18 @@ def get_interface_ip_addr(interface: str, version: int = 4) -> str:
         if x["family"] == "inet"
     ][0]
 
+
 def get_interface_macs_by_name() -> dict[str, str]:
     cmd: list[str] = "ip -j link".split(" ")
-    res:list[dict[str,Any]] = run_command(cmd).output_from_json()
-    return {a['ifname']: a['address'] for a in res}
+    res: list[dict[str, Any]] = run_command(cmd).output_from_json()
+    return {a["ifname"]: a["address"] for a in res}
+
 
 def get_interface_names_by_mac() -> dict[str, str]:
     cmd: list[str] = "ip -j link".split(" ")
-    res:list[dict[str,Any]] = run_command(cmd).output_from_json()
-    return {a['address']: a['ifname'] for a in res}
+    res: list[dict[str, Any]] = run_command(cmd).output_from_json()
+    return {a["address"]: a["ifname"] for a in res}
+
 
 def get_current_unix_timestamp():
     ms = datetime.datetime.now()
@@ -354,17 +362,21 @@ async def aevery(__seconds: float, func, *args, **kwargs):
         await func(*args, **kwargs)
         await asyncio.sleep(__seconds)
 
+
 def supports_color():
     """
     Returns True if the running system's terminal supports color, and False otherwise.
     """
     plat = sys.platform
-    supported_platform = plat != 'Pocket PC' and (plat != 'win32' or 'ANSICON' in os.environ)
+    supported_platform = plat != "Pocket PC" and (
+        plat != "win32" or "ANSICON" in os.environ
+    )
 
     # isatty is not always implemented
-    is_a_tty = hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()
+    is_a_tty = hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
 
     return supported_platform and is_a_tty
+
 
 if __name__ == "__main__":
     # print(get_interface_ip_addr("eth0"))

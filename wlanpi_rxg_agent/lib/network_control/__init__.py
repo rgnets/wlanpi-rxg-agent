@@ -28,12 +28,12 @@ Usage:
     await manager.stop()
 """
 
-from .network_control_manager import NetworkControlManager
-from .netlink_monitor import AsyncNetlinkMonitor
-from .routing_manager import RoutingManager
 from .dhcp_client import DHCPClient
 from .dhcp_lease_parser import DHCPLeaseParser
-from .domain import InterfaceInfo, InterfaceState, InterfaceType, Messages, Commands
+from .domain import Commands, InterfaceInfo, InterfaceState, InterfaceType, Messages
+from .netlink_monitor import AsyncNetlinkMonitor
+from .network_control_manager import NetworkControlManager
+from .routing_manager import RoutingManager
 
 __all__ = [
     "NetworkControlManager",

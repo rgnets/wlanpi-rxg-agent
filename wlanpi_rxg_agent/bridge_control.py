@@ -1,6 +1,7 @@
 import logging
 
 import dbus
+
 import wlanpi_rxg_agent.lib.domain as agent_domain
 import wlanpi_rxg_agent.lib.rxg_supplicant.domain as supplicant_domain
 from wlanpi_rxg_agent.busses import command_bus, message_bus

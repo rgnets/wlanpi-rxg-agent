@@ -1,22 +1,25 @@
 import asyncio
 import logging
-from typing import Dict, Optional, Set
 from ipaddress import IPv4Address
+from typing import Dict, Optional, Set
+
+from pyroute2.netlink.rtnl import RTM_DELADDR, RTM_DELLINK, RTM_NEWADDR, RTM_NEWLINK
 
 from wlanpi_rxg_agent.busses import command_bus, message_bus
 from wlanpi_rxg_agent.lib.wifi_control import domain as wifi_domain
+
+from .dhcp_client import DHCPClient
+from .dhcp_lease_parser import DHCPLeaseParser
 from .domain import (
+    Commands,
+    HostRouteResult,
     InterfaceInfo,
     InterfaceState,
     InterfaceType,
     Messages,
-    Commands,
 )
 from .netlink_monitor import AsyncNetlinkMonitor
 from .routing_manager import RoutingManager
-from .dhcp_client import DHCPClient
-from .dhcp_lease_parser import DHCPLeaseParser
-from pyroute2.netlink.rtnl import RTM_NEWADDR, RTM_DELADDR, RTM_NEWLINK, RTM_DELLINK
 
 
 class NetworkControlManager:
@@ -52,6 +55,10 @@ class NetworkControlManager:
         command_bus.add_handler(
             Commands.GetInterfaceStatus, self._handle_get_interface_status
         )
+        command_bus.add_handler(Commands.AddHostRoute, self._handle_add_host_route)
+        command_bus.add_handler(
+            Commands.RemoveHostRoute, self._handle_remove_host_route
+        )
 
     def _setup_wifi_event_handlers(self):
         """Setup WiFi event handlers for connectivity loss detection"""
@@ -59,10 +66,11 @@ class NetworkControlManager:
         message_bus.add_handler(
             wifi_domain.Messages.Disconnection, self._handle_wifi_disconnection
         )
-        
+
         # Listen for WPA supplicant state changes
         message_bus.add_handler(
-            wifi_domain.Messages.WpaSupplicantStateChanged, self._handle_wifi_state_change
+            wifi_domain.Messages.WpaSupplicantStateChanged,
+            self._handle_wifi_state_change,
         )
 
     async def start(self):
@@ -145,17 +153,19 @@ class NetworkControlManager:
         except Exception as e:
             self.logger.error(f"Error handling netlink event: {e}")
 
-    async def _handle_wifi_disconnection(self, event: wifi_domain.Messages.Disconnection):
+    async def _handle_wifi_disconnection(
+        self, event: wifi_domain.Messages.Disconnection
+    ):
         """Handle WiFi disconnection events from WPA supplicant"""
         try:
             interface_name = event.interface
-            
+
             # Only handle interfaces we're managing
             if interface_name not in self.managed_interfaces:
                 return
-                
+
             self.logger.info(f"WiFi disconnection detected on {interface_name}")
-            
+
             # Ensure we're running in the correct event loop context
             try:
                 loop = asyncio.get_running_loop()
@@ -164,45 +174,53 @@ class NetworkControlManager:
             except RuntimeError:
                 # No running loop, fall back to direct await
                 await self._cleanup_interface_on_disconnect(interface_name)
-            
+
         except Exception as e:
             self.logger.error(f"Error handling WiFi disconnection: {e}")
 
-    async def _handle_wifi_state_change(self, event: wifi_domain.Messages.WpaSupplicantStateChanged):
+    async def _handle_wifi_state_change(
+        self, event: wifi_domain.Messages.WpaSupplicantStateChanged
+    ):
         """Handle WiFi state changes from WPA supplicant"""
         try:
             interface_name = event.interface
             state = event.state
-            
+
             # Only handle interfaces we're managing
             if interface_name not in self.managed_interfaces:
                 return
-                
+
             self.logger.debug(f"WiFi state change on {interface_name}: {state}")
-            
+
             # Ensure we're running in the correct event loop context
             try:
                 loop = asyncio.get_running_loop()
-                
+
                 # Handle disconnected/inactive states
                 if state.lower() in ["disconnected", "inactive", "interface_disabled"]:
-                    self.logger.info(f"WiFi connection lost on {interface_name} (state: {state})")
-                    loop.create_task(self._cleanup_interface_on_disconnect(interface_name))
+                    self.logger.info(
+                        f"WiFi connection lost on {interface_name} (state: {state})"
+                    )
+                    loop.create_task(
+                        self._cleanup_interface_on_disconnect(interface_name)
+                    )
                 elif state.lower() == "completed":
                     self.logger.info(f"WiFi connection established on {interface_name}")
                     # Trigger DHCP and route setup since interface may remain administratively up
                     # during connectivity loss, preventing netlink events from properly detecting reconnection
                     loop.create_task(self._setup_interface_on_connect(interface_name))
-                    
+
             except RuntimeError:
                 # No running loop, fall back to direct await
                 if state.lower() in ["disconnected", "inactive", "interface_disabled"]:
-                    self.logger.info(f"WiFi connection lost on {interface_name} (state: {state})")
+                    self.logger.info(
+                        f"WiFi connection lost on {interface_name} (state: {state})"
+                    )
                     await self._cleanup_interface_on_disconnect(interface_name)
                 elif state.lower() == "completed":
                     self.logger.info(f"WiFi connection established on {interface_name}")
                     await self._setup_interface_on_connect(interface_name)
-                
+
         except Exception as e:
             self.logger.error(f"Error handling WiFi state change: {e}")
 
@@ -210,23 +228,23 @@ class NetworkControlManager:
         """Clean up interface routing and DHCP on WiFi disconnect"""
         try:
             self.logger.info(f"Cleaning up {interface_name} after WiFi disconnect")
-            
+
             # Remove routing configuration
             await self.routing_manager.remove_interface_routing(interface_name)
-            
+
             # Stop DHCP client
             await self.dhcp_client.stop_dhcp_client(interface_name)
-            
+
             # Update interface info to reflect disconnected state
             if interface_name in self.managed_interfaces:
                 interface_info = self.managed_interfaces[interface_name]
                 interface_info.ip_address = None
                 interface_info.gateway = None
                 interface_info.has_dhcp_lease = False
-                
+
                 # Send connectivity lost event
                 message_bus.handle(Messages.ConnectivityLost(interface=interface_info))
-                
+
         except Exception as e:
             self.logger.error(f"Error cleaning up interface {interface_name}: {e}")
 
@@ -234,24 +252,26 @@ class NetworkControlManager:
         """Setup interface routing and DHCP on WiFi connect"""
         try:
             self.logger.info(f"Setting up {interface_name} after WiFi connection")
-            
+
             # Get current interface info
-            interface_info = await self.netlink_monitor._get_interface_info(interface_name)
+            interface_info = await self.netlink_monitor._get_interface_info(
+                interface_name
+            )
             if not interface_info:
                 self.logger.error(f"Interface {interface_name} not found during setup")
                 return
-            
+
             # Update managed interfaces
             self.managed_interfaces[interface_name] = interface_info
-            
+
             # Start DHCP client to get IP address
             await self._trigger_dhcp(interface_name)
-            
+
             # If interface already has IP (cached/static), configure routing immediately
             if interface_info.ip_address:
                 gateway = await self._get_gateway_from_lease(interface_name)
                 await self._configure_interface_routing(interface_info, gateway)
-                
+
         except Exception as e:
             self.logger.error(f"Error setting up interface {interface_name}: {e}")
 
@@ -495,3 +515,122 @@ class NetworkControlManager:
         except Exception as e:
             self.logger.error(f"Error getting interface status: {e}")
             return {}
+
+    async def _handle_add_host_route(
+        self, command: Commands.AddHostRoute
+    ) -> HostRouteResult:
+        """Handle add host route command"""
+        try:
+            # Check if interface is managed
+            if command.interface_name not in self.managed_interfaces:
+                return HostRouteResult(
+                    success=False,
+                    host=command.host,
+                    resolved_ip=None,
+                    interface_name=command.interface_name,
+                    error_message=f"Interface {command.interface_name} not managed",
+                )
+
+            # Resolve host to IP if needed
+            resolved_ip = await self.routing_manager.resolve_host_via_interface(
+                command.host, command.interface_name
+            )
+            if not resolved_ip:
+                return HostRouteResult(
+                    success=False,
+                    host=command.host,
+                    resolved_ip=None,
+                    interface_name=command.interface_name,
+                    error_message=f"Failed to resolve host {command.host}",
+                )
+
+            # Add route
+            success = await self.routing_manager.add_host_route(
+                resolved_ip, command.interface_name, command.table_id
+            )
+
+            if success:
+                self.logger.info(
+                    f"Added host route: {command.host} ({resolved_ip}) via {command.interface_name}"
+                )
+                return HostRouteResult(
+                    success=True,
+                    host=command.host,
+                    resolved_ip=resolved_ip,
+                    interface_name=command.interface_name,
+                )
+            else:
+                return HostRouteResult(
+                    success=False,
+                    host=command.host,
+                    resolved_ip=resolved_ip,
+                    interface_name=command.interface_name,
+                    error_message=f"Failed to add route for {resolved_ip}",
+                )
+
+        except Exception as e:
+            self.logger.error(f"Error adding host route for {command.host}: {e}")
+            return HostRouteResult(
+                success=False,
+                host=command.host,
+                resolved_ip=None,
+                interface_name=command.interface_name,
+                error_message=str(e),
+            )
+
+    async def _handle_remove_host_route(
+        self, command: Commands.RemoveHostRoute
+    ) -> HostRouteResult:
+        """Handle remove host route command"""
+        try:
+            # Check if interface is managed
+            if command.interface_name not in self.managed_interfaces:
+                return HostRouteResult(
+                    success=False,
+                    host=command.host,
+                    resolved_ip=None,
+                    interface_name=command.interface_name,
+                    error_message=f"Interface {command.interface_name} not managed",
+                )
+
+            # Resolve host to IP if needed (for removal)
+            resolved_ip = await self.routing_manager.resolve_host_via_interface(
+                command.host, command.interface_name
+            )
+            if not resolved_ip:
+                # If we can't resolve it, try to remove by original host string
+                resolved_ip = command.host
+
+            # Remove route
+            success = await self.routing_manager.remove_host_route(
+                resolved_ip, command.interface_name, command.table_id
+            )
+
+            if success:
+                self.logger.info(
+                    f"Removed host route: {command.host} ({resolved_ip}) via {command.interface_name}"
+                )
+                return HostRouteResult(
+                    success=True,
+                    host=command.host,
+                    resolved_ip=resolved_ip,
+                    interface_name=command.interface_name,
+                )
+            else:
+                return HostRouteResult(
+                    success=False,
+                    host=command.host,
+                    resolved_ip=resolved_ip,
+                    interface_name=command.interface_name,
+                    error_message=f"Failed to remove route for {resolved_ip}",
+                )
+
+        except Exception as e:
+            self.logger.error(f"Error removing host route for {command.host}: {e}")
+            return HostRouteResult(
+                success=False,
+                host=command.host,
+                resolved_ip=None,
+                interface_name=command.interface_name,
+                error_message=str(e),
+            )

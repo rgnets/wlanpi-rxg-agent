@@ -1,6 +1,6 @@
 import re
 from pathlib import Path
-from typing import Union, Optional
+from typing import Optional, Union
 
 from .models import DHCPLease, DHCPLeaseDate, DHCPOption
 

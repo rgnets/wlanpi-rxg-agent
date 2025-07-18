@@ -73,19 +73,19 @@ class Messages:
 
     class NetworkControlError(BaseModel):
         model_config = {"arbitrary_types_allowed": True}
-        
+
         interface_name: str
         error_message: str
         exception: Optional[Exception] = None
-        
+
         def model_dump(self, **kwargs):
             """Custom serialization that handles Exception objects"""
             data = super().model_dump(**kwargs)
             if self.exception:
-                data['exception'] = {
-                    'type': type(self.exception).__name__,
-                    'message': str(self.exception),
-                    'args': self.exception.args
+                data["exception"] = {
+                    "type": type(self.exception).__name__,
+                    "message": str(self.exception),
+                    "args": self.exception.args,
                 }
             return data
 
@@ -107,3 +107,27 @@ class Commands:
         interface_name: Optional[str] = Field(
             None, description="Specific interface or all if None"
         )
+
+    class AddHostRoute(BaseModel):
+        host: str = Field(..., description="FQDN or IP address")
+        interface_name: str = Field(..., description="Interface to route through")
+        table_id: Optional[int] = Field(default=None)
+
+    class RemoveHostRoute(BaseModel):
+        host: str = Field(..., description="FQDN or IP address")
+        interface_name: str = Field(..., description="Interface to remove route from")
+        table_id: Optional[int] = Field(default=None)
+
+
+class HostRouteResult(BaseModel):
+    """Result of host route operations"""
+
+    success: bool = Field(..., description="Whether the operation succeeded")
+    host: str = Field(..., description="The host that was processed")
+    resolved_ip: Optional[str] = Field(
+        None, description="Resolved IP address (for FQDN hosts)"
+    )
+    interface_name: str = Field(..., description="Interface used for the operation")
+    error_message: Optional[str] = Field(
+        None, description="Error message if operation failed"
+    )

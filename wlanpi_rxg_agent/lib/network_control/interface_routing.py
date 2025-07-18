@@ -1,5 +1,6 @@
-from pyroute2 import IPRoute
 import ipaddress
+
+from pyroute2 import IPRoute
 
 
 class InterfaceRouterManager:

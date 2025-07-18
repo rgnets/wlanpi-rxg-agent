@@ -9,12 +9,13 @@ import time
 from typing import Any, Optional
 
 import dpkt
-from wlanpi_rxg_agent import kismet_capture
 import kismet_rest  # type: ignore
-from wlanpi_rxg_agent.models.runcommand_error import RunCommandError
 from scapy.data import DLT_EN10MB, DLT_IEEE802_11
 from scapy.layers.dot11 import Dot11
 from scapy.utils import PcapNgReader, PcapNgWriter, PcapReader, PcapWriter
+
+from wlanpi_rxg_agent import kismet_capture
+from wlanpi_rxg_agent.models.runcommand_error import RunCommandError
 from wlanpi_rxg_agent.utils import run_command
 
 

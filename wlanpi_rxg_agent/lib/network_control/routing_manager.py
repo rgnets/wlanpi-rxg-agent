@@ -1,8 +1,10 @@
 import asyncio
 import logging
+from ipaddress import IPv4Address, IPv4Interface, IPv4Network
 from typing import Dict, Optional, Set
+
 from pyroute2 import AsyncIPRoute, NetlinkError
-from ipaddress import IPv4Interface, IPv4Address, IPv4Network
+
 from .domain import InterfaceInfo
 
 
@@ -24,21 +26,23 @@ class RoutingManager:
         async with self.lock:
             if self._startup_complete:
                 return
-                
+
             try:
-                self.logger.info("Performing startup route cleanup for managed interfaces")
-                
+                self.logger.info(
+                    "Performing startup route cleanup for managed interfaces"
+                )
+
                 # Clean up all rules in our table range (base_table_id to base_table_id + 1000)
                 await self._cleanup_all_managed_tables()
-                
+
                 # Also clean up specific interfaces we'll manage
                 for interface_name in interface_names:
                     table_id = self._get_table_id(interface_name)
                     await self._cleanup_table_and_rules(interface_name, table_id)
-                    
+
                 self._startup_complete = True
                 self.logger.info("Startup route cleanup completed")
-                
+
             except Exception as e:
                 self.logger.error(f"Error during startup cleanup: {e}")
 
@@ -143,20 +147,33 @@ class RoutingManager:
                         # Log what we're trying to delete
                         self.logger.debug(f"Attempting to remove rule: {rule_args}")
                         await ipr.rule("del", **rule_args)
-                        self.logger.debug(f"Successfully removed rule for table {table_id}")
+                        self.logger.debug(
+                            f"Successfully removed rule for table {table_id}"
+                        )
 
                     except Exception as e:
                         # Try alternative approach: delete by table and priority only
                         try:
                             if "FRA_PRIORITY" in attrs:
-                                alt_args = {"table": table_id, "priority": attrs["FRA_PRIORITY"]}
-                                self.logger.debug(f"Retry with priority-only rule deletion: {alt_args}")
+                                alt_args = {
+                                    "table": table_id,
+                                    "priority": attrs["FRA_PRIORITY"],
+                                }
+                                self.logger.debug(
+                                    f"Retry with priority-only rule deletion: {alt_args}"
+                                )
                                 await ipr.rule("del", **alt_args)
-                                self.logger.debug(f"Successfully removed rule with priority-only approach")
+                                self.logger.debug(
+                                    f"Successfully removed rule with priority-only approach"
+                                )
                             else:
-                                self.logger.warning(f"Could not delete rule for table {table_id}: {e}")
+                                self.logger.warning(
+                                    f"Could not delete rule for table {table_id}: {e}"
+                                )
                         except Exception as e2:
-                            self.logger.warning(f"Failed to delete rule for table {table_id}: {e} (retry also failed: {e2})")
+                            self.logger.warning(
+                                f"Failed to delete rule for table {table_id}: {e} (retry also failed: {e2})"
+                            )
 
                 # Then, get all routes in the table
                 routes = []
@@ -185,22 +202,26 @@ class RoutingManager:
                             delete_args["proto"] = proto
 
                         # Add prefix length for non-default routes
-                        if 'dst' in delete_args and delete_args['dst'] != "default":
-                            if route.get('prefixlen'):
-                                prefixlen = route.get('prefixlen')
-                            elif route.get('dst_len'):
-                                prefixlen = route.get('dst_len')
+                        if "dst" in delete_args and delete_args["dst"] != "default":
+                            if route.get("prefixlen"):
+                                prefixlen = route.get("prefixlen")
+                            elif route.get("dst_len"):
+                                prefixlen = route.get("dst_len")
                             else:
                                 prefixlen = 32  # Default to /32 for host routes
-                            delete_args['dst'] = f"{delete_args['dst']}/{prefixlen}"
+                            delete_args["dst"] = f"{delete_args['dst']}/{prefixlen}"
 
                         await ipr.route("del", **delete_args)
-                        self.logger.debug(f"Removed route for table {table_id}: {delete_args}")
+                        self.logger.debug(
+                            f"Removed route for table {table_id}: {delete_args}"
+                        )
 
                     except Exception as e:
                         self.logger.debug(f"Error deleting route: {e}")
 
-            self.logger.info(f"Flushed routing table {table_id} (removed both rules and routes)")
+            self.logger.info(
+                f"Flushed routing table {table_id} (removed both rules and routes)"
+            )
             return True
 
         except Exception as e:
@@ -250,7 +271,9 @@ class RoutingManager:
 
                 # 2. Add default route via gateway if provided
                 if gateway:
-                    self.logger.info(f"Adding default route for {interface.name}: gateway={gateway}, table={table_id}")
+                    self.logger.info(
+                        f"Adding default route for {interface.name}: gateway={gateway}, table={table_id}"
+                    )
                     await ipr.route(
                         "add",
                         dst="default",
@@ -258,9 +281,13 @@ class RoutingManager:
                         oif=interface.index,
                         table=table_id,
                     )
-                    self.logger.debug(f"Default route added successfully for {interface.name}")
+                    self.logger.debug(
+                        f"Default route added successfully for {interface.name}"
+                    )
                 else:
-                    self.logger.warning(f"No gateway provided for {interface.name}, skipping default route")
+                    self.logger.warning(
+                        f"No gateway provided for {interface.name}, skipping default route"
+                    )
 
                 # 3. Add IP rule for source-based routing
                 # Traffic from this interface's IP should use this table
@@ -278,26 +305,30 @@ class RoutingManager:
                 )
 
             self.logger.debug(
-            f"Configured routing for {interface.name}: table={table_id}, "
+                f"Configured routing for {interface.name}: table={table_id}, "
                 f"network={network}, gateway={gateway}"
             )
             return True
 
         except Exception as e:
-            self.logger.error(f"Error setting up routing for {interface.name}: {e}", exc_info=True)
+            self.logger.error(
+                f"Error setting up routing for {interface.name}: {e}", exc_info=True
+            )
             return False
 
-    async def _cleanup_table_and_rules(self, interface_name: str, table_id: int) -> bool:
+    async def _cleanup_table_and_rules(
+        self, interface_name: str, table_id: int
+    ) -> bool:
         """Clean up both rules and routes for a table (used by startup and shutdown cleanup)"""
         try:
             # Use flush_table which now handles both rules and routes
             success = await self.flush_table(table_id)
-            
+
             if success:
                 self.logger.debug(
                     f"Cleaned up table and rules for {interface_name} (table {table_id})"
                 )
-            
+
             return success
 
         except Exception as e:
@@ -315,9 +346,11 @@ class RoutingManager:
                     rule_table = rule.get("table", 0)
                     if self.base_table_id <= rule_table < self.base_table_id + 1000:
                         rules_to_delete.append((rule_table, rule))
-                
-                self.logger.info(f"Found {len(rules_to_delete)} rules in managed table range")
-                
+
+                self.logger.info(
+                    f"Found {len(rules_to_delete)} rules in managed table range"
+                )
+
                 # Delete rules first
                 for table_id, rule in rules_to_delete:
                     try:
@@ -343,21 +376,34 @@ class RoutingManager:
                         # Log what we're trying to delete for debugging
                         self.logger.debug(f"Attempting to remove rule: {rule_args}")
                         await ipr.rule("del", **rule_args)
-                        self.logger.debug(f"Successfully removed rule for table {table_id}")
-                        
+                        self.logger.debug(
+                            f"Successfully removed rule for table {table_id}"
+                        )
+
                     except Exception as e:
                         # Try alternative approach: delete by table and priority only
                         try:
                             if "FRA_PRIORITY" in attrs:
-                                alt_args = {"table": table_id, "priority": attrs["FRA_PRIORITY"]}
-                                self.logger.debug(f"Retry with priority-only rule deletion: {alt_args}")
+                                alt_args = {
+                                    "table": table_id,
+                                    "priority": attrs["FRA_PRIORITY"],
+                                }
+                                self.logger.debug(
+                                    f"Retry with priority-only rule deletion: {alt_args}"
+                                )
                                 await ipr.rule("del", **alt_args)
-                                self.logger.debug(f"Successfully removed rule with priority-only approach for table {table_id}")
+                                self.logger.debug(
+                                    f"Successfully removed rule with priority-only approach for table {table_id}"
+                                )
                             else:
-                                self.logger.warning(f"Could not delete rule for table {table_id}: {e}")
+                                self.logger.warning(
+                                    f"Could not delete rule for table {table_id}: {e}"
+                                )
                         except Exception as e2:
-                            self.logger.warning(f"Failed to delete rule for table {table_id}: {e} (retry also failed: {e2})")
-                
+                            self.logger.warning(
+                                f"Failed to delete rule for table {table_id}: {e} (retry also failed: {e2})"
+                            )
+
                 # Get all tables in our range and clean routes
                 tables_with_routes = set()
                 for table_id in range(self.base_table_id, self.base_table_id + 1000):
@@ -365,7 +411,7 @@ class RoutingManager:
                         routes = []
                         async for route in await ipr.route("dump", table=table_id):
                             routes.append(route)
-                            
+
                         if routes:
                             tables_with_routes.add(table_id)
                             # Delete routes in this table
@@ -375,7 +421,7 @@ class RoutingManager:
                                     dst = attrs.get("RTA_DST", "default")
                                     gateway = attrs.get("RTA_GATEWAY")
                                     oif = attrs.get("RTA_OIF")
-                                    
+
                                     delete_args = {"table": table_id}
                                     if dst != "default":
                                         delete_args["dst"] = dst
@@ -386,27 +432,38 @@ class RoutingManager:
                                     if oif:
                                         delete_args["oif"] = oif
 
-                                    if 'dst' in delete_args and delete_args['dst'] != "default":
-                                        if route.get('prefixlen'):
-                                            prefixlen = route.get('prefixlen')
-                                        elif route.get('dst_len'):
-                                            prefixlen = route.get('dst_len')
+                                    if (
+                                        "dst" in delete_args
+                                        and delete_args["dst"] != "default"
+                                    ):
+                                        if route.get("prefixlen"):
+                                            prefixlen = route.get("prefixlen")
+                                        elif route.get("dst_len"):
+                                            prefixlen = route.get("dst_len")
                                         else:
-                                            prefixlen = 32  # Default to /32 for host routes
-                                        delete_args['dst'] = f"{delete_args['dst']}/{prefixlen}"
+                                            prefixlen = (
+                                                32  # Default to /32 for host routes
+                                            )
+                                        delete_args["dst"] = (
+                                            f"{delete_args['dst']}/{prefixlen}"
+                                        )
                                     await ipr.route("del", **delete_args)
-                                    
+
                                 except Exception as e:
-                                    self.logger.error(f"Error deleting route in table {table_id}: {e}")
+                                    self.logger.error(
+                                        f"Error deleting route in table {table_id}: {e}"
+                                    )
                     except Exception:
                         # Table doesn't exist or no routes, skip
                         pass
-                
+
                 if tables_with_routes:
-                    self.logger.info(f"Cleaned routes from {len(tables_with_routes)} tables")
-                
+                    self.logger.info(
+                        f"Cleaned routes from {len(tables_with_routes)} tables"
+                    )
+
             return True
-            
+
         except Exception as e:
             self.logger.error(f"Error during cleanup of managed tables: {e}")
             return False
@@ -422,20 +479,147 @@ class RoutingManager:
         async with self.lock:
             try:
                 self.logger.info("Starting routing cleanup for shutdown")
-                
+
                 # Clean up all interfaces we've configured
                 for interface_name in list(self.configured_interfaces):
                     await self.remove_interface_routing(interface_name)
-                
+
                 # Additional cleanup: ensure all our table range is clean
                 for interface_name, table_id in list(self.interface_tables.items()):
                     await self._cleanup_table_and_rules(interface_name, table_id)
-                    
+
                 # Clear our tracking data
                 self.configured_interfaces.clear()
                 self.interface_tables.clear()
-                
+
                 self.logger.info("Routing cleanup completed")
-                
+
             except Exception as e:
                 self.logger.error(f"Error during routing cleanup: {e}")
+
+    async def resolve_host_via_interface(
+        self, host: str, interface_name: str
+    ) -> Optional[str]:
+        """Resolve FQDN to IP address using a specific interface"""
+        import ipaddress
+        import socket
+
+        # Check if it's already an IP address
+        try:
+            ipaddress.IPv4Address(host)
+            return host  # Already an IP address
+        except ipaddress.AddressValueError:
+            pass
+
+        try:
+            # For now, use system resolver
+            # TODO: In the future, could bind to specific interface using dig
+            # TODO: This could be a source of bugs potentially, if the host has two IPs each accessible on different interfaces.
+            ip = socket.gethostbyname(host)
+            self.logger.debug(f"Resolved {host} to {ip}")
+            return ip
+        except socket.gaierror as e:
+            self.logger.error(f"Failed to resolve {host}: {e}")
+            return None
+
+    async def add_host_route(self, host_ip: str, interface_name: str, table_id: Optional[int] = None) -> bool:
+        """Add a /32 route to a specific host via an interface"""
+        async with self.lock:
+            try:
+                # Allow an override for special potatoes.
+                if not table_id:
+                    # Get the interface's table ID
+                    table_id = self.interface_tables.get(interface_name)
+                if not table_id:
+                    self.logger.error(
+                        f"No table ID found for interface {interface_name}"
+                    )
+                    return False
+
+                # Get interface index
+                interface_index = None
+                async with AsyncIPRoute() as ipr:
+                    # Find interface index
+                    async for link in await ipr.link("dump"):
+                        attrs = dict(link.get("attrs", []))
+                        if attrs.get("IFLA_IFNAME") == interface_name:
+                            interface_index = link["index"]
+                            break
+
+                if interface_index is None:
+                    self.logger.error(f"Interface {interface_name} not found")
+                    return False
+
+                # Add host route (/32) to the interface's routing table
+                async with AsyncIPRoute() as ipr:
+                    await ipr.route(
+                        "add", dst=f"{host_ip}/32", oif=interface_index, table=table_id
+                    )
+
+                self.logger.debug(
+                    f"Added host route: {host_ip}/32 via {interface_name} (table {table_id})"
+                )
+                return True
+
+            except Exception as e:
+                self.logger.error(
+                    f"Error adding host route for {host_ip} via {interface_name}: {e}"
+                )
+                return False
+
+    async def remove_host_route(self, host_ip: str, interface_name: str, table_id: Optional[int] = None) -> bool:
+        """Remove a /32 route to a specific host from an interface"""
+        async with self.lock:
+            try:
+                # Allow an override for special potatoes.
+                if not table_id:
+                    # Get the interface's table ID
+                    table_id = self.interface_tables.get(interface_name)
+                if not table_id:
+                    self.logger.warning(
+                        f"No table ID found for interface {interface_name}"
+                    )
+                    return True  # Consider it success if no table exists
+
+                # Get interface index
+                interface_index = None
+                async with AsyncIPRoute() as ipr:
+                    # Find interface index
+                    async for link in await ipr.link("dump"):
+                        attrs = dict(link.get("attrs", []))
+                        if attrs.get("IFLA_IFNAME") == interface_name:
+                            interface_index = link["index"]
+                            break
+
+                if interface_index is None:
+                    self.logger.warning(f"Interface {interface_name} not found")
+                    return True  # Consider it success if interface doesn't exist
+
+                # Remove host route (/32) from the interface's routing table
+                async with AsyncIPRoute() as ipr:
+                    await ipr.route(
+                        "del", dst=f"{host_ip}/32", oif=interface_index, table=table_id
+                    )
+
+                self.logger.debug(
+                    f"Removed host route: {host_ip}/32 via {interface_name} (table {table_id})"
+                )
+                return True
+
+            except NetlinkError as e:
+                # Route might not exist, which is fine for removal
+                if "No such file or directory" in str(e) or "No such process" in str(e):
+                    self.logger.debug(
+                        f"Host route {host_ip}/32 via {interface_name} was already removed"
+                    )
+                    return True
+                else:
+                    self.logger.error(
+                        f"NetlinkError removing host route for {host_ip} via {interface_name}: {e}"
+                    )
+                    return False
+            except Exception as e:
+                self.logger.error(
+                    f"Error removing host route for {host_ip} via {interface_name}: {e}"
+                )
+                return False

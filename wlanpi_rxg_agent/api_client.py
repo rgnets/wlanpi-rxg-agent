@@ -6,8 +6,8 @@ import requests
 import urllib3
 from aiohttp import ClientResponse, ClientSession
 from requests import Response
-from wlanpi_rxg_agent.structures import FlatResponse
 
+from wlanpi_rxg_agent.structures import FlatResponse
 from wlanpi_rxg_agent.utils import get_eth0_mac, get_interface_ip_addr
 
 
@@ -56,14 +56,16 @@ class ApiClient:
                     try:
                         response.get_encoding()
                     except RuntimeError as e:
-                        self.logger.error(f"Unable to determine encoding: {e}", exc_info=True)
+                        self.logger.error(
+                            f"Unable to determine encoding: {e}", exc_info=True
+                        )
                 return FlatResponse(
                     headers=response.headers,
                     url=str(response.url),
                     status_code=response.status,
                     reason=response.reason,
                     content=content,
-                    encoding= encoding,
+                    encoding=encoding,
                 )
 
     async def get_cert(self, ip: Optional[str] = None) -> FlatResponse:
@@ -88,7 +90,9 @@ class ApiClient:
                     try:
                         response.get_encoding()
                     except RuntimeError as e:
-                        self.logger.error(f"Unable to determine encoding: {e}", exc_info=True)
+                        self.logger.error(
+                            f"Unable to determine encoding: {e}", exc_info=True
+                        )
                 return FlatResponse(
                     headers=response.headers,
                     url=str(response.url),
@@ -130,7 +134,9 @@ class ApiClient:
                     try:
                         response.get_encoding()
                     except RuntimeError as e:
-                        self.logger.error(f"Unable to determine encoding: {e}", exc_info=True)
+                        self.logger.error(
+                            f"Unable to determine encoding: {e}", exc_info=True
+                        )
                 return FlatResponse(
                     headers=response.headers,
                     url=str(response.url),
@@ -169,7 +175,9 @@ class ApiClient:
                     try:
                         response.get_encoding()
                     except RuntimeError as e:
-                        self.logger.error(f"Unable to determine encoding: {e}", exc_info=True)
+                        self.logger.error(
+                            f"Unable to determine encoding: {e}", exc_info=True
+                        )
                 return FlatResponse(
                     headers=response.headers,
                     url=str(response.url),

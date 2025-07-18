@@ -1,8 +1,8 @@
 import re
+from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, Extra, Field, ValidationError
-from datetime import datetime
 
 
 class DHCPLeaseDate(BaseModel):

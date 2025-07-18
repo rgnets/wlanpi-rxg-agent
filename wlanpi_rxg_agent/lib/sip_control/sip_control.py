@@ -1,7 +1,9 @@
 from abc import ABC, abstractmethod
 
+
 class SipInstance(ABC):
     pass
+
 
 class SipControl(ABC):
 
@@ -9,9 +11,5 @@ class SipControl(ABC):
         pass
 
     @abstractmethod
-    def get_instance(self, gateway:str, user: str, password: str) -> SipInstance:
+    def get_instance(self, gateway: str, user: str, password: str) -> SipInstance:
         pass
-
-
-
-

@@ -20,9 +20,9 @@ __status__ = "alpha"
 __license__ = "BSD-3-Clause"
 __license_url__ = "https://opensource.org/licenses/BSD-3-Clause"
 __classifiers__ = [
-        "Natural Language :: English",
-        "Development Status :: 1 - Planning",
-        "Programming Language :: Python :: 3.9",
-        "Intended Audience :: System Administrators",
-        "Topic :: Utilities",
-    ]
+    "Natural Language :: English",
+    "Development Status :: 1 - Planning",
+    "Programming Language :: Python :: 3.9",
+    "Intended Audience :: System Administrators",
+    "Topic :: Utilities",
+]
