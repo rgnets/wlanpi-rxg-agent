@@ -410,32 +410,50 @@ class AgentActions:
             conf_path = f"/tmp/bs_sip_test__{event.id}/"
             await SipTestBaresip.deploy_config(conf_path)
 
-            # 2. Add host route for SIP server if interface is specified
+            # 2. Add host route for SIP server if a wireless interface is specified
             if event.interface:
-                try:
-                    self.logger.info(
-                        f"Adding route to {event.sip_account.host} via {event.interface}"
-                    )
-                    route_result = await command_bus.handle(
-                        network_control_domain.Commands.AddHostRoute(
-                            host=event.sip_account.host, interface_name=event.interface, table_id=254
-                        )
-                    )
-
-                    if not route_result.success:
-                        self.logger.warning(
-                            f"Failed to add route to {event.sip_account.host}: {route_result.error_message}"
-                        )
-                        # Continue with test but log the warning
-                    else:
-                        route_added = True
+                if event.interface.startswith("wlan"):
+                    try:
                         self.logger.info(
-                            f"Added route to {route_result.resolved_ip} via {event.interface}"
+                            f"Adding route to {event.sip_account.host} via {event.interface}"
+                        )
+                        route_main_result = await command_bus.handle(
+                            network_control_domain.Commands.AddHostRoute(
+                                host=event.sip_account.host, interface_name=event.interface, table_id=254
+                            )
                         )
 
-                except Exception as e:
-                    self.logger.warning(f"Error adding route for SIP test: {e}")
-                    # Continue with test but log the error
+                        if not route_main_result.success:
+                            self.logger.warning(
+                                f"Failed to add route to {event.sip_account.host}: {route_main_result.error_message}"
+                            )
+                            # Continue with test but log the warning
+                        else:
+                            route_added = True
+                            self.logger.info(
+                                f"Added route to {route_main_result.resolved_ip} via {event.interface} main table"
+                            )
+
+                        route_result = await command_bus.handle(
+                            network_control_domain.Commands.AddHostRoute(
+                                host=event.sip_account.host, interface_name=event.interface
+                            )
+                        )
+
+                        if not route_result.success:
+                            self.logger.warning(
+                                f"Failed to add route to {event.sip_account.host}: {route_result.error_message}"
+                            )
+                            # Continue with test but log the warning
+                        else:
+                            route_added = True
+                            self.logger.info(
+                                f"Added route to {route_result.resolved_ip} via {event.interface} dedicated table"
+                            )
+
+                    except Exception as e:
+                        self.logger.warning(f"Error adding route for SIP test: {e}")
+                        # Continue with test but log the error
 
             # 3. Execute SIP test
             sip_test = SipTestBaresip(
@@ -473,9 +491,25 @@ class AgentActions:
                     self.logger.info(
                         f"Removing route to {event.sip_account.host} via {event.interface}"
                     )
-                    cleanup_result = await command_bus.handle(
+
+                    cleanup_main_result = await command_bus.handle(
                         network_control_domain.Commands.RemoveHostRoute(
                             host=event.sip_account.host, interface_name=event.interface, table_id=254
+                        )
+                    )
+
+                    if not cleanup_main_result.success:
+                        self.logger.warning(
+                            f"Failed to remove route to {event.sip_account.host}: {cleanup_main_result.error_message}"
+                        )
+                    else:
+                        self.logger.info(
+                            f"Removed route to {event.sip_account.host} via {event.interface} main table"
+                        )
+
+                    cleanup_result = await command_bus.handle(
+                        network_control_domain.Commands.RemoveHostRoute(
+                            host=event.sip_account.host, interface_name=event.interface
                         )
                     )
 
@@ -485,7 +519,7 @@ class AgentActions:
                         )
                     else:
                         self.logger.info(
-                            f"Removed route to {event.sip_account.host} via {event.interface}"
+                            f"Removed route to {event.sip_account.host} via {event.interface} dedicated table"
                         )
 
                 except Exception as e:
