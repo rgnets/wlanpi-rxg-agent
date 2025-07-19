@@ -1,5 +1,6 @@
+import asyncio
 import time
-
+from functools import wraps, partial
 
 def debug_print_execution_time(func):
     def wrapper(*args, **kwargs):
@@ -19,3 +20,15 @@ def debug_announce_execution(func):
         return result
 
     return wrapper
+
+def async_wrap(func):
+    """
+    Decorator to turn a synchronous function into an awaitable asynchronous function.
+    """
+    @wraps(func)
+    async def run(*args, loop=None, executor=None, **kwargs):
+        if loop is None:
+            loop = asyncio.get_event_loop()
+        pfunc = partial(func, *args, **kwargs)
+        return await loop.run_in_executor(executor, pfunc)
+    return run

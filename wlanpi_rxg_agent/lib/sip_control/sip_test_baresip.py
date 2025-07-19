@@ -4,6 +4,7 @@ import os
 from os import PathLike
 from typing import Callable, Optional
 
+from util_decorators import async_wrap
 from wlanpi_rxg_agent import utils
 from wlanpi_rxg_agent.lib.sip_control.custom_baresipy import CustomBaresipy
 from wlanpi_rxg_agent.lib.sip_control.mdk_baresip import MdkBareSIP
@@ -98,18 +99,24 @@ class SipTestBaresip(SipTest):
             @bs.ee.listens_to(str(bs.Events.ESTABLISHED))
             async def call_established(bs_instance: MdkBareSIP, *_, **__):
                 self.logger.info("call established")
+                # Wait a moment or two.
+                await asyncio.sleep(2)
                 if post_connect:
                     bs_instance.send_dtmf(post_connect)
 
                 """ CALL TEST LOGIC HERE"""
-                bs_instance.speak("I am WLAN Pi " + utils.get_hostname())
-                # await asyncio.sleep(0.5)
+                self.logger.warning("Speaking!")
+                await asyncio.create_task(async_wrap(bs_instance.speak)("I am WLAN Pi " + utils.get_hostname()))
+                self.logger.warning("Done speaking!")
+                # Wait a few seconds, because we're not actually done speaking.
+                await asyncio.sleep(10)
                 # bs_instance.hang()
 
                 """ END CALL TEST LOGIC """
                 # If there's no timeout set, always hang up to prevent holding the call open.
                 # You can safely hang up before this.
                 if not call_timeout:
+                    await asyncio.sleep(5)
                     bs_instance.hang()
                 if not (test_in_progress.done() or test_in_progress.cancelled()):
                     test_in_progress.set_result(True)

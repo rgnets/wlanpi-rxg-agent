@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 
+import constants
 import wlanpi_rxg_agent.lib.domain as agent_domain
 import wlanpi_rxg_agent.lib.rxg_supplicant.domain as supplicant_domain
 from wlanpi_rxg_agent.bridge_control import BridgeControl
@@ -38,7 +39,7 @@ logger = logging.getLogger(__name__)
 logging.getLogger("wlanpi_rxg_agent.rxg_agent").setLevel(logging.INFO)
 logging.getLogger("rxg_agent").setLevel(logging.INFO)
 logging.getLogger("api_client").setLevel(logging.INFO)
-logging.getLogger("apscheduler.scheduler").setLevel(logging.WARNING)
+logging.getLogger("apscheduler.scheduler").setLevel(logging.INFO)
 logging.getLogger("wlanpi_rxg_agent.core_client").setLevel(logging.WARNING)
 logging.getLogger("wlanpi_rxg_agent.lib.event_bus._messagebus").setLevel(logging.INFO)
 logging.getLogger("wlanpi_rxg_agent.lib.event_bus._commandbus").setLevel(logging.INFO)
@@ -49,7 +50,7 @@ logging.getLogger(
     "wlanpi_rxg_agent.lib.wifi_control.wifi_control_wpa_supplicant"
 ).setLevel(logging.DEBUG)
 logging.getLogger("wlanpi_rxg_agent.rxg_mqtt_client").setLevel(logging.INFO)
-logging.getLogger("wlanpi_rxg_agent.lib.sip_control.mdk_baresip").setLevel(logging.INFO)
+logging.getLogger("wlanpi_rxg_agent.lib.sip_control").setLevel(logging.DEBUG if constants.BARESIP_DEBUG_OUTPUT else logging.INFO)
 # logging.getLogger("apscheduler.scheduler").setLevel(logging.INFO)
 logging.getLogger("wlanpi_rxg_agent.lib.tasker.tasker").setLevel(logging.INFO)
 logging.getLogger(
@@ -201,7 +202,7 @@ async def lifespan(app: FastAPI):
                 for component_name, shutdown_func in shutdown_tasks:
                     try:
                         logger.info(f"Shutting down {component_name}...")
-                        await asyncio.wait_for(shutdown_func(), timeout=10.0)
+                        await asyncio.wait_for(shutdown_func(), timeout=30.0)
                         logger.info(f"{component_name} shutdown completed")
                     except asyncio.TimeoutError:
                         logger.warning(

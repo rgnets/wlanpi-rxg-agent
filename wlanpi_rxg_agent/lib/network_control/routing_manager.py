@@ -88,13 +88,15 @@ class RoutingManager:
 
     async def remove_interface_routing(self, interface_name: str) -> bool:
         """Remove routing configuration for an interface"""
+        self.logger.debug(f"Removing routing for {interface_name}")
         async with self.lock:
+            self.logger.debug(f"Lock obtained")
             try:
                 table_id = self.interface_tables.get(interface_name)
                 if not table_id:
                     self.logger.debug(f"No table ID found for {interface_name}")
                     return True
-
+                self.logger.debug(f"Found {table_id} for {interface_name}")
                 success = await self._remove_interface_routing(interface_name, table_id)
 
                 if success:
@@ -582,31 +584,40 @@ class RoutingManager:
 
     async def cleanup(self):
         """Clean up all configured routing on shutdown"""
-        async with self.lock:
-            try:
-                self.logger.info("Starting routing cleanup for shutdown")
 
-                # Clean up all interfaces we've configured
-                for interface_name in list(self.configured_interfaces):
-                    await self.remove_interface_routing(interface_name)
+        try:
+            self.logger.info("Starting routing cleanup for shutdown")
 
-                # Additional cleanup: ensure all our table range is clean
-                for interface_name, table_id in list(self.interface_tables.items()):
-                    await self._cleanup_table_and_rules(interface_name, table_id)
+            # Clean up all interfaces we've configured
+            self.logger.debug(f"Cleaning up all configured interfaces: {self.configured_interfaces}")
+            for interface_name in list(self.configured_interfaces):
+                self.logger.debug(f"Removing routing for interface: {interface_name}")
+                await self.remove_interface_routing(interface_name)
+            self.logger.debug("Finished cleaning up all interfaces")
 
-                # Clean up any remaining main table routes
-                for interface_name in list(self.main_table_routes.keys()):
-                    await self._remove_main_table_routes(interface_name)
+            self.logger.info(f"Starting routing cleanup for managed tables: {self.interface_tables}")
+            # Additional cleanup: ensure all our table range is clean
+            for interface_name, table_id in list(self.interface_tables.items()):
+                self.logger.debug(f"Cleaning up table {table_id} for interface {interface_name}")
+                await self._cleanup_table_and_rules(interface_name, table_id)
+            self.logger.debug(f"Finished cleaning up all tables: ")
 
-                # Clear our tracking data
-                self.configured_interfaces.clear()
-                self.interface_tables.clear()
-                self.main_table_routes.clear()
+            # Clean up any remaining main table routes
+            self.logger.debug(f"Cleaning up all main table routes: {self.main_table_routes}")
+            for interface_name in list(self.main_table_routes.keys()):
+                self.logger.debug(f"Cleaning up main table routes for {interface_name}: {self.main_table_routes[interface_name]}")
+                await self._remove_main_table_routes(interface_name)
+            self.logger.debug("Finished cleaning up all main table routes")
 
-                self.logger.info("Routing cleanup completed")
+            # Clear our tracking data
+            self.configured_interfaces.clear()
+            self.interface_tables.clear()
+            self.main_table_routes.clear()
 
-            except Exception as e:
-                self.logger.error(f"Error during routing cleanup: {e}")
+            self.logger.info("Routing cleanup completed")
+
+        except Exception as e:
+            self.logger.error(f"Error during routing cleanup: {e}")
 
     async def resolve_host_via_interface(
         self, host: str, interface_name: str
@@ -653,10 +664,12 @@ class RoutingManager:
                 self.logger.error(f"NDB route addition failed: {e}")
                 return False
         
+
+        success = await asyncio.to_thread(add_route_with_ndb)
         # Run in thread pool to avoid asyncio conflicts
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            future = executor.submit(add_route_with_ndb)
-            success = future.result()
+        # with concurrent.futures.ThreadPoolExecutor() as executor:
+        #     future = executor.submit(add_route_with_ndb)
+        #     success = future.result()
             
         if not success:
             raise Exception("Failed to add main table default route via NDB")

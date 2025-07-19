@@ -167,13 +167,11 @@ class NetworkControlManager:
             self.logger.info(f"WiFi disconnection detected on {interface_name}")
 
             # Ensure we're running in the correct event loop context
-            try:
-                loop = asyncio.get_running_loop()
-                # Schedule the cleanup as a task in the current loop
-                loop.create_task(self._cleanup_interface_on_disconnect(interface_name))
-            except RuntimeError:
-                # No running loop, fall back to direct await
-                await self._cleanup_interface_on_disconnect(interface_name)
+
+            loop = asyncio.get_running_loop()
+            # Schedule the cleanup as a task in the current loop
+            loop.create_task(self._cleanup_interface_on_disconnect(interface_name))
+
 
         except Exception as e:
             self.logger.error(f"Error handling WiFi disconnection: {e}")
