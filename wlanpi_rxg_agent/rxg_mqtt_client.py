@@ -16,23 +16,28 @@ from ssl import SSLCertVerificationError
 from typing import Any, Callable, Coroutine, Optional, Union
 
 import aiomqtt
-import lib.agent_actions.domain as actions_domain
-import lib.domain as agent_domain
-import lib.rxg_supplicant.domain as supplicant_domain
 import paho.mqtt.client as mqtt
-import utils
 from aiomqtt import MqttCodeError, MqttError, TLSParameters
 from aiomqtt.types import PayloadType
-from api_client import ApiClient
-from busses import command_bus, message_bus
-from kismet_control import KismetControl
-from lib.configuration.agent_config_file import AgentConfigFile
-from lib.configuration.bootloader_config_file import BootloaderConfigFile
-from lib.configuration.bridge_config_file import BridgeConfigFile
-from lib.wifi_control.wifi_control_wpa_supplicant import WiFiControlWpaSupplicant
 from paho.mqtt.properties import Properties
-from structures import MQTTRestResponse, TLSConfig
-from utils import run_command_async
+
+import wlanpi_rxg_agent.lib.agent_actions.domain as actions_domain
+import wlanpi_rxg_agent.lib.domain as agent_domain
+import wlanpi_rxg_agent.lib.rxg_supplicant.domain as supplicant_domain
+import wlanpi_rxg_agent.utils as utils
+from wlanpi_rxg_agent.api_client import ApiClient
+from wlanpi_rxg_agent.busses import command_bus, message_bus
+from wlanpi_rxg_agent.kismet_control import KismetControl
+from wlanpi_rxg_agent.lib.configuration.agent_config_file import AgentConfigFile
+from wlanpi_rxg_agent.lib.configuration.bootloader_config_file import (
+    BootloaderConfigFile,
+)
+from wlanpi_rxg_agent.lib.configuration.bridge_config_file import BridgeConfigFile
+from wlanpi_rxg_agent.lib.wifi_control.wifi_control_wpa_supplicant import (
+    WiFiControlWpaSupplicant,
+)
+from wlanpi_rxg_agent.structures import MQTTRestResponse, TLSConfig
+from wlanpi_rxg_agent.utils import run_command_async
 
 
 class RxgMqttClient:
@@ -107,10 +112,11 @@ class RxgMqttClient:
             (actions_domain.Messages.Iperf3Complete, self.iperf3_complete_handler),
             (actions_domain.Messages.DigTestComplete, self.dig_test_complete_handler),
             (actions_domain.Messages.DhcpTestComplete, self.dhcp_test_complete_handler),
+            (actions_domain.Messages.SipTestComplete, self.sip_test_complete_handler),
         ]
 
         self.setup_listeners()
-        self.mqtt_listener_task: Any = None
+        self.mqtt_listener_coro: Any = None
 
     def setup_listeners(self):
         self.logger.info("Setting up listeners")
@@ -127,28 +133,29 @@ class RxgMqttClient:
         if self.run:
             await self.stop()
 
-    async def listen(self, client: aiomqtt.Client):
-        async for message in self.mqtt_client.messages:
-            # self.logger.info(f"Got message {message}: {message.payload}")
-            await self.handle_message(self.mqtt_client, message)
-
     async def restart_client_handler(
         self, event: supplicant_domain.Messages.RestartInternalMqtt
     ):
-        return await self.start_client(event.host, event.port, event.tls_config)
+        if event.host and event.port:
+            return await self.start_client(event.host, event.port, event.tls_config)
+        else:
+            self.logger.error(
+                f"restart_client_handler: Missing host or port in event!\n {event}"
+            )
 
     async def start_client(self, host, port, tls_config: TLSConfig = None):
+
+        self.mqtt_client = aiomqtt.Client(
+            host,
+            port=port,
+            tls_params=TLSParameters(**tls_config.__dict__) if tls_config else None,
+            will=aiomqtt.Will(
+                f"{self.my_base_topic}/status", "Abnormally Disconnected", 1, True
+            ),
+        )
         try:
-            async with aiomqtt.Client(
-                host,
-                port=port,
-                tls_params=TLSParameters(**tls_config.__dict__) if tls_config else None,
-                will=aiomqtt.Will(
-                    f"{self.my_base_topic}/status", "Abnormally Disconnected", 1, True
-                ),
-            ) as c:
+            async with self.mqtt_client:
                 # Make client globally available
-                self.mqtt_client = c
                 self.logger.info(
                     f"Connected to MQTT server at {self.mqtt_server}:{self.mqtt_port}."
                 )
@@ -166,11 +173,26 @@ class RxgMqttClient:
 
                 self.connected = True
 
-                loop = asyncio.get_event_loop()
-                self.mqtt_listener_task = loop.create_task(
-                    self.listen(self.mqtt_client)
-                )
-                await self.mqtt_listener_task
+                while self.run:
+                    try:
+                        self.mqtt_listener_coro = asyncio.wait_for(
+                            self.mqtt_client.messages.__anext__(), 1
+                        )
+                        message = await self.mqtt_listener_coro
+                        await self.handle_message(self.mqtt_client, message)
+                    except asyncio.TimeoutError:
+                        continue
+                    except StopAsyncIteration:
+                        break
+                    except asyncio.CancelledError as e:
+                        self.logger.info("MQTT listener coroutine was cancelled.")
+                        break
+                    except Exception as e:
+                        err_msg = "There was an error in the MQTT Listener. Refusing to die so we don't lose connection"
+                        self.logger.exception(err_msg, exc_info=True)
+                        message_bus.handle(agent_domain.Messages.MqttError(err_msg, e))
+
+                # Reaching here will cause a disconnect as we leave the context.
 
         except (aiomqtt.exceptions.MqttError, aiomqtt.exceptions.MqttCodeError) as e:
             err_msg = "There was an error in the MQTT Listener"
@@ -206,7 +228,9 @@ class RxgMqttClient:
         )
         self.mqtt_server = event.host
         self.mqtt_port = event.port
-
+        self.logger.info(
+            f"Starting client with {event.host}:{event.port}, {self.tls_config}"
+        )
         await self.start_client(
             host=event.host, port=event.port, tls_config=self.tls_config
         )
@@ -257,27 +281,55 @@ class RxgMqttClient:
             payload=json.dumps(event.model_dump(), default=str),
         )
 
+    async def sip_test_complete_handler(
+        self, event: actions_domain.Messages.SipTestComplete
+    ):
+        await self.publish_with_retry(
+            topic=f"{self.my_base_topic}/ingest/sip",
+            payload=json.dumps(event.model_dump(), default=str),
+        )
+
     async def stop(self):
-        self.logger.info("Stopping MQTTBridge")
-        self.run = False
+        self.logger.info("Stopping MQTT Client")
+
+        self.logger.info("Tearing down bus listeners...")
+        self.teardown_listeners()
+
         try:
-            await self.mqtt_client.publish(
-                f"{self.my_base_topic}/status", "Disconnected", 1, True
+            self.logger.info("Sending disconnect message to MQTT server...")
+
+            await asyncio.wait_for(
+                self.mqtt_client.publish(
+                    f"{self.my_base_topic}/status", "Disconnected", 1, True
+                ),
+                5,
             )
-        except (aiomqtt.exceptions.MqttError, aiomqtt.exceptions.MqttCodeError) as e:
-            self.logger.warning(f"Failed to stop Agent MQTT: {e}", exc_info=True)
-        if self.mqtt_listener_task is None:
+        except (
+            aiomqtt.exceptions.MqttError,
+            aiomqtt.exceptions.MqttCodeError,
+            asyncio.CancelledError,
+        ) as e:
+            self.logger.warning(f"Failed to send disconnect: {e}", exc_info=True)
+
+        self.run = False
+        if self.mqtt_listener_coro is None:
+            self.logger.info("No MQTT listener coroutine to cancel.")
             return
-        # Cancel the task
-        self.mqtt_listener_task.cancel()
-        # Wait for the task to be cancelled
+
         try:
-            await self.mqtt_listener_task
+            # Cancel the task
+            self.logger.info("Cancelling MQTT listener coroutine...")
+            self.mqtt_listener_coro.throw(asyncio.CancelledError)
+            # Wait for the task to be cancelled
+            self.logger.info("MQTT listener coroutine has finished.")
+            return
         except (aiomqtt.exceptions.MqttError, aiomqtt.exceptions.MqttCodeError) as e:
             err_msg = "There was an error in the MQTT Listener, but we were stopping it, so we don't care."
             self.logger.warn(err_msg, exc_info=True)
+            return
         except asyncio.CancelledError:
-            pass
+            self.logger.info("MQTT listener coroutine was cancelled.")
+            return
 
     async def add_subscription(self, topic) -> bool:
         """
@@ -339,7 +391,7 @@ class RxgMqttClient:
                         payload = msg.payload
                 else:
                     payload = None
-                self.logger.warning(
+                self.logger.info(
                     f"Received message on topic '{msg.topic}': {str(msg.payload)}"
                 )
                 self.logger.debug(f"Payload: {payload}")
@@ -495,6 +547,16 @@ class RxgMqttClient:
         attempts = 0
         MAX_ATTEMPTS = 3
         while attempts < MAX_ATTEMPTS:
+
+            if not self.mqtt_server or not self.mqtt_port:
+                stack_trace_list = traceback.format_stack()
+                stack_trace_string = "".join(stack_trace_list[-3:-1])
+                self.logger.warning(
+                    f"Client is not properly configured yet, but we tried to publish! Stack: {stack_trace_string}"
+                )
+                await asyncio.sleep(3)
+                continue
+
             try:
                 attempts += 1
                 result = await self.mqtt_client.publish(
@@ -567,7 +629,6 @@ class RxgMqttClient:
                 self.logger.warning(f"Failed to stop Agent MQTT: {e}", exc_info=True)
 
     def __del__(self):
-        self.teardown_listeners()
         if self.run:
             try:
                 self.stop()

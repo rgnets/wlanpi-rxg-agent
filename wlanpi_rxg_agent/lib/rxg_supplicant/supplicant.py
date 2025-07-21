@@ -5,18 +5,18 @@ import os
 from enum import Enum
 from typing import Literal, Optional
 
-import lib.domain as agent_domain
-import lib.rxg_supplicant.domain as supplicant_domain
-from api_client import ApiClient
-from busses import command_bus, message_bus
-from certificate_tool import CertificateTool
-from constants import CONFIG_DIR
-from lib.configuration.agent_config_file import AgentConfigFile
-from models.exceptions import RXGAgentException
 from requests import ConnectTimeout, ReadTimeout
-from structures import FlatResponse
 
+import wlanpi_rxg_agent.lib.domain as agent_domain
+import wlanpi_rxg_agent.lib.rxg_supplicant.domain as supplicant_domain
 import wlanpi_rxg_agent.utils as utils
+from wlanpi_rxg_agent.api_client import ApiClient
+from wlanpi_rxg_agent.busses import command_bus, message_bus
+from wlanpi_rxg_agent.certificate_tool import CertificateTool
+from wlanpi_rxg_agent.constants import CONFIG_DIR
+from wlanpi_rxg_agent.lib.configuration.agent_config_file import AgentConfigFile
+from wlanpi_rxg_agent.models.exceptions import RXGAgentException
+from wlanpi_rxg_agent.structures import FlatResponse
 
 
 class RxgSupplicantState(Enum):
@@ -224,7 +224,12 @@ class RxgSupplicant:
         try:
             resp = await api_client.check_device(ip)
 
-        except (ConnectTimeout, ConnectionError, ReadTimeout) as e:
+        except (
+            ConnectTimeout,
+            ConnectionError,
+            ReadTimeout,
+            asyncio.TimeoutError,
+        ) as e:
             self.logger.warning(f"Testing of address {ip} failed: {e}")
             return False
 
@@ -243,16 +248,26 @@ class RxgSupplicant:
         if self.override_server and await self.test_address_for_rxg(
             self.override_server
         ):
+            self.logger.info(
+                f"Override server {self.override_server} is valid. Using it."
+            )
             return self.override_server
-
+        self.logger.debug(
+            "No valid override server configured. Checking default routes. Starting with first gateway on eth0."
+        )
         first_gateway = utils.get_default_gateways().get("eth0", None)
 
         if not first_gateway:
             raise RXGAgentException("Unable to find first gateway on eth0")
 
+        self.logger.debug(f"First gateway on eth0: {first_gateway}")
         if await self.test_address_for_rxg(first_gateway):
+            self.logger.debug(f"First gateway on eth0 is a valid rXg: {first_gateway}")
             return first_gateway
 
+        self.logger.debug(
+            "First gateway on eth0 is not a valid rXg. Looking for a valid rXg on a route to google.com."
+        )
         raw_hop_data: list[dict] = utils.trace_route("google.com")["hops"]
         filtered_hops: list[dict] = list(
             filter(lambda e: len(e["probes"]), raw_hop_data)
@@ -265,15 +280,21 @@ class RxgSupplicant:
         ]
 
         for i, address in enumerate(hop_addresses):
+            self.logger.debug(f"Checking address {address} for rXg")
             if i < max_hops and await self.test_address_for_rxg(address):
+                self.logger.debug(f"Address {address} is a valid rXg")
                 return address
 
+        self.logger.debug(
+            "No valid rXg found. Checking for configured fallback server."
+        )
         # Todo: insert fallback here
         if self.fallback_server and await self.test_address_for_rxg(
             self.fallback_server
         ):
+            self.logger.debug("Fallback server is valid. Using it.")
             return self.fallback_server
-
+        self.logger.error("Unable find a valid rXg. Throwing in the towel.")
         raise RXGAgentException("Unable to find an rXg.")
 
     async def get_client_cert(self, server_ip):
@@ -420,14 +441,19 @@ class RxgSupplicant:
                 message_bus.handle(supplicant_domain.Messages.RegistrationFailed())
                 return False
             return False
-        except (ConnectTimeout, ConnectionError) as e:
+        except (ConnectTimeout, ConnectionError, asyncio.TimeoutError) as e:
             self.logger.warning(f"Configuring {self.active_server} failed: {e}")
             message_bus.handle(supplicant_domain.Messages.Error(e))
             return False
 
 
-# if __name__ == "__main__":
-#     supp = RxgSupplicant()
-#     # supp.fallback_server = "192.168.20.81"
-#     res = supp.find_rxg()
-#     print(res)
+if __name__ == "__main__":
+
+    async def main():
+        supp = RxgSupplicant(verify_ssl=False)
+        # supp.fallback_server = "192.168.20.81"
+        # res = await supp.find_rxg()
+        res = await supp.test_address_for_rxg("gcr.rxgs.ketchel.xyz")
+        print(res)
+
+    asyncio.get_event_loop().run_until_complete(main())

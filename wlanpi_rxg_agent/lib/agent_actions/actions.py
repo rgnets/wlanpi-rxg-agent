@@ -5,15 +5,22 @@ import string
 import typing as t
 from json import JSONDecodeError
 
-import lib.agent_actions.domain as actions_domain
-import lib.domain as agent_domain
-import lib.rxg_supplicant.domain as supplicant_domain
-import utils
-from api_client import ApiClient
-from busses import command_bus, message_bus
-from core_client import CoreClient
-from kismet_control import KismetControl
-from lib.configuration.bootloader_config_file import BootloaderConfigFile
+import constants
+
+import wlanpi_rxg_agent.lib.agent_actions.domain as actions_domain
+import wlanpi_rxg_agent.lib.domain as agent_domain
+import wlanpi_rxg_agent.lib.network_control.domain as network_control_domain
+import wlanpi_rxg_agent.lib.rxg_supplicant.domain as supplicant_domain
+import wlanpi_rxg_agent.lib.wifi_control.domain as wifi_domain
+import wlanpi_rxg_agent.utils as utils
+from wlanpi_rxg_agent.api_client import ApiClient
+from wlanpi_rxg_agent.busses import command_bus, message_bus
+from wlanpi_rxg_agent.core_client import CoreClient
+from wlanpi_rxg_agent.kismet_control import KismetControl
+from wlanpi_rxg_agent.lib.configuration.bootloader_config_file import (
+    BootloaderConfigFile,
+)
+from wlanpi_rxg_agent.lib.sip_control.sip_test_baresip import SipTestBaresip
 
 
 class AgentActions:
@@ -55,6 +62,7 @@ class AgentActions:
             (actions_domain.Commands.TCPDump, self.handle_tcp_dump_on_interface),
             (actions_domain.Commands.Iperf2, self.run_iperf2),
             (actions_domain.Commands.Iperf3, self.run_iperf3),
+            (actions_domain.Commands.SipTest, self.run_sip_test),
         )
 
         for command, handler in pairs:
@@ -115,10 +123,12 @@ class AgentActions:
         command_bus.handle(
             actions_domain.Commands.ConfigureSpeedTests(targets=event.speed_tests)
         )
+        # Then Sip Tests
+        command_bus.handle(
+            actions_domain.Commands.ConfigureSipTests(targets=event.sip_tests)
+        )
 
     async def configure_radios(self, event: actions_domain.Commands.ConfigureRadios):
-        import lib.wifi_control.domain as wifi_domain  # type: ignore
-
         self.logger.info(f"Configuring radios: New payload: {event}")
         for interface_name, config in event.interfaces.items():
             # if not interface_name in self.kismet_control.available_kismet_interfaces().keys():
@@ -197,20 +207,14 @@ class AgentActions:
                         )
 
                         try:
-
                             await wlan_if.connect(
                                 ssid=wlan_data.ssid, psk=wlan_data.psk
                             )
                             self.logger.info(
-                                f"Connection state of {interface_name} is complete. Renewing dhcp."
+                                f"Connection to {wlan_data.ssid} completed. DHCP and routing will be handled automatically by NetworkControlManager."
                             )
-                            await wlan_if.renew_dhcp()
-                            # self.logger.info(f"Waiting for dhcp to settle.")
-                            # await asyncio.sleep(5)
-                            self.logger.info(
-                                f"Adding default routes for {interface_name}."
-                            )
-                            await wlan_if.add_default_routes()
+                            # Note: DHCP renewal and route configuration are now handled automatically
+                            # by NetworkControlManager when it detects the interface IP change via netlink events
                         except TimeoutError:
                             self.logger.error(
                                 f"Connection to {wlan_data.ssid} timed out."
@@ -361,19 +365,25 @@ class AgentActions:
 
     async def run_dig_test(
         self, event: actions_domain.Commands.Dig
-    ) -> actions_domain.Messages.DigResponse:
+    ) -> actions_domain.Messages.DigTestComplete:
         self.logger.info(f"Running dig test: {event}")
         res = await self.core_client.execute_async_request(
             "post", "api/v1/utils/dns/dig", data=event.model_dump()
         )
+
         res_json = res.json()
-        result_payload = actions_domain.Messages.DigResponse(**res.json()[0])
-        message_bus.handle(result_payload)
+        if len(res_json) == 0:
+            error = "No results returned from dig, probably a timeout."
+        else:
+            error = None
+            result_payload = actions_domain.Messages.DigResponse(**res_json[0])
+            message_bus.handle(result_payload)
         # Extra: emit a test complete message too, for now, since these don't have identifiable rXg models
-        message_bus.handle(
-            actions_domain.Messages.DigTestComplete(request=event, result=res.json())
+        payload = actions_domain.Messages.DigTestComplete(
+            error=error, request=event, result=res_json
         )
-        return result_payload
+        message_bus.handle(payload)
+        return payload
 
     async def run_dhcp_test(
         self, event: actions_domain.Commands.DhcpTest
@@ -382,10 +392,146 @@ class AgentActions:
         res = await self.core_client.execute_async_request(
             "post", "api/v1/utils/dhcp/test", data=event.model_dump()
         )
-        result_payload = actions_domain.Messages.DhcpTestResponse(**res.json())
+        res_json = res.json()
+        result_payload = actions_domain.Messages.DhcpTestResponse(**res_json)
         message_bus.handle(result_payload)
         # Extra: emit a test complete message too, for now, since these don't have identifiable rXg models
         message_bus.handle(
-            actions_domain.Messages.DhcpTestComplete(request=event, result=res.json())
+            actions_domain.Messages.DhcpTestComplete(request=event, result=res_json)
         )
+        return result_payload
+
+    async def run_sip_test(
+        self, event: actions_domain.Commands.SipTest
+    ) -> actions_domain.Messages.SipTestComplete:
+        self.logger.info(f"Running sip test: {event}")
+        route_added = False
+
+        try:
+            # 1. Setup temp directory and config
+            conf_path = f"/tmp/bs_sip_test__{event.id}/"
+            await SipTestBaresip.deploy_config(conf_path)
+
+            # 2. Add host route for SIP server if a wireless interface is specified
+            if event.interface:
+                if event.interface.startswith("wlan"):
+                    try:
+                        self.logger.info(
+                            f"Adding route to {event.sip_account.host} via {event.interface}"
+                        )
+                        route_main_result = await command_bus.handle(
+                            network_control_domain.Commands.AddHostRoute(
+                                host=event.sip_account.host,
+                                interface_name=event.interface,
+                                table_id=254,
+                            )
+                        )
+
+                        if not route_main_result.success:
+                            self.logger.warning(
+                                f"Failed to add route to {event.sip_account.host}: {route_main_result.error_message}"
+                            )
+                            # Continue with test but log the warning
+                        else:
+                            route_added = True
+                            self.logger.info(
+                                f"Added route to {route_main_result.resolved_ip} via {event.interface} main table"
+                            )
+
+                        route_result = await command_bus.handle(
+                            network_control_domain.Commands.AddHostRoute(
+                                host=event.sip_account.host,
+                                interface_name=event.interface,
+                            )
+                        )
+
+                        if not route_result.success:
+                            self.logger.warning(
+                                f"Failed to add route to {event.sip_account.host}: {route_result.error_message}"
+                            )
+                            # Continue with test but log the warning
+                        else:
+                            route_added = True
+                            self.logger.info(
+                                f"Added route to {route_result.resolved_ip} via {event.interface} dedicated table"
+                            )
+
+                    except Exception as e:
+                        self.logger.warning(f"Error adding route for SIP test: {e}")
+                        # Continue with test but log the error
+
+            # 3. Execute SIP test
+            sip_test = SipTestBaresip(
+                gateway=event.sip_account.host,
+                password=event.sip_account.auth_pass,
+                user=event.sip_account.user,
+                config_path=conf_path,
+                debug=constants.BARESIP_DEBUG_OUTPUT,
+                interface=event.interface,
+            )
+
+            sip_result = await sip_test.execute(
+                callee=event.callee,
+                post_connect=event.post_connect,
+                call_timeout=event.call_timeout,
+            )
+            summary = actions_domain.Data.SipTestRtcpSummary.from_baresip_summary(
+                sip_result
+            )
+
+            result_payload = actions_domain.Messages.SipTestComplete(
+                request=event, result=summary
+            )
+
+        except Exception as e:
+            self.logger.warning(f"SIP test failed: {e}", exc_info=True)
+            result_payload = actions_domain.Messages.SipTestComplete(
+                request=event, error=str(e)
+            )
+
+        finally:
+            # 4. Cleanup route (always)
+            if route_added and event.interface:
+                try:
+                    self.logger.info(
+                        f"Removing route to {event.sip_account.host} via {event.interface}"
+                    )
+
+                    cleanup_main_result = await command_bus.handle(
+                        network_control_domain.Commands.RemoveHostRoute(
+                            host=event.sip_account.host,
+                            interface_name=event.interface,
+                            table_id=254,
+                        )
+                    )
+
+                    if not cleanup_main_result.success:
+                        self.logger.warning(
+                            f"Failed to remove route to {event.sip_account.host}: {cleanup_main_result.error_message}"
+                        )
+                    else:
+                        self.logger.info(
+                            f"Removed route to {event.sip_account.host} via {event.interface} main table"
+                        )
+
+                    cleanup_result = await command_bus.handle(
+                        network_control_domain.Commands.RemoveHostRoute(
+                            host=event.sip_account.host, interface_name=event.interface
+                        )
+                    )
+
+                    if not cleanup_result.success:
+                        self.logger.warning(
+                            f"Failed to remove route to {event.sip_account.host}: {cleanup_result.error_message}"
+                        )
+                    else:
+                        self.logger.info(
+                            f"Removed route to {event.sip_account.host} via {event.interface} dedicated table"
+                        )
+
+                except Exception as e:
+                    self.logger.error(f"Error during route cleanup: {e}")
+
+        # 5. Publish results
+        message_bus.handle(result_payload)
         return result_payload

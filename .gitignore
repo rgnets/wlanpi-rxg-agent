@@ -4,3 +4,6 @@ venv
 .pycache
 .mypy_cache
 .venv
+/wlanpi_rxg_agent.egg-info
+/dist
+/build

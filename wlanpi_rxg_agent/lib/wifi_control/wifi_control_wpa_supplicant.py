@@ -6,16 +6,17 @@ import time
 from asyncio import AbstractEventLoop
 from typing import Any, Optional
 
-import utils
 import wpa_supplicant
-from busses import command_bus, message_bus
-from core_client import CoreClient
-from lib.wifi_control import domain as wifi_domain
-from lib.wifi_control.wifi_control import WifiControl
-from models.runcommand_error import RunCommandError
 from twisted.internet.asyncioreactor import AsyncioSelectorReactor
-from utils import run_command_async
 from wpa_supplicant.core import Interface, WpaSupplicant, WpaSupplicantDriver
+
+from wlanpi_rxg_agent import utils
+from wlanpi_rxg_agent.busses import command_bus, message_bus
+from wlanpi_rxg_agent.core_client import CoreClient
+from wlanpi_rxg_agent.lib.wifi_control import domain as wifi_domain
+from wlanpi_rxg_agent.lib.wifi_control.wifi_control import WifiControl
+from wlanpi_rxg_agent.models.runcommand_error import RunCommandError
+from wlanpi_rxg_agent.utils import run_command_async
 
 
 class WifiInterfaceException(Exception):
@@ -43,7 +44,7 @@ class WifiInterface:
         interface: Interface,
         event_loop: Optional[AbstractEventLoop] = None,
     ):
-        self.logger = logging.getLogger(f"{__name__}:")
+        self.logger = logging.getLogger(__name__)
         self.logger.info(f"Initializing {__name__}")
         self.name = name
         self.supplicant = supplicant
@@ -94,7 +95,7 @@ class WifiInterface:
                     )
                 )
             else:
-                self.logger.debug(f"Unhandled event on {self.name}: {result}")
+                self.logger.warning(f"Unhandled event on {self.name}: {result}")
                 message_bus.handle(
                     wifi_domain.Messages.WpaSupplicantEvent(
                         interface=self.name, details=result
@@ -436,6 +437,9 @@ class WiFiControlWpaSupplicant(WifiControl):
         )
         self.setup_listeners()
 
+        # Proactively create interfaces for common wireless interface names to enable disconnect monitoring
+        self._create_monitoring_interfaces()
+
     def setup_listeners(self):
         self.logger.info("Setting up listeners")
         # TODO: Surely we can implement this as some sort of decorator function?
@@ -528,6 +532,58 @@ class WiFiControlWpaSupplicant(WifiControl):
                 )
 
         return self.interfaces[interface_name]
+
+    def _discover_wireless_interfaces(self):
+        """Discover actual wireless interfaces present on the system"""
+        try:
+            import subprocess
+
+            result = subprocess.run(
+                ["ip", "link", "show"], capture_output=True, text=True
+            )
+            wireless_interfaces = []
+
+            for line in result.stdout.split("\n"):
+                if "wlan" in line and ":" in line:
+                    # Extract interface name from lines like "6: wlan1: <BROADCAST,MULTICAST,UP,LOWER_UP>"
+                    parts = line.split(":")
+                    if len(parts) >= 2:
+                        interface_name = parts[1].strip()
+                        if interface_name.startswith("wlan"):
+                            wireless_interfaces.append(interface_name)
+
+            self.logger.info(f"Discovered wireless interfaces: {wireless_interfaces}")
+            return wireless_interfaces
+
+        except Exception as e:
+            self.logger.error(f"Error discovering wireless interfaces: {e}")
+            return []
+
+    def _create_monitoring_interfaces(self):
+        """Create WiFi interfaces for discovered wireless interfaces to enable disconnect monitoring"""
+        wireless_interfaces = self._discover_wireless_interfaces()
+
+        if not wireless_interfaces:
+            self.logger.warning("No wireless interfaces discovered for monitoring")
+            return
+
+        # Create WiFi interfaces for existing wireless interfaces to enable event monitoring
+        for interface_name in wireless_interfaces:
+            try:
+                self.logger.info(f"Creating monitoring interface for {interface_name}")
+                self.get_or_create_interface(interface_name)
+                self.logger.info(
+                    f"Successfully created monitoring interface for {interface_name}"
+                )
+            except Exception as e:
+                self.logger.warning(
+                    f"Failed to create monitoring interface for {interface_name}: {e}"
+                )
+                # Continue with other interfaces even if one fails
+
+    def get_discovered_wireless_interfaces(self):
+        """Get the list of discovered wireless interfaces"""
+        return self._discover_wireless_interfaces()
 
 
 if __name__ == "__main__":

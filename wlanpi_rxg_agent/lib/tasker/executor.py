@@ -3,10 +3,11 @@ from abc import ABC, abstractmethod
 from json import JSONDecodeError
 from typing import Type
 
-import lib.agent_actions.domain as actions_domain
-from busses import command_bus, message_bus
-from core_client import CoreClient
 from pydantic import BaseModel
+
+import wlanpi_rxg_agent.lib.agent_actions.domain as actions_domain
+from wlanpi_rxg_agent.busses import command_bus, message_bus
+from wlanpi_rxg_agent.core_client import CoreClient
 
 
 class Executor(ABC):

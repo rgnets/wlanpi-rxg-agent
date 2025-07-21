@@ -10,7 +10,8 @@ from requests.compat import json as complexjson
 from requests.models import guess_json_utf
 from requests.structures import CaseInsensitiveDict
 from requests.utils import guess_json_utf
-from utils import get_current_unix_timestamp
+
+from wlanpi_rxg_agent.utils import get_current_unix_timestamp
 
 
 class MQTTRestResponse:

@@ -2,8 +2,8 @@ import copy
 import json
 from json import JSONDecodeError
 
-from lib.configuration.config_file import ConfigFile
-from utils import run_command
+from wlanpi_rxg_agent.lib.configuration.config_file import ConfigFile
+from wlanpi_rxg_agent.utils import run_command
 
 
 class BootloaderConfigFile(ConfigFile):
