@@ -8,9 +8,9 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 
+import constants
 from fastapi import FastAPI, HTTPException
 
-import constants
 import wlanpi_rxg_agent.lib.domain as agent_domain
 import wlanpi_rxg_agent.lib.rxg_supplicant.domain as supplicant_domain
 from wlanpi_rxg_agent.bridge_control import BridgeControl
@@ -50,7 +50,9 @@ logging.getLogger(
     "wlanpi_rxg_agent.lib.wifi_control.wifi_control_wpa_supplicant"
 ).setLevel(logging.DEBUG)
 logging.getLogger("wlanpi_rxg_agent.rxg_mqtt_client").setLevel(logging.INFO)
-logging.getLogger("wlanpi_rxg_agent.lib.sip_control").setLevel(logging.DEBUG if constants.BARESIP_DEBUG_OUTPUT else logging.INFO)
+logging.getLogger("wlanpi_rxg_agent.lib.sip_control").setLevel(
+    logging.DEBUG if constants.BARESIP_DEBUG_OUTPUT else logging.INFO
+)
 # logging.getLogger("apscheduler.scheduler").setLevel(logging.INFO)
 logging.getLogger("wlanpi_rxg_agent.lib.tasker.tasker").setLevel(logging.INFO)
 logging.getLogger(

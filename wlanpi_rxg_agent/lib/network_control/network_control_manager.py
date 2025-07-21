@@ -172,7 +172,6 @@ class NetworkControlManager:
             # Schedule the cleanup as a task in the current loop
             loop.create_task(self._cleanup_interface_on_disconnect(interface_name))
 
-
         except Exception as e:
             self.logger.error(f"Error handling WiFi disconnection: {e}")
 

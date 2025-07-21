@@ -5,6 +5,7 @@ from os import PathLike
 from typing import Callable, Optional
 
 from util_decorators import async_wrap
+
 from wlanpi_rxg_agent import utils
 from wlanpi_rxg_agent.lib.sip_control.custom_baresipy import CustomBaresipy
 from wlanpi_rxg_agent.lib.sip_control.mdk_baresip import MdkBareSIP
@@ -106,7 +107,11 @@ class SipTestBaresip(SipTest):
 
                 """ CALL TEST LOGIC HERE"""
                 self.logger.warning("Speaking!")
-                await asyncio.create_task(async_wrap(bs_instance.speak)("I am WLAN Pi " + utils.get_hostname()))
+                await asyncio.create_task(
+                    async_wrap(bs_instance.speak)(
+                        "I am WLAN Pi " + utils.get_hostname()
+                    )
+                )
                 self.logger.warning("Done speaking!")
                 # Wait a few seconds, because we're not actually done speaking.
                 await asyncio.sleep(10)

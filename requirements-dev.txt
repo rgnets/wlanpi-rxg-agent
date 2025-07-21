@@ -24,6 +24,8 @@ attrs==24.2.0
     #   twisted
 automat==24.8.1
     # via twisted
+baresipy==0.1.4
+    # via wlanpi-rxg-agent (pyproject.toml)
 black==24.10.0
     # via wlanpi-rxg-agent (pyproject.toml)
 certifi==2024.8.30
@@ -81,6 +83,8 @@ mypy-extensions==1.0.0
     # via
     #   black
     #   mypy
+opentone==0.1.2
+    # via baresipy
 packaging==24.1
     # via black
 paho-mqtt==2.1.0
@@ -89,12 +93,18 @@ paho-mqtt==2.1.0
     #   wlanpi-rxg-agent (pyproject.toml)
 pathspec==0.12.1
     # via black
+pexpect==4.9.0
+    # via
+    #   baresipy
+    #   wlanpi-rxg-agent (pyproject.toml)
 platformdirs==4.3.6
     # via black
 propcache==0.3.1
     # via
     #   aiohttp
     #   yarl
+ptyprocess==0.7.0
+    # via pexpect
 pycairo==1.27.0
     # via pygobject
 pydantic==2.9.2
@@ -105,9 +115,15 @@ pydantic-core==2.23.4
     # via pydantic
 pydantic-settings==2.6.0
     # via wlanpi-rxg-agent (pyproject.toml)
+pydub==0.25.1
+    # via baresipy
+pyee==13.0.0
+    # via wlanpi-rxg-agent (pyproject.toml)
 pygments==2.19.1
     # via jc
 pygobject==3.50.0
+    # via wlanpi-rxg-agent (pyproject.toml)
+pyroute2==0.9.2
     # via wlanpi-rxg-agent (pyproject.toml)
 python-daemon==3.0.1
     # via wlanpi-rxg-agent (pyproject.toml)
@@ -116,7 +132,10 @@ python-dotenv==1.0.1
 requests==2.32.3
     # via
     #   kismet-rest
+    #   responsivevoice
     #   wlanpi-rxg-agent (pyproject.toml)
+responsivevoice==0.5.3
+    # via baresipy
 ruamel-yaml==0.18.12
     # via jc
 ruamel-yaml-clib==0.2.12
@@ -152,6 +171,7 @@ typing-extensions==4.12.2
     #   mypy
     #   pydantic
     #   pydantic-core
+    #   pyee
     #   twisted
 tzlocal==5.3.1
     # via apscheduler

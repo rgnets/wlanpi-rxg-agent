@@ -3,7 +3,7 @@ import logging
 from ipaddress import IPv4Address, IPv4Interface, IPv4Network
 from typing import Dict, List, Optional, Set
 
-from pyroute2 import AsyncIPRoute, NetlinkError, NDB
+from pyroute2 import NDB, AsyncIPRoute, NetlinkError
 
 from .domain import InterfaceInfo
 
@@ -291,10 +291,14 @@ class RoutingManager:
                     # 2a. Also add gateway to main table with lower metric for poorly designed programs
                     try:
                         main_metric = await self._get_main_table_metric()
-                        self.logger.debug(f"Attempting to add main table route: dst: default, gateway:{str(gateway)}, metric: {main_metric}, oif: {interface.index}, table: {254} ")
-                        
+                        self.logger.debug(
+                            f"Attempting to add main table route: dst: default, gateway:{str(gateway)}, metric: {main_metric}, oif: {interface.index}, table: {254} "
+                        )
+
                         # Use NDB for main table default route since AsyncIPRoute has issues with multiple default routes
-                        await self._add_main_table_default_route_ndb(gateway, interface, main_metric)
+                        await self._add_main_table_default_route_ndb(
+                            gateway, interface, main_metric
+                        )
 
                         # Track this route for cleanup
                         if interface.name not in self.main_table_routes:
@@ -589,23 +593,33 @@ class RoutingManager:
             self.logger.info("Starting routing cleanup for shutdown")
 
             # Clean up all interfaces we've configured
-            self.logger.debug(f"Cleaning up all configured interfaces: {self.configured_interfaces}")
+            self.logger.debug(
+                f"Cleaning up all configured interfaces: {self.configured_interfaces}"
+            )
             for interface_name in list(self.configured_interfaces):
                 self.logger.debug(f"Removing routing for interface: {interface_name}")
                 await self.remove_interface_routing(interface_name)
             self.logger.debug("Finished cleaning up all interfaces")
 
-            self.logger.info(f"Starting routing cleanup for managed tables: {self.interface_tables}")
+            self.logger.info(
+                f"Starting routing cleanup for managed tables: {self.interface_tables}"
+            )
             # Additional cleanup: ensure all our table range is clean
             for interface_name, table_id in list(self.interface_tables.items()):
-                self.logger.debug(f"Cleaning up table {table_id} for interface {interface_name}")
+                self.logger.debug(
+                    f"Cleaning up table {table_id} for interface {interface_name}"
+                )
                 await self._cleanup_table_and_rules(interface_name, table_id)
             self.logger.debug(f"Finished cleaning up all tables: ")
 
             # Clean up any remaining main table routes
-            self.logger.debug(f"Cleaning up all main table routes: {self.main_table_routes}")
+            self.logger.debug(
+                f"Cleaning up all main table routes: {self.main_table_routes}"
+            )
             for interface_name in list(self.main_table_routes.keys()):
-                self.logger.debug(f"Cleaning up main table routes for {interface_name}: {self.main_table_routes[interface_name]}")
+                self.logger.debug(
+                    f"Cleaning up main table routes for {interface_name}: {self.main_table_routes[interface_name]}"
+                )
                 await self._remove_main_table_routes(interface_name)
             self.logger.debug("Finished cleaning up all main table routes")
 
@@ -644,10 +658,12 @@ class RoutingManager:
             self.logger.error(f"Failed to resolve {host}: {e}")
             return None
 
-    async def _add_main_table_default_route_ndb(self, gateway: IPv4Address, interface: InterfaceInfo, metric: int):
+    async def _add_main_table_default_route_ndb(
+        self, gateway: IPv4Address, interface: InterfaceInfo, metric: int
+    ):
         """Add a default route to main table using NDB (works around AsyncIPRoute limitations)"""
         import concurrent.futures
-        
+
         def add_route_with_ndb():
             try:
                 with NDB() as ndb:
@@ -656,21 +672,20 @@ class RoutingManager:
                         gateway=str(gateway),
                         oif=interface.index,
                         table=254,  # Main table
-                        priority=metric
+                        priority=metric,
                     )
                     main_route.commit()
                     return True
             except Exception as e:
                 self.logger.error(f"NDB route addition failed: {e}")
                 return False
-        
 
         success = await asyncio.to_thread(add_route_with_ndb)
         # Run in thread pool to avoid asyncio conflicts
         # with concurrent.futures.ThreadPoolExecutor() as executor:
         #     future = executor.submit(add_route_with_ndb)
         #     success = future.result()
-            
+
         if not success:
             raise Exception("Failed to add main table default route via NDB")
 
@@ -746,19 +761,26 @@ class RoutingManager:
                 gateway_ip = None
                 try:
                     from .dhcp_lease_parser import DHCPLeaseParser
+
                     lease_parser = DHCPLeaseParser(interface_name)
                     lease = lease_parser.latest_lease()
-                    
+
                     if lease and "routers" in lease.options:
                         # Extract the first router from the DHCP lease
                         routers_data = lease.options["routers"].data
                         gateway_ip = routers_data.split()[0]  # Take first router IP
-                        self.logger.debug(f"Found gateway {gateway_ip} for {interface_name} from DHCP lease")
+                        self.logger.debug(
+                            f"Found gateway {gateway_ip} for {interface_name} from DHCP lease"
+                        )
                     else:
-                        self.logger.debug(f"No DHCP lease or routers option found for {interface_name}")
-                        
+                        self.logger.debug(
+                            f"No DHCP lease or routers option found for {interface_name}"
+                        )
+
                 except Exception as e:
-                    self.logger.debug(f"Could not get gateway from DHCP lease for {interface_name}: {e}")
+                    self.logger.debug(
+                        f"Could not get gateway from DHCP lease for {interface_name}: {e}"
+                    )
 
                 # Fallback: Get gateway from the interface's routing table if DHCP failed
                 if not gateway_ip:
@@ -770,7 +792,9 @@ class RoutingManager:
                             if dst == "default" or not dst:  # Default route
                                 gateway_ip = attrs.get("RTA_GATEWAY")
                                 if gateway_ip:
-                                    self.logger.debug(f"Found gateway {gateway_ip} for {interface_name} in table {table_id} (fallback)")
+                                    self.logger.debug(
+                                        f"Found gateway {gateway_ip} for {interface_name} in table {table_id} (fallback)"
+                                    )
                                     break
 
                 # Add host route (/32) to the interface's routing table
@@ -787,7 +811,9 @@ class RoutingManager:
                 # Add gateway if found
                 if gateway_ip:
                     route_args["gateway"] = gateway_ip
-                    self.logger.debug(f"Using gateway {gateway_ip} for host route to {host_ip}")
+                    self.logger.debug(
+                        f"Using gateway {gateway_ip} for host route to {host_ip}"
+                    )
 
                 async with AsyncIPRoute() as ipr:
                     await ipr.route("add", **route_args)
