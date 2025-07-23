@@ -50,6 +50,7 @@ class MdkBareSIP:
         extra_login_args: Optional[str] = None,
         config_path: Optional[str] = None,
         interface: Optional[str] = None,
+            loop: Optional[asyncio.AbstractEventLoop] = None,
     ):
         self.logger = logging.getLogger(__name__)
         self.logger.info(f"Initializing {__name__}")
@@ -58,8 +59,9 @@ class MdkBareSIP:
         self.user = user
         self.pwd = pwd
         self.gateway = gateway
+        self.async_loop = loop or asyncio.get_event_loop()
 
-        self.ee = AsyncIOEventEmitter()
+        self.ee = AsyncIOEventEmitter(loop=self.async_loop)
 
         if tts:
             self.tts = tts
