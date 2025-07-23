@@ -114,23 +114,25 @@ class Tasker:
         # Configures fixed tasks that always run while the tasker is running.
         self.logger.info("Configuring fixed tasks")
         fixed_task_prefix = "ft_"
+        # Disabling fixed-task definitions for now in favor of eventually configuring them from the rxg, as they cause issues
+        # if triggered before the mqtt client is up.
         fixed_tasks = [
-            [
-                "dig_eth0",
-                "DigTest",
-                60,
-                lambda: command_bus.handle(
-                    actions_domain.Commands.Dig(host="google.com", interface="eth0")
-                ),
-            ],
-            [
-                "dhcp_eth0",
-                "DhcpTest",
-                60,
-                lambda: command_bus.handle(
-                    actions_domain.Commands.DhcpTest(interface="eth0", timeout=10)
-                ),
-            ],
+            # [
+            #     "dig_eth0",
+            #     "DigTest",
+            #     60,
+            #     lambda: command_bus.handle(
+            #         actions_domain.Commands.Dig(host="google.com", interface="eth0")
+            #     ),
+            # ],
+            # [
+            #     "dhcp_eth0",
+            #     "DhcpTest",
+            #     60,
+            #     lambda: command_bus.handle(
+            #         actions_domain.Commands.DhcpTest(interface="eth0", timeout=10)
+            #     ),
+            # ],
         ]
 
         for task_ident, task_type, task_period, task_func in fixed_tasks:
@@ -163,9 +165,12 @@ class Tasker:
                 task_schedule = self.scheduled_tasks.__getattribute__(
                     task_schedule_name
                 )
+                # Keep track of task names so we can remove the ones that don't belong later.
+                incoming_composite_ids = []
                 for new_target in event.targets:
                     target = new_target.__deepcopy__()
                     composite_id = f"{target.id}:{target.interface}"
+                    incoming_composite_ids.append(composite_id)
 
                     if composite_id in task_schedule:
                         existing_task_def: TaskDefinition = task_schedule[composite_id]
@@ -185,6 +190,7 @@ class Tasker:
                             # Cancel/stop the task
                             existing_task = task_schedule[composite_id]
                             existing_task.task_obj.end_task()
+                            task_schedule.pop(composite_id)
 
                             # Create new task to replace it with
 
@@ -222,12 +228,29 @@ class Tasker:
                         id=composite_id, task_obj=new_task, definition=target
                     )
 
+                # Cleanup tasks that have disappeared from config
+                for composite_id in list(task_schedule.keys()):
+                    if composite_id not in incoming_composite_ids:
+                        try:
+                             self.logger.debug(f"Removing {composite_id} from {task_schedule_name}")
+                             self.logger.debug(
+                                 f"Removing {composite_id} from {task_schedule_name}."
+                             )
+                             existing_task = task_schedule[composite_id]
+                             existing_task.task_obj.end_task()
+                             task_schedule.pop(composite_id)
+                        except:
+                             self.logger.exception(f"Exception removing {composite_id} from {task_schedule_name}")
+                             raise
+
+
+
             return wrapper_configure_test
 
         return decorator_configure_test
 
     @configure_test(
-        "SipTest", "sip_tests", event_type=actions_domain.Commands.ConfigureSipTests
+        task_type_name="SipTest", task_schedule_name= "sip_tests", event_type=actions_domain.Commands.ConfigureSipTests
     )
     async def configured_sip_tests(self, exec_def: actions_domain.Data.SipTest):
 
@@ -244,8 +267,8 @@ class Tasker:
         # )
 
     @configure_test(
-        "PingTarget",
-        "ping_targets",
+        task_type_name = "PingTarget",
+        task_schedule_name = "ping_targets",
         event_type=actions_domain.Commands.ConfigurePingTargets,
     )
     async def configured_ping_targets(self, exec_def: actions_domain.Data.PingTarget):
@@ -283,8 +306,8 @@ class Tasker:
         )
 
     @configure_test(
-        "TraceRoute",
-        "traceroutes",
+        task_type_name="TraceRoute",
+        task_schedule_name="traceroutes",
         event_type=actions_domain.Commands.ConfigureTraceroutes,
     )
     async def configured_traceroutes(self, exec_def: actions_domain.Data.Traceroute):
@@ -309,6 +332,7 @@ class Tasker:
             "Speed test scheduling is temporarily disabled in code due to how it's handled on the rxg."
         )
         return
+        # TODO: Update this code to reflect the decorator above once we start using it. Include the destruction of removed tests.
         for target in event.targets:
             composite_id = f"{target.id}:{target.interface}"
 
@@ -392,13 +416,13 @@ class Tasker:
 
         composite_id = f"oo_{target.id}:{target.interface}"
 
-        if composite_id in self.scheduled_speed_tests:
-            existing_task_def: TaskDefinition = self.scheduled_speed_tests[composite_id]
+        if composite_id in self.scheduled_tasks.speed_tests:
+            existing_task_def: TaskDefinition = self.scheduled_tasks.speed_tests[composite_id]
 
             if existing_task_def.definition == target:
                 # Nothing needed, tasks should match
                 self.logger.debug(
-                    f'Task "{composite_id}" (from event {event.__class__}) already exists and matches target configuration. Skipping...'
+                    f'Task "{composite_id}" (from event {target.__class__}) already exists and matches target configuration. Skipping...'
                 )
                 return
             else:
@@ -408,8 +432,9 @@ class Tasker:
                 )
 
                 # Cancel/stop the task
-                existing_task = self.scheduled_speed_tests[composite_id]
+                existing_task = self.scheduled_tasks.speed_tests[composite_id]
                 existing_task.task_obj.end_task()
+                self.scheduled_tasks.speed_tests.pop(composite_id)
 
         test_def = actions_domain.Data.Iperf3Test(**target.model_dump())
 
@@ -436,7 +461,7 @@ class Tasker:
                 interval=target.period,
             )
 
-            self.scheduled_speed_tests[composite_id] = TaskDefinition(
+            self.scheduled_tasks.speed_tests[composite_id] = TaskDefinition(
                 id=composite_id, task_obj=new_task, definition=target
             )
         else:
@@ -446,8 +471,8 @@ class Tasker:
 
             # def on_complete(composite_id):
             #     logging.debug(
-            #         f"Dropping {composite_id} from scheduled_speed_tests. Current keys: {self.scheduled_speed_tests.keys()}")
-            #     self.scheduled_speed_tests.pop(composite_id)
+            #         f"Dropping {composite_id} from scheduled_speed_tests. Current keys: {self.scheduled_tasks.speed_tests.keys()}")
+            #     self.scheduled_tasks.speed_tests.pop(composite_id)
             #
             # new_task = OneShotTask(
             #     self.scheduler,
@@ -457,5 +482,5 @@ class Tasker:
             #     start_date=target.start_date,
             #     on_complete=lambda: on_complete(composite_id)
             # )
-        # self.scheduled_speed_tests[composite_id] = TaskDefinition(id=composite_id, task_obj=new_task,
+        # self.scheduled_tasks.speed_tests[composite_id] = TaskDefinition(id=composite_id, task_obj=new_task,
         #                                                           definition=target)
