@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+from distutils.fancy_getopt import longopt_pat
 from os import PathLike
 from typing import Callable, Optional
 
@@ -84,6 +85,7 @@ class SipTestBaresip(SipTest):
             extra_login_args=self._extra_login_args,
             config_path=self._config_path,
             interface=self._interface,
+            loop=asyncio.get_running_loop(),
         ) as bs:
             self.logger.info(f"Executing test against {callee}")
 
@@ -101,7 +103,7 @@ class SipTestBaresip(SipTest):
             async def call_established(bs_instance: MdkBareSIP, *_, **__):
                 self.logger.info("call established")
                 # Wait a moment or two.
-                await asyncio.sleep(2)
+                await asyncio.sleep(1)
                 if post_connect:
                     bs_instance.send_dtmf(post_connect)
 
@@ -114,7 +116,7 @@ class SipTestBaresip(SipTest):
                 )
                 self.logger.warning("Done speaking!")
                 # Wait a few seconds, because we're not actually done speaking.
-                await asyncio.sleep(10)
+                await asyncio.sleep(1)
                 # bs_instance.hang()
 
                 """ END CALL TEST LOGIC """
