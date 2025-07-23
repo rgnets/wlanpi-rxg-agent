@@ -148,6 +148,8 @@ async def lifespan(app: FastAPI):
         # event_bus=event_bus,
     )
 
+    loop = asyncio.get_running_loop()
+
     # Wifi control currently has no dependencies
     wifi_control = WiFiControlWpaSupplicant()
     tasker = Tasker()
@@ -163,7 +165,8 @@ async def lifespan(app: FastAPI):
         f"Using discovered wireless interfaces for network control: {discovered_wireless_interfaces}"
     )
     network_control = NetworkControlManager(
-        wireless_interfaces=discovered_wireless_interfaces
+        wireless_interfaces=discovered_wireless_interfaces,
+        asyncio_loop=loop
     )
     await network_control.start()
 
