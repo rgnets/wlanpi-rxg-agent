@@ -3,6 +3,7 @@ wlanpi-rxg-agent (1.0.1-11) UNRELEASED; urgency=medium
   * was missing something
   * New build with VOIP Support
   * Numerous bugfixes in preparation for VOIP MOS release 
+  * More bugfixes
 
  -- Michael Ketchel <michael.ketchel@gmail.com>  Wed, 23 Jul 2025 00:13:44 +0000
 
