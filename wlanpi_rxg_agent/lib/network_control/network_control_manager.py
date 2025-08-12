@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from asyncio import AbstractEventLoop
 from ipaddress import IPv4Address
 from typing import Dict, Optional, Set
 
@@ -26,9 +27,11 @@ class NetworkControlManager:
     """Main network control manager that coordinates interface monitoring,
     routing configuration, and DHCP management"""
 
-    def __init__(self, wireless_interfaces: Optional[Set[str]] = None):
+    def __init__(self, wireless_interfaces: Optional[Set[str]] = None, asyncio_loop: Optional[AbstractEventLoop] = None ):
         self.logger = logging.getLogger(__name__)
         self.logger.info(f"Initializing {__name__}")
+
+        self.asyncio_loop = asyncio_loop or asyncio.get_running_loop()
 
         self.wireless_interfaces = wireless_interfaces or set()
         self.managed_interfaces: Dict[str, InterfaceInfo] = {}
@@ -167,8 +170,7 @@ class NetworkControlManager:
             self.logger.info(f"WiFi disconnection detected on {interface_name}")
 
             # Ensure we're running in the correct event loop context
-
-            loop = asyncio.get_running_loop()
+            loop = self.asyncio_loop or asyncio.get_running_loop()
             # Schedule the cleanup as a task in the current loop
             loop.create_task(self._cleanup_interface_on_disconnect(interface_name))
 
@@ -191,7 +193,7 @@ class NetworkControlManager:
 
             # Ensure we're running in the correct event loop context
             try:
-                loop = asyncio.get_running_loop()
+                loop = self.asyncio_loop or asyncio.get_running_loop()
 
                 # Handle disconnected/inactive states
                 if state.lower() in ["disconnected", "inactive", "interface_disabled"]:

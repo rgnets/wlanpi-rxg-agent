@@ -50,6 +50,7 @@ class MdkBareSIP:
         extra_login_args: Optional[str] = None,
         config_path: Optional[str] = None,
         interface: Optional[str] = None,
+            loop: Optional[asyncio.AbstractEventLoop] = None,
     ):
         self.logger = logging.getLogger(__name__)
         self.logger.info(f"Initializing {__name__}")
@@ -58,8 +59,9 @@ class MdkBareSIP:
         self.user = user
         self.pwd = pwd
         self.gateway = gateway
+        self.async_loop = loop or asyncio.get_event_loop()
 
-        self.ee = AsyncIOEventEmitter()
+        self.ee = AsyncIOEventEmitter(loop=self.async_loop)
 
         if tts:
             self.tts = tts
@@ -590,7 +592,7 @@ class MdkBareSIP:
     async def async_wait_until_ready(self):
         while not self.ready:
             self.logger.debug("Waiting for baresip to be ready...")
-            await asyncio.sleep(0.4)
+            await asyncio.sleep(1)
             if self.abort:
                 return
 
@@ -607,7 +609,13 @@ class MdkBareSIP:
         self.logger.info("Entering async context")
 
         self.run_task = asyncio.create_task(self.run())
-        await self.async_wait_until_ready()
+        try:
+            await  asyncio.wait_for(self.async_wait_until_ready(), 30)
+        except asyncio.TimeoutError:
+            self.logger.warning(
+                f"Timeout waiting for Baresip to be ready"
+            )
+            raise
         self.logger.info("Baresip is ready")
         return self
 

@@ -29,6 +29,8 @@ class DHCPClient:
                 "dhclient",
                 "-v",  # verbose
                 "-1",  # try once
+                "-lf",
+                f"/var/lib/dhcp/dhclient.{interface_name}.leases",
                 # "-timeout",  # WLAN Pi doesn't have a version that supports the timeout argument.
                 # str(timeout),
                 interface_name,

@@ -409,7 +409,7 @@ class AgentActions:
 
         try:
             # 1. Setup temp directory and config
-            conf_path = f"/tmp/bs_sip_test__{event.id}/"
+            conf_path = f"/tmp/bs_sip_test_{event.id}/"
             await SipTestBaresip.deploy_config(conf_path)
 
             # 2. Add host route for SIP server if a wireless interface is specified

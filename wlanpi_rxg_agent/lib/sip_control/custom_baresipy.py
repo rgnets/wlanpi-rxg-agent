@@ -269,7 +269,7 @@ class CustomBaresipy(BareSIP):
     async def async_wait_until_ready(self):
         while not self.ready:
             LOG.debug("Waiting for baresip to be ready...")
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(1)
             if self.abort:
                 return
 
