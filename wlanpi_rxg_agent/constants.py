@@ -1,4 +1,7 @@
 import os
+# print(os.environ)
+RUNTIME_ENV = os.environ.get("RUNTIME_ENV", "production")
+IS_DEV = RUNTIME_ENV == "development"
 
 CONFIG_DIR = "/etc/wlanpi-rxg-agent"
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.toml")

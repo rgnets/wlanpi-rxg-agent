@@ -1,18 +1,43 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="PublishConfigData" autoUpload="Always" serverName="remote rxg agent" createEmptyFolders="true" remoteFilesAllowedToDisappearOnAutoupload="false" autoUploadExternalChanges="true">
+  <component name="PublishConfigData" autoUpload="Always" serverName="root@dev-wlanpi3:22 agent (2)" createEmptyFolders="true" remoteFilesAllowedToDisappearOnAutoupload="false" autoUploadExternalChanges="true">
     <serverData>
-      <paths name="remote rxg agent">
+      <paths name="root@dev-wlanpi3:22 agent (2)">
         <serverdata>
           <mappings>
-            <mapping deploy="/home/wlanpi/dev/wlanpi-rxg-agent" local="$PROJECT_DIR$" web="/" />
+            <mapping deploy="/tmp/pycharm_project_813" local="$PROJECT_DIR$" />
           </mappings>
         </serverdata>
       </paths>
-      <paths name="wlanpi@dev-wlanpi:22 agent (5)">
+      <paths name="wlanpi@dev-wlanpi2:22 agent">
         <serverdata>
           <mappings>
-            <mapping deploy="/tmp/pycharm_project_206" local="$PROJECT_DIR$" />
+            <mapping deploy="/tmp/pycharm_project_933" local="$PROJECT_DIR$" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="wlanpi@dev-wlanpi2:22 agent (2)">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/tmp/pycharm_project_577" local="$PROJECT_DIR$" />
+          </mappings>
+          <excludedPaths>
+            <excludedPath local="true" path="$PROJECT_DIR$/.mypy_cache" />
+            <excludedPath local="true" path="$PROJECT_DIR$/.git" />
+          </excludedPaths>
+        </serverdata>
+      </paths>
+      <paths name="wlanpi@dev-wlanpi:22 agent">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/tmp/pycharm_project_285" local="$PROJECT_DIR$" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="wlanpi@wlanpi-475:22 agent">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/tmp/pycharm_project_513" local="$PROJECT_DIR$" />
           </mappings>
         </serverdata>
       </paths>

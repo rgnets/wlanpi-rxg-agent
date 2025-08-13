@@ -249,7 +249,7 @@ class Client(aiomqtt.Client):
         """Dynamic view of the client's message queue."""
         return MessagesIterator(self)
 
-    async def disconnect(self):
+    async def disconnect(self, ack_timeout: Optional[int] = None):
         """Disconnect from the broker."""
         if self._disconnected.done():
             # Return early if the client is already disconnected
@@ -264,7 +264,7 @@ class Client(aiomqtt.Client):
         rc = self._client.disconnect()
         if rc == mqtt.MQTT_ERR_SUCCESS:
             # Wait for acknowledgement
-            await self._wait_for(self._disconnected, timeout=None)
+            await self._wait_for(self._disconnected, timeout=ack_timeout)
             # Reset `_connected` if it's still in completed state after disconnecting
             if self._connected.done():
                 self._connected = asyncio.Future()

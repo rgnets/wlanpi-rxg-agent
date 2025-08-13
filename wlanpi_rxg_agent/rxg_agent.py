@@ -30,34 +30,14 @@ from wlanpi_rxg_agent.models.api_models import DevShutdownRequest
 from wlanpi_rxg_agent.rxg_mqtt_client import RxgMqttClient
 from wlanpi_rxg_agent.utils import aevery
 
+print("RUNTIME_ENV:", constants.RUNTIME_ENV)
+
 # Setup logging with custom formatter
-setup_logging(level=logging.DEBUG)
+setup_logging(level=logging.INFO)
 
 logger = logging.getLogger(__name__)
 
-# Set specific log levels for various components
-logging.getLogger("wlanpi_rxg_agent.rxg_agent").setLevel(logging.INFO)
-logging.getLogger("rxg_agent").setLevel(logging.INFO)
-logging.getLogger("api_client").setLevel(logging.INFO)
-logging.getLogger("apscheduler.scheduler").setLevel(logging.INFO)
-logging.getLogger("wlanpi_rxg_agent.core_client").setLevel(logging.WARNING)
-logging.getLogger("wlanpi_rxg_agent.lib.event_bus._messagebus").setLevel(logging.INFO)
-logging.getLogger("wlanpi_rxg_agent.lib.event_bus._commandbus").setLevel(logging.INFO)
-logging.getLogger("wlanpi_rxg_agent.lib.rxg_supplicant.supplicant").setLevel(
-    logging.INFO
-)
-logging.getLogger(
-    "wlanpi_rxg_agent.lib.wifi_control.wifi_control_wpa_supplicant"
-).setLevel(logging.DEBUG)
-logging.getLogger("wlanpi_rxg_agent.rxg_mqtt_client").setLevel(logging.INFO)
-logging.getLogger("wlanpi_rxg_agent.lib.sip_control").setLevel(
-    logging.DEBUG if constants.BARESIP_DEBUG_OUTPUT else logging.INFO
-)
-# logging.getLogger("apscheduler.scheduler").setLevel(logging.INFO)
-logging.getLogger("wlanpi_rxg_agent.lib.tasker.tasker").setLevel(logging.INFO)
-logging.getLogger(
-    "wlanpi_rxg_agent.lib.network_control.network_control_manager"
-).setLevel(logging.DEBUG)
+
 
 
 class RXGAgent:

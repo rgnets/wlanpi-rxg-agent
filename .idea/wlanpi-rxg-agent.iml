@@ -6,7 +6,7 @@
       <excludeFolder url="file://$MODULE_DIR$/_baresip" />
       <excludeFolder url="file://$MODULE_DIR$/build" />
     </content>
-    <orderEntry type="jdk" jdkName="Remote Python 3.9.2 (sftp://wlanpi@dev-wlanpi2:22/home/wlanpi/.virtualenvs/wlanpi-rxg-agent/bin/python)" jdkType="Python SDK" />
+    <orderEntry type="jdk" jdkName="Remote Python 3.9.2 (sftp://root@dev-wlanpi3:22/root/.virtualenvs/wlanpi-rxg-agent/bin/python)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
   <component name="PackageRequirementsSettings">
