@@ -23,84 +23,84 @@ jobs:
     uses: rgnets/wlanpi-gh-workflows/.github/workflows/get-formatted-version-string.yml@main
 
 
-  build_baresip:
-    name: build baresip
-    runs-on: ubuntu-24.04-arm
-    steps:
-      - name: Checkout baresip
-        uses: actions/checkout@v4
-        with:
-          repository: rgnets/baresip
-          ref: rgnets-custom
-
-
-
-      - name: fix flaky azure mirrors
-        if: ${{ runner.os == 'Linux' }}
-        run: |
-          sudo sed -i 's/azure\./de\./' /etc/apt/sources.list
-
-      - name: install packages
-        if: ${{ runner.os == 'Linux' }}
-        run: |
-          sudo apt-get update && sudo apt-get install -y \
-                              libasound2-dev \
-                              libavcodec-dev \
-                              libavdevice-dev \
-                              libavformat-dev \
-                              libcodec2-dev \
-                              libfdk-aac-dev \
-                              libglib2.0-dev \
-                              libgstreamer1.0-dev \
-                              libgtk-3-dev \
-                              libjack-jackd2-dev \
-                              libmosquitto-dev \
-                              libmpg123-dev \
-                              libopencore-amrnb-dev \
-                              libopencore-amrwb-dev \
-                              libopus-dev \
-                              libpulse-dev \
-                              libsndfile1-dev \
-                              libspandsp-dev \
-                              libssl-dev \
-                              libvpx-dev \
-                              libx11-dev \
-                              libwebrtc-audio-processing-dev
-
-      - uses: sreimers/pr-dependency-action@v1
-        with:
-          name: re
-          repo: https://github.com/baresip/re
-          secret: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: make re
-        run: |
-          cmake -S re -B re/build
-          cmake --build re/build -j
-          mv re ../.
-
-      - name: ldconfig
-        if: ${{ runner.os == 'Linux' }}
-        run: sudo ldconfig
-
-
-      - name: Build Baresip
-        run: |
-          cmake -B build -DCMAKE_BUILD_TYPE=Release -DAPP_MODULES_DIR=./modules -DAPP_MODULES="rgrtcpsummary"
-          cmake --build build -j
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: baresip_artifact
-          path: build
-          
+#  build_baresip:
+#    name: build baresip
+#    runs-on: ubuntu-24.04-arm
+#    steps:
+#      - name: Checkout baresip
+#        uses: actions/checkout@v4
+#        with:
+#          repository: rgnets/baresip
+#          ref: rgnets-custom
+#
+#
+#
+#      - name: fix flaky azure mirrors
+#        if: ${{ runner.os == 'Linux' }}
+#        run: |
+#          sudo sed -i 's/azure\./de\./' /etc/apt/sources.list
+#
+#      - name: install packages
+#        if: ${{ runner.os == 'Linux' }}
+#        run: |
+#          sudo apt-get update && sudo apt-get install -y \
+#                              libasound2-dev \
+#                              libavcodec-dev \
+#                              libavdevice-dev \
+#                              libavformat-dev \
+#                              libcodec2-dev \
+#                              libfdk-aac-dev \
+#                              libglib2.0-dev \
+#                              libgstreamer1.0-dev \
+#                              libgtk-3-dev \
+#                              libjack-jackd2-dev \
+#                              libmosquitto-dev \
+#                              libmpg123-dev \
+#                              libopencore-amrnb-dev \
+#                              libopencore-amrwb-dev \
+#                              libopus-dev \
+#                              libpulse-dev \
+#                              libsndfile1-dev \
+#                              libspandsp-dev \
+#                              libssl-dev \
+#                              libvpx-dev \
+#                              libx11-dev \
+#                              libwebrtc-audio-processing-dev
+#
+#      - uses: sreimers/pr-dependency-action@v1
+#        with:
+#          name: re
+#          repo: https://github.com/baresip/re
+#          secret: ${{ secrets.GITHUB_TOKEN }}
+#
+#      - name: make re
+#        run: |
+#          cmake -S re -B re/build
+#          cmake --build re/build -j
+#          mv re ../.
+#
+#      - name: ldconfig
+#        if: ${{ runner.os == 'Linux' }}
+#        run: sudo ldconfig
+#
+#
+#      - name: Build Baresip
+#        run: |
+#          cmake -B build -DCMAKE_BUILD_TYPE=Release -DAPP_MODULES_DIR=./modules -DAPP_MODULES="rgrtcpsummary"
+#          cmake --build build -j
+#
+#      - name: Upload artifact
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: baresip_artifact
+#          path: build
+#
 
   sbuild_deploy:
     needs:
       - format
       - check_version
-      - build_baresip
+#      - build_baresip
 
     env:
       PKG_NAME: wlanpi-rxg-agent
@@ -137,12 +137,12 @@ jobs:
           echo "filename=${{ env.PKG_NAME }}_${{ env.PKG_VERSION }}~gha${{ env.date }}+${{ matrix.arch }}_${{ matrix.distro }}" >> $GITHUB_ENV
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Download baresip artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: baresip_artifact
-          path: ./wlanpi_rxg_agent/bin/baresip
+#
+#      - name: Download baresip artifact
+#        uses: actions/download-artifact@v4
+#        with:
+#          name: baresip_artifact
+#          path: ./wlanpi_rxg_agent/bin/baresip
 
       - name: sbuild deb pkg for ${{ matrix.distro }}+${{ matrix.arch }}
         uses: wlan-pi/sbuild-debian-package@main
