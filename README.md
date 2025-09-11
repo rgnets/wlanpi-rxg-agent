@@ -22,7 +22,7 @@ This allows proper cleanup of network interfaces, DHCP clients, and other system
 ## Makefile Shortcuts
 
 - `make run` — Run the agent locally (`python -m wlanpi_rxg_agent`).
-- `make preflight` — Auto-format, lint, and run unit tests (pre-PR check).
+- `make preflight` — Auto-format, lint, import-check, and run unit tests (pre-PR check).
 - `make test-unit` — Run unit tests only (excludes integration/hardware/slow).
 - `make test` — Run default test suite.
 - `make test-integration` — Run integration tests (requires device/network privileges).

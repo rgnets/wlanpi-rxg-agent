@@ -30,4 +30,4 @@ run:
 	$(PY) -m wlanpi_rxg_agent
 
 preflight:
-	./scripts/format.sh && ./scripts/lint.sh && ./scripts/test-unit.sh
+	./scripts/format.sh && ./scripts/lint.sh && ./scripts/check-imports.sh && ./scripts/test-unit.sh
