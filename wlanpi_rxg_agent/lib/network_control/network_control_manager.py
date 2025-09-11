@@ -27,7 +27,11 @@ class NetworkControlManager:
     """Main network control manager that coordinates interface monitoring,
     routing configuration, and DHCP management"""
 
-    def __init__(self, wireless_interfaces: Optional[Set[str]] = None, asyncio_loop: Optional[AbstractEventLoop] = None ):
+    def __init__(
+        self,
+        wireless_interfaces: Optional[Set[str]] = None,
+        asyncio_loop: Optional[AbstractEventLoop] = None,
+    ):
         self.logger = logging.getLogger(__name__)
         self.logger.info(f"Initializing {__name__}")
 

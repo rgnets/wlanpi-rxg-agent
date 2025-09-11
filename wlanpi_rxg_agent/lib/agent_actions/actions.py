@@ -5,14 +5,13 @@ import string
 import typing as t
 from json import JSONDecodeError
 
-from wlanpi_rxg_agent import constants
-
 import wlanpi_rxg_agent.lib.agent_actions.domain as actions_domain
 import wlanpi_rxg_agent.lib.domain as agent_domain
 import wlanpi_rxg_agent.lib.network_control.domain as network_control_domain
 import wlanpi_rxg_agent.lib.rxg_supplicant.domain as supplicant_domain
 import wlanpi_rxg_agent.lib.wifi_control.domain as wifi_domain
 import wlanpi_rxg_agent.utils as utils
+from wlanpi_rxg_agent import constants
 from wlanpi_rxg_agent.api_client import ApiClient
 from wlanpi_rxg_agent.busses import command_bus, message_bus
 from wlanpi_rxg_agent.core_client import CoreClient

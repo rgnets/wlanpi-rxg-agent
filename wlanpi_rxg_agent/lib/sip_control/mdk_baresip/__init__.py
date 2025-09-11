@@ -50,7 +50,7 @@ class MdkBareSIP:
         extra_login_args: Optional[str] = None,
         config_path: Optional[str] = None,
         interface: Optional[str] = None,
-            loop: Optional[asyncio.AbstractEventLoop] = None,
+        loop: Optional[asyncio.AbstractEventLoop] = None,
     ):
         self.logger = logging.getLogger(__name__)
         self.logger.info(f"Initializing {__name__}")
@@ -610,11 +610,9 @@ class MdkBareSIP:
 
         self.run_task = asyncio.create_task(self.run())
         try:
-            await  asyncio.wait_for(self.async_wait_until_ready(), 30)
+            await asyncio.wait_for(self.async_wait_until_ready(), 30)
         except asyncio.TimeoutError:
-            self.logger.warning(
-                f"Timeout waiting for Baresip to be ready"
-            )
+            self.logger.warning(f"Timeout waiting for Baresip to be ready")
             raise
         self.logger.info("Baresip is ready")
         return self

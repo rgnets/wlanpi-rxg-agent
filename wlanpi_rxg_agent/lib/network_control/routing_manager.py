@@ -295,7 +295,9 @@ class RoutingManager:
                             f"Default route added successfully for {interface.name}"
                         )
 
-                        main_table_routes_to_add.append([gateway, interface, main_metric])
+                        main_table_routes_to_add.append(
+                            [gateway, interface, main_metric]
+                        )
 
                     else:
                         self.logger.warning(
@@ -353,7 +355,6 @@ class RoutingManager:
                         f"Failed to add gateway to main table for {interface.name}: {e}"
                     )
                     # Continue setup even if main table route fails
-
 
             self.logger.debug(
                 f"Configured routing for {interface.name}: table={table_id}, "
@@ -459,7 +460,9 @@ class RoutingManager:
 
                     # Get all tables in our range and clean routes
                     tables_with_routes = set()
-                    for table_id in range(self.base_table_id, self.base_table_id + 1000):
+                    for table_id in range(
+                        self.base_table_id, self.base_table_id + 1000
+                    ):
                         try:
                             routes = []
                             async for route in await ipr.route("dump", table=table_id):
@@ -740,14 +743,14 @@ class RoutingManager:
                 return True
             else:
                 error_msg = stderr.decode().strip() if stderr else "Unknown error"
-                
+
                 # Check if route already exists (not an error for our purposes)
                 if "File exists" in error_msg:
                     self.logger.debug(
                         f"Main table route already exists (ignoring): {gateway} dev {interface.name}"
                     )
                     return True
-                
+
                 self.logger.error(
                     f"CLI route addition failed (exit code {process.returncode}): {error_msg}"
                 )
@@ -816,7 +819,9 @@ class RoutingManager:
 
                         # Get interface IP address if src_ip not provided
                         if src_ip is None:
-                            async for addr in await ipr.addr("dump", index=interface_index):
+                            async for addr in await ipr.addr(
+                                "dump", index=interface_index
+                            ):
                                 attrs = dict(addr.get("attrs", []))
                                 if "IFA_ADDRESS" in attrs:
                                     interface_ip = attrs["IFA_ADDRESS"]
@@ -941,7 +946,10 @@ class RoutingManager:
                 async with self.socket_lock:
                     async with AsyncIPRoute() as ipr:
                         await ipr.route(
-                            "del", dst=f"{host_ip}/32", oif=interface_index, table=table_id
+                            "del",
+                            dst=f"{host_ip}/32",
+                            oif=interface_index,
+                            table=table_id,
                         )
 
                 self.logger.debug(

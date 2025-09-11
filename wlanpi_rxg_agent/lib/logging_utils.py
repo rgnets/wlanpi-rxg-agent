@@ -114,7 +114,6 @@ def setup_logging(level=logging.INFO, handlers=None):
     logging.getLogger("pyroute2.netlink.core").setLevel(logging.WARNING)
     logging.getLogger("pyroute2.ndb").setLevel(logging.WARNING)
 
-
     if IS_DEV:
         # Set specific log levels for various components
         logging.getLogger("wlanpi_rxg_agent.rxg_agent").setLevel(logging.INFO)
@@ -122,8 +121,12 @@ def setup_logging(level=logging.INFO, handlers=None):
         logging.getLogger("api_client").setLevel(logging.INFO)
         logging.getLogger("apscheduler.scheduler").setLevel(logging.INFO)
         logging.getLogger("wlanpi_rxg_agent.core_client").setLevel(logging.WARNING)
-        logging.getLogger("wlanpi_rxg_agent.lib.event_bus._messagebus").setLevel(logging.INFO)
-        logging.getLogger("wlanpi_rxg_agent.lib.event_bus._commandbus").setLevel(logging.INFO)
+        logging.getLogger("wlanpi_rxg_agent.lib.event_bus._messagebus").setLevel(
+            logging.INFO
+        )
+        logging.getLogger("wlanpi_rxg_agent.lib.event_bus._commandbus").setLevel(
+            logging.INFO
+        )
         logging.getLogger("wlanpi_rxg_agent.lib.rxg_supplicant.supplicant").setLevel(
             logging.INFO
         )
@@ -149,14 +152,24 @@ def setup_logging(level=logging.INFO, handlers=None):
         logging.getLogger("wlanpi_rxg_agent.core_client").setLevel(logging.WARNING)
         # Bus logger levels can be overridden via RXG_BUS_LOG_LEVEL
         bus_level = _env_level("RXG_BUS_LOG_LEVEL", str(level))
-        logging.getLogger("wlanpi_rxg_agent.lib.event_bus._messagebus").setLevel(bus_level)
-        logging.getLogger("wlanpi_rxg_agent.lib.event_bus._commandbus").setLevel(bus_level)
-        logging.getLogger("wlanpi_rxg_agent.lib.rxg_supplicant.supplicant").setLevel(level)
-        logging.getLogger("wlanpi_rxg_agent.lib.wifi_control.wifi_control_wpa_supplicant").setLevel(level)
+        logging.getLogger("wlanpi_rxg_agent.lib.event_bus._messagebus").setLevel(
+            bus_level
+        )
+        logging.getLogger("wlanpi_rxg_agent.lib.event_bus._commandbus").setLevel(
+            bus_level
+        )
+        logging.getLogger("wlanpi_rxg_agent.lib.rxg_supplicant.supplicant").setLevel(
+            level
+        )
+        logging.getLogger(
+            "wlanpi_rxg_agent.lib.wifi_control.wifi_control_wpa_supplicant"
+        ).setLevel(level)
         logging.getLogger("wlanpi_rxg_agent.rxg_mqtt_client").setLevel(level)
         logging.getLogger("wlanpi_rxg_agent.lib.sip_control").setLevel(
             logging.DEBUG if constants.BARESIP_DEBUG_OUTPUT else level
         )
         # logging.getLogger("apscheduler.scheduler").setLevel(level)
         logging.getLogger("wlanpi_rxg_agent.lib.tasker.tasker").setLevel(level)
-        logging.getLogger("wlanpi_rxg_agent.lib.network_control.network_control_manager").setLevel(level)
+        logging.getLogger(
+            "wlanpi_rxg_agent.lib.network_control.network_control_manager"
+        ).setLevel(level)

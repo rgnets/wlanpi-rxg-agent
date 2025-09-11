@@ -10,10 +10,10 @@ from pydantic import BaseModel, ConfigDict, Field
 import wlanpi_rxg_agent.lib.domain as agent_domain
 from wlanpi_rxg_agent.busses import command_bus, message_bus
 from wlanpi_rxg_agent.lib.agent_actions import domain as actions_domain
+from wlanpi_rxg_agent.lib.tasker import store as task_store
 from wlanpi_rxg_agent.lib.tasker.one_shot_task import OneShotTask
 from wlanpi_rxg_agent.lib.tasker.repeating_task import RepeatingTask
 from wlanpi_rxg_agent.lib.wifi_control import domain as wifi_domain
-from wlanpi_rxg_agent.lib.tasker import store as task_store
 
 TaskDefDataType = TypeVar("TaskDefDataType")
 
@@ -74,7 +74,9 @@ class Tasker:
         try:
             self.restore_from_store()
         except Exception:
-            self.logger.exception("Error restoring tasks from store; continuing with empty schedule")
+            self.logger.exception(
+                "Error restoring tasks from store; continuing with empty schedule"
+            )
 
         self.configure_fixed_tasks()
 
@@ -239,16 +241,20 @@ class Tasker:
                 for composite_id in list(task_schedule.keys()):
                     if composite_id not in incoming_composite_ids:
                         try:
-                             self.logger.debug(f"Removing {composite_id} from {task_schedule_name}")
-                             self.logger.debug(
-                                 f"Removing {composite_id} from {task_schedule_name}."
-                             )
-                             existing_task = task_schedule[composite_id]
-                             existing_task.task_obj.end_task()
-                             task_schedule.pop(composite_id)
+                            self.logger.debug(
+                                f"Removing {composite_id} from {task_schedule_name}"
+                            )
+                            self.logger.debug(
+                                f"Removing {composite_id} from {task_schedule_name}."
+                            )
+                            existing_task = task_schedule[composite_id]
+                            existing_task.task_obj.end_task()
+                            task_schedule.pop(composite_id)
                         except:
-                             self.logger.exception(f"Exception removing {composite_id} from {task_schedule_name}")
-                             raise
+                            self.logger.exception(
+                                f"Exception removing {composite_id} from {task_schedule_name}"
+                            )
+                            raise
                 # Persist updated schedule snapshot
                 try:
                     self._persist_all_tasks()
@@ -261,6 +267,7 @@ class Tasker:
 
     def _snapshot(self) -> dict[str, list[dict]]:
         """Capture current scheduled task definitions for persistence."""
+
         def defs_to_list(dct):
             items = []
             for td in dct.values():
@@ -284,7 +291,9 @@ class Tasker:
         data = task_store.load_snapshot()
         # Build configure events and feed through the same code paths
         if data.get("ping_targets"):
-            targets = [actions_domain.Data.PingTarget(**x) for x in data["ping_targets"]]
+            targets = [
+                actions_domain.Data.PingTarget(**x) for x in data["ping_targets"]
+            ]
             evt = actions_domain.Commands.ConfigurePingTargets(targets=targets)
             self.configured_ping_targets(evt)
         if data.get("traceroutes"):
@@ -297,7 +306,9 @@ class Tasker:
             self.configured_sip_tests(evt)
 
     @configure_test(
-        task_type_name="SipTest", task_schedule_name= "sip_tests", event_type=actions_domain.Commands.ConfigureSipTests
+        task_type_name="SipTest",
+        task_schedule_name="sip_tests",
+        event_type=actions_domain.Commands.ConfigureSipTests,
     )
     async def configured_sip_tests(self, exec_def: actions_domain.Data.SipTest):
 
@@ -314,8 +325,8 @@ class Tasker:
         # )
 
     @configure_test(
-        task_type_name = "PingTarget",
-        task_schedule_name = "ping_targets",
+        task_type_name="PingTarget",
+        task_schedule_name="ping_targets",
         event_type=actions_domain.Commands.ConfigurePingTargets,
     )
     async def configured_ping_targets(self, exec_def: actions_domain.Data.PingTarget):
@@ -464,7 +475,9 @@ class Tasker:
         composite_id = f"oo_{target.id}:{target.interface}"
 
         if composite_id in self.scheduled_tasks.speed_tests:
-            existing_task_def: TaskDefinition = self.scheduled_tasks.speed_tests[composite_id]
+            existing_task_def: TaskDefinition = self.scheduled_tasks.speed_tests[
+                composite_id
+            ]
 
             if existing_task_def.definition == target:
                 # Nothing needed, tasks should match

@@ -30,7 +30,8 @@ def test_agent_config_validation_fallback(tmp_path, monkeypatch):
 
     # Write invalid toml (numeric where string expected)
     cfg_file = temp_dir / "config.toml"
-    cfg_file.write_text("""
+    cfg_file.write_text(
+        """
 [General]
 override_rxg = 123
 fallback_rxg = 456
@@ -55,7 +56,8 @@ def test_bridge_config_validation_fallback(tmp_path, monkeypatch):
 
     # Write invalid toml (port as string)
     cfg_file = temp_dir / "config.toml"
-    cfg_file.write_text("""
+    cfg_file.write_text(
+        """
 [MQTT]
 server = "192.0.2.1"
 port = "notanint"

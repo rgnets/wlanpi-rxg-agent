@@ -21,6 +21,7 @@ from wlanpi_rxg_agent.lib.event_bus.middleware.logger import (
 # command_logger.addHandler(command_fh)
 # command_logging_middleware = get_logger_middleware(command_logger, logging_middleware_config)
 
+
 def _env_on(name: str, default: str = "on") -> bool:
     return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
 

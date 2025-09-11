@@ -1,19 +1,27 @@
 import asyncio
 import logging
 import ssl
-from typing import Optional, Union, cast, Literal, Iterable, AsyncIterator, TypeVar
+from typing import AsyncIterator, Iterable, Literal, Optional, TypeVar, Union, cast
 
 import aiomqtt
-from aiomqtt import MqttReentrantError, MqttError
-from aiomqtt.client import _set_client_socket_defaults, ProtocolVersion, Will, TLSParameters, ProxySettings, MQTT_LOGGER
-from aiomqtt.message import Message
 import paho.mqtt.client as mqtt
+from aiomqtt import MqttError, MqttReentrantError
+from aiomqtt.client import (
+    MQTT_LOGGER,
+    ProtocolVersion,
+    ProxySettings,
+    TLSParameters,
+    Will,
+    _set_client_socket_defaults,
+)
+from aiomqtt.message import Message
 from aiomqtt.types import SocketOption, WebSocketHeaders
 from paho.mqtt.enums import CallbackAPIVersion
 from paho.mqtt.properties import Properties
 from paho.mqtt.reasoncodes import ReasonCode
 
 ClientT = TypeVar("ClientT", bound="Client")
+
 
 class MessagesIterator:
     """Dynamic view of the client's message queue."""
@@ -139,28 +147,26 @@ class Client(aiomqtt.Client):
             timeout = 10
         self.timeout = timeout
 
-
     async def connect(
-            self,
-            hostname: str,
-            port: int = 1883,
-            keepalive: int = 60,
-            bind_address: str = "",
-            bind_port: int = 0,
-            clean_start: mqtt.CleanStartOption = mqtt.MQTT_CLEAN_START_FIRST_ONLY,
-            properties: Optional[Properties] = None,
-            username: Optional[str] = None,
-            password: Optional[str] = None,
-            will: Optional[Will] = None,
-            tls_context: Optional[ssl.SSLContext] = None,
-            tls_params: Optional[TLSParameters] = None,
-            tls_insecure: Optional[bool] = None,
-            proxy: Optional[ProxySettings] = None,
-            socket_options: Optional[Iterable[SocketOption]] = None,
-            websocket_path: Optional[str] = None,
-            websocket_headers: Optional[WebSocketHeaders] = None,
-                      ):
-
+        self,
+        hostname: str,
+        port: int = 1883,
+        keepalive: int = 60,
+        bind_address: str = "",
+        bind_port: int = 0,
+        clean_start: mqtt.CleanStartOption = mqtt.MQTT_CLEAN_START_FIRST_ONLY,
+        properties: Optional[Properties] = None,
+        username: Optional[str] = None,
+        password: Optional[str] = None,
+        will: Optional[Will] = None,
+        tls_context: Optional[ssl.SSLContext] = None,
+        tls_params: Optional[TLSParameters] = None,
+        tls_insecure: Optional[bool] = None,
+        proxy: Optional[ProxySettings] = None,
+        socket_options: Optional[Iterable[SocketOption]] = None,
+        websocket_path: Optional[str] = None,
+        websocket_headers: Optional[WebSocketHeaders] = None,
+    ):
         """Connect to the broker."""
         if self._lock.locked():
             msg = "The client context manager is reusable, but not reentrant"
@@ -208,8 +214,6 @@ class Client(aiomqtt.Client):
         if socket_options is None:
             socket_options = ()
         _socket_options = tuple(socket_options)
-
-
 
         try:
             loop = asyncio.get_running_loop()
@@ -279,5 +283,3 @@ class Client(aiomqtt.Client):
         # Release the reusability lock
         if self._lock.locked():
             self._lock.release()
-
-

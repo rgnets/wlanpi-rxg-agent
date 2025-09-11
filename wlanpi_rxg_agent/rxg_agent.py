@@ -8,11 +8,11 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 
-from wlanpi_rxg_agent import constants
 from fastapi import FastAPI, HTTPException
 
 import wlanpi_rxg_agent.lib.domain as agent_domain
 import wlanpi_rxg_agent.lib.rxg_supplicant.domain as supplicant_domain
+from wlanpi_rxg_agent import constants
 from wlanpi_rxg_agent.bridge_control import BridgeControl
 
 # import wlanpi_rxg_agent.utils as utils
@@ -36,8 +36,6 @@ print("RUNTIME_ENV:", constants.RUNTIME_ENV)
 setup_logging(level=logging.INFO)
 
 logger = logging.getLogger(__name__)
-
-
 
 
 class RXGAgent:
@@ -145,8 +143,7 @@ async def lifespan(app: FastAPI):
         f"Using discovered wireless interfaces for network control: {discovered_wireless_interfaces}"
     )
     network_control = NetworkControlManager(
-        wireless_interfaces=discovered_wireless_interfaces,
-        asyncio_loop=loop
+        wireless_interfaces=discovered_wireless_interfaces, asyncio_loop=loop
     )
     await network_control.start()
 

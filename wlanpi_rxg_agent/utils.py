@@ -377,9 +377,11 @@ def supports_color():
 
     return supported_platform and is_a_tty
 
+
 def raise_(ex):
-    """ Lets you raise an exception """
+    """Lets you raise an exception"""
     raise ex
+
 
 if __name__ == "__main__":
     # print(get_interface_ip_addr("eth0"))

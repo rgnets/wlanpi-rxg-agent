@@ -31,7 +31,9 @@ def mocked_test_check_device_no_response(mocker):
     mocked_api = MockedAPIClient.return_value
     mocked_response = mocker.Mock()
     mocked_response.status_code = 404
-    mocked_api.check_device = mocker.AsyncMock(side_effect=ConnectTimeout("No Response"))
+    mocked_api.check_device = mocker.AsyncMock(
+        side_effect=ConnectTimeout("No Response")
+    )
 
 
 @pytest.mark.asyncio

@@ -2,7 +2,6 @@ import json
 import os
 from typing import Any, Dict, List
 
-
 STATE_DIR = "/var/lib/wlanpi-rxg-agent"
 STATE_PATH = os.path.join(STATE_DIR, "tasks.json")
 
@@ -43,4 +42,3 @@ def save_snapshot(snapshot: Dict[str, List[dict]]) -> None:
         except Exception:
             pass
     os.replace(tmp_path, STATE_PATH)
-

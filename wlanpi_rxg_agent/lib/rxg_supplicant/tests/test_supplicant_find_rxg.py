@@ -1,10 +1,11 @@
 import pytest
 from requests.exceptions import ConnectionError, ConnectTimeout, ReadTimeout
+
+from wlanpi_rxg_agent.lib.rxg_supplicant.supplicant import RxgSupplicant
+
 from .test_supplicant_test_address import (
     mocked_test_check_device_unknown_device,
 )
-
-from wlanpi_rxg_agent.lib.rxg_supplicant.supplicant import RxgSupplicant
 
 
 @pytest.fixture
