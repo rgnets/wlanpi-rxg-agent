@@ -33,6 +33,7 @@ class CertificateTool:
     def save_csr(self, csr_string: str):
         with open(self.csr_file, "w") as pem_out:
             pem_out.write(csr_string)
+        os.chmod(self.csr_file, 0o600)
 
     def load_csr(self) -> str:
         with open(self.csr_file, "r") as pem_in:
@@ -49,6 +50,8 @@ class CertificateTool:
             cert_file = self.cert_file
         with open(cert_file, "w") as pem_out:
             pem_out.write(cert)
+        # Certificates can be world-readable on this embedded target
+        os.chmod(cert_file, 0o644)
 
     def load_cert(self, cert_file: Optional[str] = None) -> str:
         if not cert_file:

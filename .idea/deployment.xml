@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="PublishConfigData" autoUpload="Always" serverName="root@dev-wlanpi3:22 agent (2)" createEmptyFolders="true" remoteFilesAllowedToDisappearOnAutoupload="false" autoUploadExternalChanges="true">
+  <component name="PublishConfigData" autoUpload="Always" promptOnRemoteOverwrite="CHECK_CONTENT" serverName="root@dev-wlanpi3:22 agent" createEmptyFolders="true" autoUploadExternalChanges="true">
     <serverData>
-      <paths name="root@dev-wlanpi3:22 agent (2)">
+      <paths name="root@dev-wlanpi3:22 agent">
         <serverdata>
           <mappings>
-            <mapping deploy="/tmp/pycharm_project_813" local="$PROJECT_DIR$" />
+            <mapping deploy="/tmp/pycharm_project_880" local="$PROJECT_DIR$" />
           </mappings>
         </serverdata>
       </paths>
@@ -31,13 +31,6 @@
         <serverdata>
           <mappings>
             <mapping deploy="/tmp/pycharm_project_285" local="$PROJECT_DIR$" />
-          </mappings>
-        </serverdata>
-      </paths>
-      <paths name="wlanpi@wlanpi-475:22 agent">
-        <serverdata>
-          <mappings>
-            <mapping deploy="/tmp/pycharm_project_513" local="$PROJECT_DIR$" />
           </mappings>
         </serverdata>
       </paths>

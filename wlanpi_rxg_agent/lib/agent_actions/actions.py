@@ -5,7 +5,7 @@ import string
 import typing as t
 from json import JSONDecodeError
 
-import constants
+from wlanpi_rxg_agent import constants
 
 import wlanpi_rxg_agent.lib.agent_actions.domain as actions_domain
 import wlanpi_rxg_agent.lib.domain as agent_domain

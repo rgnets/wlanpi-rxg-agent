@@ -19,7 +19,7 @@ def mocked_test_check_device_unknown_device(mocker):
     }
 
     mocked_api = MockedAPIClient.return_value
-    mocked_api.check_device.return_value = mocked_response
+    mocked_api.check_device = mocker.AsyncMock(return_value=mocked_response)
 
 
 @pytest.fixture
@@ -31,28 +31,30 @@ def mocked_test_check_device_no_response(mocker):
     mocked_api = MockedAPIClient.return_value
     mocked_response = mocker.Mock()
     mocked_response.status_code = 404
-    mocked_api.check_device.side_effect = ConnectTimeout("No Response")
+    mocked_api.check_device = mocker.AsyncMock(side_effect=ConnectTimeout("No Response"))
 
 
-def test_test_address_for_rxg_passing(mocked_test_check_device_unknown_device):
+@pytest.mark.asyncio
+async def test_test_address_for_rxg_passing(mocked_test_check_device_unknown_device):
 
     # Instantiate the RxgSupplicant class
     instance = RxgSupplicant()
 
     # Call test_address_for_rxg with a fake IP
-    result = instance.test_address_for_rxg("192.0.2.5")
+    result = await instance.test_address_for_rxg("192.0.2.5")
 
     # Assert that it returned True
     assert result == True
 
 
-def test_test_address_for_rxg_failing(mocked_test_check_device_no_response):
+@pytest.mark.asyncio
+async def test_test_address_for_rxg_failing(mocked_test_check_device_no_response):
 
     # Instantiate the RxgSupplicant class
     instance = RxgSupplicant()
 
     # Call test_address_for_rxg with a fake IP
-    result = instance.test_address_for_rxg("192.0.2.5")
+    result = await instance.test_address_for_rxg("192.0.2.5")
 
     # Assert that it returned False
     assert result == False

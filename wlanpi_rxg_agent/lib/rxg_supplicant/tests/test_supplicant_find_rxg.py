@@ -1,6 +1,8 @@
 import pytest
 from requests.exceptions import ConnectionError, ConnectTimeout, ReadTimeout
-from test_supplicant_test_address import mocked_test_check_device_unknown_device
+from .test_supplicant_test_address import (
+    mocked_test_check_device_unknown_device,
+)
 
 from wlanpi_rxg_agent.lib.rxg_supplicant.supplicant import RxgSupplicant
 
@@ -30,6 +32,7 @@ def mocked_utils(monkeypatch):
     monkeypatch.setattr("wlanpi_rxg_agent.utils.trace_route", trace_route)
 
 
+@pytest.mark.asyncio
 async def test_find_rxg_first_gateway(
     mocked_utils, mocked_test_check_device_unknown_device
 ):

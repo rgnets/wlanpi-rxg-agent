@@ -50,6 +50,8 @@ class RepeatingTask:
             # start_date='2023-06-21 10:00:00',
             # end_date='2023-06-21 11:00:00'
             misfire_grace_time=int(self.interval / 2),
+            max_instances=1,
+            coalesce=True,
         )
 
     def end_task(self):

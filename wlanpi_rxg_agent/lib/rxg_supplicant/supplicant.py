@@ -56,7 +56,7 @@ class RxgSupplicant:
         # Initialize certificates
         self.cert_dir = os.path.join(CONFIG_DIR, "certs")
         os.makedirs(self.cert_dir, exist_ok=True)
-        os.chmod(self.cert_dir, 0o755)
+        os.chmod(self.cert_dir, 0o700)
         self.cert_tool = CertificateTool(cert_directory=self.cert_dir)
         self.csr = self.cert_tool.get_csr(node_name=utils.get_hostname())
         # self.current_ca = ""

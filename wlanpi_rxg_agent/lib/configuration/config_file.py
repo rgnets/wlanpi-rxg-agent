@@ -41,11 +41,27 @@ class ConfigFile:
             raise e
 
     def save(self):
-        with open(self.config_file, "w") as f:
+        """Atomically write the config file to avoid partial writes."""
+        tmp_path = f"{self.config_file}.tmp"
+        # Write to a temp file first
+        with open(tmp_path, "w") as f:
             if self.config_file.endswith(".toml"):
                 toml.dump(self.data, f)
             else:
                 json.dump(self.data, f)
+            f.flush()
+            try:
+                # On some systems, fsync ensures data hits disk before rename
+                import os as _os
+
+                _os.fsync(f.fileno())
+            except Exception:
+                # Best‑effort; still proceed to replace
+                pass
+        # Replace target
+        import os as _os
+
+        _os.replace(tmp_path, self.config_file)
 
     def create_defaults(self):
         self.data = copy.deepcopy(self.defaults)

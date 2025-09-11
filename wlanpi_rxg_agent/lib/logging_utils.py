@@ -2,8 +2,8 @@ import logging
 import os
 import sys
 
-import constants
-from constants import IS_DEV
+from wlanpi_rxg_agent import constants
+from wlanpi_rxg_agent.constants import IS_DEV
 
 
 def supports_color():
@@ -81,12 +81,27 @@ def create_console_handler(level=logging.DEBUG):
     return handler
 
 
+def _env_level(name: str, default: str = "INFO") -> int:
+    levels = {
+        "debug": logging.DEBUG,
+        "info": logging.INFO,
+        "warn": logging.WARN,
+        "warning": logging.WARN,
+        "error": logging.ERROR,
+        "critical": logging.CRITICAL,
+    }
+    return levels.get(os.environ.get(name, default).strip().lower(), logging.INFO)
+
+
 def setup_logging(level=logging.INFO, handlers=None):
     """Setup logging with custom formatter"""
 
     if IS_DEV:
         # Default to DEBUG for dev mode.
         level = logging.DEBUG
+
+    # Allow env override for global app log level
+    level = _env_level("RXG_LOG_LEVEL", str(level))
 
     if handlers is None:
         handlers = [create_console_handler(level)]
@@ -132,8 +147,10 @@ def setup_logging(level=logging.INFO, handlers=None):
         logging.getLogger("api_client").setLevel(level)
         logging.getLogger("apscheduler.scheduler").setLevel(level)
         logging.getLogger("wlanpi_rxg_agent.core_client").setLevel(logging.WARNING)
-        logging.getLogger("wlanpi_rxg_agent.lib.event_bus._messagebus").setLevel(level)
-        logging.getLogger("wlanpi_rxg_agent.lib.event_bus._commandbus").setLevel(level)
+        # Bus logger levels can be overridden via RXG_BUS_LOG_LEVEL
+        bus_level = _env_level("RXG_BUS_LOG_LEVEL", str(level))
+        logging.getLogger("wlanpi_rxg_agent.lib.event_bus._messagebus").setLevel(bus_level)
+        logging.getLogger("wlanpi_rxg_agent.lib.event_bus._commandbus").setLevel(bus_level)
         logging.getLogger("wlanpi_rxg_agent.lib.rxg_supplicant.supplicant").setLevel(level)
         logging.getLogger("wlanpi_rxg_agent.lib.wifi_control.wifi_control_wpa_supplicant").setLevel(level)
         logging.getLogger("wlanpi_rxg_agent.rxg_mqtt_client").setLevel(level)

@@ -13,6 +13,7 @@ from wlanpi_rxg_agent.lib.agent_actions import domain as actions_domain
 from wlanpi_rxg_agent.lib.tasker.one_shot_task import OneShotTask
 from wlanpi_rxg_agent.lib.tasker.repeating_task import RepeatingTask
 from wlanpi_rxg_agent.lib.wifi_control import domain as wifi_domain
+from wlanpi_rxg_agent.lib.tasker import store as task_store
 
 TaskDefDataType = TypeVar("TaskDefDataType")
 
@@ -68,6 +69,12 @@ class Tasker:
             (agent_domain.Messages.ShutdownStarted, self.shutdown),
         )
         self.setup_listeners()
+
+        # Restore any previously configured tasks from persistent store
+        try:
+            self.restore_from_store()
+        except Exception:
+            self.logger.exception("Error restoring tasks from store; continuing with empty schedule")
 
         self.configure_fixed_tasks()
 
@@ -242,12 +249,52 @@ class Tasker:
                         except:
                              self.logger.exception(f"Exception removing {composite_id} from {task_schedule_name}")
                              raise
-
-
+                # Persist updated schedule snapshot
+                try:
+                    self._persist_all_tasks()
+                except Exception:
+                    self.logger.exception("Failed to persist task schedule snapshot")
 
             return wrapper_configure_test
 
         return decorator_configure_test
+
+    def _snapshot(self) -> dict[str, list[dict]]:
+        """Capture current scheduled task definitions for persistence."""
+        def defs_to_list(dct):
+            items = []
+            for td in dct.values():
+                try:
+                    items.append(td.definition.model_dump())
+                except Exception:
+                    pass
+            return items
+
+        return {
+            "ping_targets": defs_to_list(self.scheduled_tasks.ping_targets),
+            "traceroutes": defs_to_list(self.scheduled_tasks.traceroutes),
+            "sip_tests": defs_to_list(self.scheduled_tasks.sip_tests),
+        }
+
+    def _persist_all_tasks(self) -> None:
+        snapshot = self._snapshot()
+        task_store.save_snapshot(snapshot)
+
+    def restore_from_store(self) -> None:
+        data = task_store.load_snapshot()
+        # Build configure events and feed through the same code paths
+        if data.get("ping_targets"):
+            targets = [actions_domain.Data.PingTarget(**x) for x in data["ping_targets"]]
+            evt = actions_domain.Commands.ConfigurePingTargets(targets=targets)
+            self.configured_ping_targets(evt)
+        if data.get("traceroutes"):
+            targets = [actions_domain.Data.Traceroute(**x) for x in data["traceroutes"]]
+            evt = actions_domain.Commands.ConfigureTraceroutes(targets=targets)
+            self.configured_traceroutes(evt)
+        if data.get("sip_tests"):
+            targets = [actions_domain.Data.SipTest(**x) for x in data["sip_tests"]]
+            evt = actions_domain.Commands.ConfigureSipTests(targets=targets)
+            self.configured_sip_tests(evt)
 
     @configure_test(
         task_type_name="SipTest", task_schedule_name= "sip_tests", event_type=actions_domain.Commands.ConfigureSipTests

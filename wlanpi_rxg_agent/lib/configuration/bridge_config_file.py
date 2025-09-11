@@ -2,6 +2,7 @@ import logging
 import os
 
 from wlanpi_rxg_agent.lib.configuration.config_file import ConfigFile
+from wlanpi_rxg_agent.lib.configuration.schemas import BridgeConfig
 
 BRIDGE_CONFIG_DIR = "/etc/wlanpi-mqtt-bridge"
 
@@ -24,6 +25,15 @@ class BridgeConfigFile(ConfigFile):
                 },
             },
         )
+
+    def load_or_create_defaults(self, allow_empty: bool = False):  # type: ignore[override]
+        super().load_or_create_defaults(allow_empty=allow_empty)
+        try:
+            cfg = BridgeConfig(**self.data)
+            self.data = cfg.model_dump()
+        except Exception:
+            self.create_defaults()
+            self.save()
 
 
 if __name__ == "__main__":

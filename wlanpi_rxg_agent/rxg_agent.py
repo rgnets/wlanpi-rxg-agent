@@ -8,7 +8,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 
-import constants
+from wlanpi_rxg_agent import constants
 from fastapi import FastAPI, HTTPException
 
 import wlanpi_rxg_agent.lib.domain as agent_domain

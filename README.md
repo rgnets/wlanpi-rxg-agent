@@ -18,3 +18,21 @@ curl -X POST http://localhost:8200/dev_shutdown \
 - When `CONFIRM` is not 1: Returns message requiring confirmation
 
 This allows proper cleanup of network interfaces, DHCP clients, and other system resources before termination.
+
+## Makefile Shortcuts
+
+- `make run` — Run the agent locally (`python -m wlanpi_rxg_agent`).
+- `make preflight` — Auto-format, lint, and run unit tests (pre-PR check).
+- `make test-unit` — Run unit tests only (excludes integration/hardware/slow).
+- `make test` — Run default test suite.
+- `make test-integration` — Run integration tests (requires device/network privileges).
+- `make cov-html` — Generate coverage HTML report.
+- `make lint` — Type/lint checks (mypy, black --check, isort --check, flake8).
+- `make format` — Auto-format code (autoflake, black, isort).
+- `make gen-reqs` — Re-generate `requirements*.txt` from `pyproject.toml`.
+- `make sync` — Sync the repo to a remote dev device (defaults to `root@dev-wlanpi3:/tmp/pycharm_project_880`).
+
+Notes
+- The sync target uses `scripts/sync-remote.sh`. Override host/path:
+  - `make sync REMOTE_HOST=user@host REMOTE_PATH=/path/on/remote`
+- For unit tests on a remote device: `PYTHONPATH=. make test-unit` (ensure `pytest`, `pytest-mock`, `pytest-asyncio` are installed in the remote venv).
