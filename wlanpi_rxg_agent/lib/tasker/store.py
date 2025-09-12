@@ -24,11 +24,12 @@ def load_snapshot() -> Dict[str, List[dict]]:
                 "ping_targets": data.get("ping_targets", []),
                 "traceroutes": data.get("traceroutes", []),
                 "sip_tests": data.get("sip_tests", []),
+                "robot_suites": data.get("robot_suites", []),
             }
     except FileNotFoundError:
-        return {"ping_targets": [], "traceroutes": [], "sip_tests": []}
+        return {"ping_targets": [], "traceroutes": [], "sip_tests": [], "robot_suites": []}
     except Exception:
-        return {"ping_targets": [], "traceroutes": [], "sip_tests": []}
+        return {"ping_targets": [], "traceroutes": [], "sip_tests": [], "robot_suites": []}
 
 
 def save_snapshot(snapshot: Dict[str, List[dict]]) -> None:

@@ -32,6 +32,7 @@ class Tasker:
         traceroutes: dict[str, TaskDefinition[actions_domain.Data.Traceroute]] = {}
         speed_tests: dict[str, TaskDefinition[actions_domain.Data.SpeedTest]] = {}
         sip_tests: dict[str, TaskDefinition[actions_domain.Data.SipTest]] = {}
+        robot_suites: dict[str, TaskDefinition[actions_domain.Data.RobotSuite]] = {}
         misc_tasks: dict[str, TaskDefinition[Any]] = {}
 
     def __init__(self):
@@ -65,6 +66,10 @@ class Tasker:
             (
                 actions_domain.Commands.ConfigureSipTests,
                 lambda event: self.configured_sip_tests(event),
+            ),
+            (
+                actions_domain.Commands.ConfigureRobotSuites,
+                lambda event: self.configured_robot_suites(event),
             ),
             (agent_domain.Messages.ShutdownStarted, self.shutdown),
         )
@@ -115,6 +120,9 @@ class Tasker:
         )
         self.logger.debug(
             f"Scheduled SipTests: {self.scheduled_tasks.sip_tests.items()}"
+        )
+        self.logger.debug(
+            f"Scheduled RobotSuites: {self.scheduled_tasks.robot_suites.items()}"
         )
         self.logger.debug(f"Scheduled misc: {self.scheduled_tasks.misc_tasks.items()}")
         self.logger.debug(f"Raw Scheduler jobs: {self.scheduler.get_jobs()}")
@@ -232,6 +240,7 @@ class Tasker:
                         identifier=composite_id,
                         task_executor=execute,
                         interval=interval,
+                        start_date=getattr(target, "start_date", None),
                     )
                     task_schedule[composite_id] = TaskDefinition(
                         id=composite_id, task_obj=new_task, definition=target
@@ -281,6 +290,7 @@ class Tasker:
             "ping_targets": defs_to_list(self.scheduled_tasks.ping_targets),
             "traceroutes": defs_to_list(self.scheduled_tasks.traceroutes),
             "sip_tests": defs_to_list(self.scheduled_tasks.sip_tests),
+            "robot_suites": defs_to_list(self.scheduled_tasks.robot_suites),
         }
 
     def _persist_all_tasks(self) -> None:
@@ -304,6 +314,10 @@ class Tasker:
             targets = [actions_domain.Data.SipTest(**x) for x in data["sip_tests"]]
             evt = actions_domain.Commands.ConfigureSipTests(targets=targets)
             self.configured_sip_tests(evt)
+        if data.get("robot_suites"):
+            targets = [actions_domain.Data.RobotSuite(**x) for x in data["robot_suites"]]
+            evt = actions_domain.Commands.ConfigureRobotSuites(targets=targets)
+            self.configured_robot_suites(evt)
 
     @configure_test(
         task_type_name="SipTest",
@@ -323,6 +337,21 @@ class Tasker:
         #         id=exec_def.id, result=res, request=command
         #     )
         # )
+
+    @configure_test(
+        task_type_name="RobotSuite",
+        task_schedule_name="robot_suites",
+        event_type=actions_domain.Commands.ConfigureRobotSuites,
+    )
+    async def configured_robot_suites(
+        self, exec_def: actions_domain.Data.RobotSuite
+    ):
+        # Ensure we pull/update suite as part of execution (first run or any run)
+        command = actions_domain.Commands.RunRobotSuite(
+            **exec_def.model_dump(by_alias=True),
+        )
+        res = await command_bus.handle(command)
+        self.logger.debug(f"RobotSuite execution complete: {res}")
 
     @configure_test(
         task_type_name="PingTarget",

@@ -20,6 +20,9 @@ from wlanpi_rxg_agent.lib.configuration.bootloader_config_file import (
     BootloaderConfigFile,
 )
 from wlanpi_rxg_agent.lib.sip_control.sip_test_baresip import SipTestBaresip
+from wlanpi_rxg_agent.lib.robot_runner.robot_manager import RobotManager
+from wlanpi_rxg_agent.lib.robot_runner.executor import RobotExecutor
+from wlanpi_rxg_agent.lib.robot_runner.result_parser import parse_output_xml
 
 
 class AgentActions:
@@ -40,6 +43,9 @@ class AgentActions:
         # Kismet
         self.kismet_base_url = kismet_base_url
         self.kismet_control = KismetControl()
+        # Robot subsystem
+        self.robot_manager = RobotManager()
+        self.robot_executor = RobotExecutor()
 
         # Event/Command Bus
         self.setup_listeners()
@@ -62,6 +68,7 @@ class AgentActions:
             (actions_domain.Commands.Iperf2, self.run_iperf2),
             (actions_domain.Commands.Iperf3, self.run_iperf3),
             (actions_domain.Commands.SipTest, self.run_sip_test),
+            (actions_domain.Commands.RunRobotSuite, self.run_robot_suite),
         )
 
         for command, handler in pairs:
@@ -90,6 +97,108 @@ class AgentActions:
         # if self.agent_reconfig_callback is not None:
         #     await self.agent_reconfig_callback({"override_rxg": value})
         return self.bootloader_config.data
+
+    async def run_robot_suite(self, event: actions_domain.Commands.RunRobotSuite):
+        """Run a RobotFramework suite once and emit a RobotSuiteComplete message."""
+        self.logger.info(f"Running RobotSuite id={event.id} entrypoint={event.entrypoint}")
+        try:
+            suite_dir = await self.robot_manager.ensure_suite(event)
+        except Exception as e:
+            self.logger.exception("Failed to prepare RobotSuite")
+            message_bus.handle(
+                actions_domain.Messages.RobotSuiteComplete(
+                    id=event.id,
+                    error=str(e),
+                    request=event,
+                )
+            )
+            return
+
+        run_dir, meta = await self.robot_executor.run(event, suite_dir)
+
+        # Build summary from output.xml if present
+        from pathlib import Path
+
+        output_xml = Path(run_dir) / "output.xml"
+        try:
+            if output_xml.exists():
+                parsed = parse_output_xml(output_xml)
+                summary = actions_domain.Messages.RobotSuiteSummary(
+                    suite_id=event.id,
+                    started_at=meta.get("started_at"),
+                    ended_at=meta.get("ended_at"),
+                    total=parsed.total,
+                    passed=parsed.passed,
+                    failed=parsed.failed,
+                    skipped=parsed.skipped,
+                    duration_seconds=parsed.duration_seconds,
+                    rxg_results=parsed.rxg_results,
+                )
+            else:
+                summary = actions_domain.Messages.RobotSuiteSummary(
+                    suite_id=event.id,
+                    started_at=meta.get("started_at"),
+                    ended_at=meta.get("ended_at"),
+                )
+        except Exception:
+            self.logger.exception("Failed to parse robot output.xml")
+            summary = actions_domain.Messages.RobotSuiteSummary(
+                suite_id=event.id,
+                started_at=meta.get("started_at"),
+                ended_at=meta.get("ended_at"),
+            )
+
+        artifacts = []
+        for fname in ("output.xml", "report.html", "log.html"):
+            p = (Path(run_dir) / fname)
+            if p.exists():
+                artifacts.append({"name": fname, "path": str(p)})
+
+        # Always create a consolidated artifacts.zip for convenience of upload/storage
+        try:
+            import zipfile
+            zpath = Path(run_dir) / "artifacts.zip"
+            with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED) as zf:
+                for a in artifacts:
+                    ap = Path(a["path"])  # type: ignore
+                    if ap.exists():
+                        zf.write(ap, arcname=ap.name)
+            artifacts.append({"name": "artifacts.zip", "path": str(zpath)})
+        except Exception:
+            self.logger.exception("Failed to create artifacts.zip for RobotSuite run")
+
+        message_bus.handle(
+            actions_domain.Messages.RobotSuiteComplete(
+                id=event.id,
+                result=summary,
+                request=event,
+                artifacts=artifacts,
+            )
+        )
+        # Optional HTTP artifact upload
+        try:
+            if (event.upload_method or "mqtt") == "http" and event.upload_token:
+                from pathlib import Path
+                # Prefer consolidated zip for upload
+                zpath = Path(run_dir) / "artifacts.zip"
+                upload_path = zpath if zpath.exists() else Path(run_dir) / "output.xml"
+                api = ApiClient()
+                resp = await api.upload_robot_result(
+                    file_path=str(upload_path), submit_token=event.upload_token, ip=event.upload_ip
+                )
+                # Optionally publish a status note via MQTT by sending another completion with extra info
+                message_bus.handle(
+                    actions_domain.Messages.RobotSuiteComplete(
+                        id=event.id,
+                        result=summary,
+                        request=event,
+                        artifacts=artifacts + [{"upload_status": resp.status_code, "upload_url": resp.url}],
+                    )
+                )
+        except Exception:
+            self.logger.exception("RobotSuite HTTP artifact upload failed")
+
+        return summary
 
     async def set_password(self, event: actions_domain.Commands.SetCredentials):
         self.logger.info(f"Setting new password.")
@@ -126,6 +235,13 @@ class AgentActions:
         command_bus.handle(
             actions_domain.Commands.ConfigureSipTests(targets=event.sip_tests)
         )
+        # Then Robot Suites
+        if hasattr(event, "robot_suites"):
+            command_bus.handle(
+                actions_domain.Commands.ConfigureRobotSuites(
+                    targets=event.robot_suites
+                )
+            )
 
     async def configure_radios(self, event: actions_domain.Commands.ConfigureRadios):
         self.logger.info(f"Configuring radios: New payload: {event}")

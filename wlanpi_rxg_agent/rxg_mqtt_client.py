@@ -130,6 +130,7 @@ class RxgMqttClient:
             (actions_domain.Messages.DigTestComplete, self.dig_test_complete_handler),
             (actions_domain.Messages.DhcpTestComplete, self.dhcp_test_complete_handler),
             (actions_domain.Messages.SipTestComplete, self.sip_test_complete_handler),
+            (actions_domain.Messages.RobotSuiteComplete, self.robot_suite_complete_handler),
         ]
 
         self.setup_listeners()
@@ -417,6 +418,14 @@ class RxgMqttClient:
             payload=json.dumps(event.model_dump(), default=str),
         )
 
+    async def robot_suite_complete_handler(
+        self, event: actions_domain.Messages.RobotSuiteComplete
+    ):
+        await self.publish_with_retry(
+            topic=f"{self.my_base_topic}/ingest/robot",
+            payload=json.dumps(event.model_dump(), default=str),
+        )
+
     async def stop(self):
         self.logger.info("Stopping MQTT Client")
 
@@ -551,6 +560,9 @@ class RxgMqttClient:
                     "configure/ping_targets": lambda: command_bus.handle(
                         actions_domain.Commands.ConfigurePingTargets(targets=payload)
                     ),
+                    "configure/robot_suites": lambda: command_bus.handle(
+                        actions_domain.Commands.ConfigureRobotSuites(targets=payload)
+                    ),
                     "configure/agent": lambda: command_bus.handle(
                         actions_domain.Commands.ConfigureAgent(**payload)
                     ),
@@ -564,6 +576,9 @@ class RxgMqttClient:
                     ),
                     "execute/iperf3": lambda: command_bus.handle(
                         actions_domain.Commands.Iperf3(**payload)
+                    ),
+                    "execute/robot_suite": lambda: command_bus.handle(
+                        actions_domain.Commands.RunRobotSuite(**payload)
                     ),
                     "debug/mqtt_disconnect_normal": lambda: self.mqtt_client.disconnect(),
                     "debug/mqtt_disconnect_mqtt_error": lambda: raise_(

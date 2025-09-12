@@ -177,6 +177,46 @@ class ApiClient:
                     except RuntimeError as e:
                         self.logger.error(
                             f"Unable to determine encoding: {e}", exc_info=True
+                )
+                return FlatResponse(
+                    headers=response.headers,
+                    url=str(response.url),
+                    status_code=response.status,
+                    reason=response.reason,
+                    content=content,
+                    encoding=encoding,
+                )
+
+    async def upload_robot_result(
+        self,
+        file_path: Union[int, str, bytes, PathLike[str], PathLike[bytes]],
+        submit_token: str,
+        ip: Optional[str] = None,
+    ) -> FlatResponse:
+        """Upload a RobotFramework run artifact (zip or single file) to RXG.
+
+        Mirrors upload_tcpdump pattern, targeting the RobotSuiteResult controller.
+        """
+        if not ip:
+            ip = self.ip
+        form_data = {"token": submit_token, "file": open(file_path, "rb")}
+        async with ClientSession() as session:
+            async with session.request(
+                method="post",
+                url=f"https://{ip}/{self.api_base}/robot_suite_result/upload_result",
+                data=form_data,
+                verify_ssl=self.verify_ssl,
+                timeout=self.timeout,
+            ) as response:
+                self.logger.debug("Returning response for robot result upload")
+                content = await response.read()
+                encoding = response.charset
+                if not encoding:
+                    try:
+                        response.get_encoding()
+                    except RuntimeError as e:
+                        self.logger.error(
+                            f"Unable to determine encoding: {e}", exc_info=True
                         )
                 return FlatResponse(
                     headers=response.headers,

@@ -1,3 +1,17 @@
+wlanpi-rxg-agent (1.0.1-14) UNRELEASED; urgency=medium
+
+  * Add RobotFramework suite support:
+    - Pull bundles via HTTP with SHA256 change detection
+    - Schedule suites with start_date + interval (Tasker)
+    - Publish compact results to MQTT, extract RXG_RESULT lines
+    - Optional HTTP artifact upload to /api/robot_suite_result/upload_result
+    - Auto-detect default listener (rxg_listener.RxgListener) in bundles
+  * Domain, MQTT routing, and Actions updated for Robot Suites
+  * Added unit test for result parser and smoke test (skipped if robotframework missing)
+  * Documentation: ROBOT_SUITE_DESIGN.md and ROBOT_LISTENER_GUIDE.md
+
+ -- Michael Ketchel <michael.ketchel@gmail.com>  Thu, 12 Sep 2025 00:00:00 +0000
+
 wlanpi-rxg-agent (1.0.1-13) UNRELEASED; urgency=medium
 
   * was missing something

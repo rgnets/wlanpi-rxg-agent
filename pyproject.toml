@@ -65,7 +65,8 @@ dependencies = [
     "pyee",
     "baresipy",
     "pexpect",
-    "pyroute2"
+    "pyroute2",
+    "robotframework"
 ]
 #
 #[project.scripts]

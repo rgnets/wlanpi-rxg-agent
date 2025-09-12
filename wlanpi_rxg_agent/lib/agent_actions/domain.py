@@ -265,6 +265,26 @@ class Data:
         )  #
         host: str = Field()  # :string
 
+    # RobotFramework Suites
+    class RobotSuite(TestBase):
+        """Definition for a RobotFramework suite.
+
+        Delivery is via HTTP pull using `bundle_url` and tracked with `bundle_sha256`.
+        Variables can be provided as a simple dictionary of string keys/values.
+        """
+        # Scheduling inherited from TestBase: id, period (seconds), start_date
+        # Delivery
+        bundle_url: t.Optional[str] = Field(default=None, description="HTTPS URL for the compressed bundle (zip or tar.gz)")
+        bundle_sha256: t.Optional[str] = Field(default=None, description="SHA256 for bundle content; pull when changed")
+        # Runtime
+        entrypoint: t.Optional[str] = Field(default=None, description="Relative path to primary .robot file; if omitted, run all .robot in root")
+        variables: t.Optional[dict[str, str]] = Field(default=None, description="Variables passed to robot as --variable key:value")
+        timeout: t.Optional[int] = Field(default=None, description="Optional max seconds for execution")
+        upload_method: t.Optional[str] = Field(default="mqtt", description="mqtt|http|none")
+        artifact_policy: t.Optional[str] = Field(default="summary_only", description="none|summary_only|all")
+        upload_token: t.Optional[str] = Field(default=None, description="Token for HTTP artifact upload when upload_method=http")
+        upload_ip: t.Optional[str] = Field(default=None, description="Optional override for RXG IP when uploading artifacts over HTTP")
+
     # Traceroute
     # Most of these reflect the API definitions in Core
     class TracerouteRequest(BaseModel):
@@ -400,6 +420,23 @@ class Messages:
     class SipTestComplete(TestCompleteMessage):
         pass
 
+    class RobotSuiteSummary(BaseModel):
+        suite_id: int = Field()
+        started_at: t.Optional[str] = Field(default=None)
+        ended_at: t.Optional[str] = Field(default=None)
+        total: int = Field(default=0)
+        passed: int = Field(default=0)
+        failed: int = Field(default=0)
+        skipped: int = Field(default=0)
+        duration_seconds: t.Optional[float] = Field(default=None)
+        rxg_results: t.Optional[list[dict]] = Field(default=None, description="Structured results extracted from RXG_RESULT lines")
+
+    class RobotSuiteComplete(TestCompleteMessage):
+        id: t.Optional[int] = Field(default=None)
+        result: t.Optional[RobotSuiteSummary] = Field(default=None)
+        request: t.Optional[Data.RobotSuite] = Field(default=None)
+        artifacts: t.Optional[list[dict]] = Field(default=None)
+
 
 class Commands:
     class Reboot(BaseModel):
@@ -448,6 +485,7 @@ class Commands:
         traceroute_targets: list[Data.Traceroute] = Field(default=[])
         speed_tests: list[Data.SpeedTest] = Field(default=[])
         sip_tests: list[Data.SipTest] = Field(default=[])
+        robot_suites: list[Data.RobotSuite] = Field(default=[])
 
     class Ping(Data.PingRequest):
         pass
@@ -468,4 +506,11 @@ class Commands:
         pass
 
     class SipTest(Data.SipTest):
+        pass
+
+    # Robot suites
+    class ConfigureRobotSuites(BaseModel):
+        targets: list[Data.RobotSuite] = Field()
+
+    class RunRobotSuite(Data.RobotSuite):
         pass
