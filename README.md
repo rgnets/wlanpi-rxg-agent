@@ -36,3 +36,11 @@ Notes
 - The sync target uses `scripts/sync-remote.sh`. Override host/path:
   - `make sync REMOTE_HOST=user@host REMOTE_PATH=/path/on/remote`
 - For unit tests on a remote device: `PYTHONPATH=. make test-unit` (ensure `pytest`, `pytest-mock`, `pytest-asyncio` are installed in the remote venv).
+
+## Robot Suites
+
+- The agent can pull and run RobotFramework suites delivered by the rXg and publish compact results via MQTT.
+- Suites are pulled via HTTP using a bundle URL and SHA256 and scheduled on intervals respecting a `start_date`.
+- Results topic: `wlan-pi/<mac>/agent/ingest/robot`.
+- See ROBOT_SUITE_DESIGN.md for full details on configuration, scheduling, variables, and RXG endpoints.
+- See ROBOT_LISTENER_GUIDE.md for listener patterns and helper keywords.
