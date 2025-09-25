@@ -102,6 +102,48 @@ class ApiClient:
                     encoding=encoding,
                 )
 
+    async def download_robot_suite_bundle(
+        self,
+        suite_id: int,
+        bundle_url: Optional[str] = None,
+        ip: Optional[str] = None,
+    ) -> FlatResponse:
+        """Fetch the compressed Robot Framework bundle for a suite."""
+
+        if not bundle_url:
+            if not ip:
+                ip = self.ip
+            if not ip:
+                raise ValueError("Robot suite bundle download requires an rXg IP")
+            bundle_url = (
+                f"https://{ip}/{self.api_base}/robot_suites/{suite_id}/bundle"
+            )
+
+        async with ClientSession() as session:
+            async with session.request(
+                method="get",
+                url=bundle_url,
+                verify_ssl=self.verify_ssl,
+                timeout=self.timeout,
+            ) as response:
+                content = await response.read()
+                encoding = response.charset
+                if not encoding:
+                    try:
+                        response.get_encoding()
+                    except RuntimeError as e:
+                        self.logger.error(
+                            f"Unable to determine encoding: {e}", exc_info=True
+                        )
+                return FlatResponse(
+                    headers=response.headers,
+                    url=str(response.url),
+                    status_code=response.status,
+                    reason=response.reason,
+                    content=content,
+                    encoding=encoding,
+                )
+
     async def register(
         self,
         model: str,

@@ -102,7 +102,7 @@ class AgentActions:
         """Run a RobotFramework suite once and emit a RobotSuiteComplete message."""
         self.logger.info(f"Running RobotSuite id={event.id} entrypoint={event.entrypoint}")
         try:
-            suite_dir = await self.robot_manager.ensure_suite(event)
+            preparation = await self.robot_manager.ensure_suite(event)
         except Exception as e:
             self.logger.exception("Failed to prepare RobotSuite")
             message_bus.handle(
@@ -114,7 +114,12 @@ class AgentActions:
             )
             return
 
-        run_dir, meta = await self.robot_executor.run(event, suite_dir)
+        run_dir, meta = await self.robot_executor.run(
+            event,
+            preparation.suite_dir,
+            python_executable=preparation.python_executable,
+        )
+        meta["pip_install_log"] = preparation.pip_log
 
         # Build summary from output.xml if present
         from pathlib import Path
@@ -149,6 +154,18 @@ class AgentActions:
             )
 
         artifacts = []
+        if preparation.pip_log:
+            self.logger.debug(
+                "pip install log for suite %s:\n%s", event.id, preparation.pip_log
+            )
+
+        pip_log_path = Path(run_dir) / "pip_install.log"
+        try:
+            pip_log_path.write_text(preparation.pip_log or "", encoding="utf-8")
+            artifacts.append({"name": "pip_install.log", "path": str(pip_log_path)})
+        except Exception:
+            self.logger.exception("Failed to write pip installation log for RobotSuite run")
+
         for fname in ("output.xml", "report.html", "log.html"):
             p = (Path(run_dir) / fname)
             if p.exists():
@@ -182,7 +199,7 @@ class AgentActions:
                 # Prefer consolidated zip for upload
                 zpath = Path(run_dir) / "artifacts.zip"
                 upload_path = zpath if zpath.exists() else Path(run_dir) / "output.xml"
-                api = ApiClient()
+                api = ApiClient(server_ip=event.upload_ip, verify_ssl=False, timeout=None)
                 resp = await api.upload_robot_result(
                     file_path=str(upload_path), submit_token=event.upload_token, ip=event.upload_ip
                 )

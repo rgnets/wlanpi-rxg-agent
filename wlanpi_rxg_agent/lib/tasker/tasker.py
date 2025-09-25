@@ -75,14 +75,6 @@ class Tasker:
         )
         self.setup_listeners()
 
-        # Restore any previously configured tasks from persistent store
-        try:
-            self.restore_from_store()
-        except Exception:
-            self.logger.exception(
-                "Error restoring tasks from store; continuing with empty schedule"
-            )
-
         self.configure_fixed_tasks()
 
     def setup_listeners(self):

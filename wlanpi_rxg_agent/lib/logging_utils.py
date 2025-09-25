@@ -101,7 +101,7 @@ def setup_logging(level=logging.INFO, handlers=None):
         level = logging.DEBUG
 
     # Allow env override for global app log level
-    level = _env_level("RXG_LOG_LEVEL", str(level))
+    level = _env_level("GLOBAL_LOG_LEVEL", str(level))
 
     if handlers is None:
         handlers = [create_console_handler(level)]
@@ -142,6 +142,7 @@ def setup_logging(level=logging.INFO, handlers=None):
         logging.getLogger(
             "wlanpi_rxg_agent.lib.network_control.network_control_manager"
         ).setLevel(logging.DEBUG)
+        logging.getLogger("wlanpi_rxg_agent.lib.robot_runner").setLevel(logging.DEBUG)
 
     else:
         # Set specific log levels for various components
@@ -150,8 +151,8 @@ def setup_logging(level=logging.INFO, handlers=None):
         logging.getLogger("api_client").setLevel(level)
         logging.getLogger("apscheduler.scheduler").setLevel(level)
         logging.getLogger("wlanpi_rxg_agent.core_client").setLevel(logging.WARNING)
-        # Bus logger levels can be overridden via RXG_BUS_LOG_LEVEL
-        bus_level = _env_level("RXG_BUS_LOG_LEVEL", str(level))
+        # Bus logger levels can be overridden via BUS_LOG_LEVEL
+        bus_level = _env_level("BUS_LOG_LEVEL", str(level))
         logging.getLogger("wlanpi_rxg_agent.lib.event_bus._messagebus").setLevel(
             bus_level
         )

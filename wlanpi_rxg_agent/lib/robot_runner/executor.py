@@ -18,6 +18,8 @@ class RobotExecutor:
         self,
         suite: Data.RobotSuite,
         suite_dir: Path,
+        *,
+        python_executable: Optional[Path] = None,
     ) -> Tuple[Path, Dict]:
         """Runs a RobotFramework suite.
 
@@ -29,7 +31,9 @@ class RobotExecutor:
 
         # Build command
         import sys
-        cmd: List[str] = [sys.executable, "-m", "robot", "--outputdir", str(run_dir)]
+
+        python_bin = str(python_executable) if python_executable else sys.executable
+        cmd: List[str] = [python_bin, "-m", "robot", "--outputdir", str(run_dir)]
 
         # Inject variables
         variables = self._build_variables(suite)
@@ -56,6 +60,10 @@ class RobotExecutor:
         cmd.append(str(test_path))
 
         env = os.environ.copy()
+        if python_executable:
+            venv_bin = python_executable.parent
+            env["VIRTUAL_ENV"] = str(venv_bin.parent)
+            env["PATH"] = f"{venv_bin}:{env.get('PATH', '')}"
         # Ensure Python can import bundle libs
         env["PYTHONPATH"] = f"{suite_dir}:{env.get('PYTHONPATH','')}" if env.get("PYTHONPATH") else str(suite_dir)
 
@@ -72,32 +80,59 @@ class RobotExecutor:
             )
             timeout = suite.timeout or 600
             try:
-                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+                stdout, stderr = await asyncio.wait_for(
+                    proc.communicate(), timeout=timeout
+                )
+                timed_out = False
             except asyncio.TimeoutError:
                 self.logger.warning(
-                    f"Robot run timed out after {timeout}s for suite {suite.id}; terminating process"
+                    "Robot run timed out after %ss for suite %s; terminating process",
+                    timeout,
+                    suite.id,
                 )
                 proc.terminate()
-                return run_dir, {
-                    "started_at": started_at,
-                    "ended_at": datetime.utcnow().isoformat(),
-                    "returncode": None,
-                    "timed_out": True,
-                    "stdout": "",
-                    "stderr": "",
-                }
+                try:
+                    stdout, stderr = await asyncio.wait_for(
+                        proc.communicate(), timeout=30
+                    )
+                except Exception:
+                    stdout, stderr = b"", b""
+                timed_out = True
 
             ended_at = datetime.utcnow().isoformat()
+            stdout_text = stdout.decode(errors="ignore")
+            stderr_text = stderr.decode(errors="ignore")
+            stdout_path, stderr_path = self._write_run_logs(
+                run_dir, stdout_text, stderr_text
+            )
+            self.logger.debug(
+                "Robot run stdout for suite %s:\n%s", suite.id, stdout_text or "<empty>"
+            )
+            self.logger.debug(
+                "Robot run stderr for suite %s:\n%s", suite.id, stderr_text or "<empty>"
+            )
+            self._log_run_result(
+                suite=suite,
+                returncode=proc.returncode,
+                timed_out=timed_out,
+                stdout=stdout_text,
+                stderr=stderr_text,
+                stdout_path=stdout_path,
+                stderr_path=stderr_path,
+            )
             meta = {
                 "started_at": started_at,
                 "ended_at": ended_at,
                 "returncode": proc.returncode,
-                "timed_out": False,
-                "stdout": stdout.decode(errors="ignore"),
-                "stderr": stderr.decode(errors="ignore"),
+                "timed_out": timed_out,
+                "stdout": stdout_text,
+                "stderr": stderr_text,
+                "stdout_path": str(stdout_path) if stdout_path else None,
+                "stderr_path": str(stderr_path) if stderr_path else None,
+                "python_executable": python_bin,
             }
             return run_dir, meta
-        except Exception:
+        except Exception as exc:
             self.logger.exception("Exception running RobotFramework")
             ended_at = datetime.utcnow().isoformat()
             return run_dir, {
@@ -106,7 +141,9 @@ class RobotExecutor:
                 "returncode": None,
                 "timed_out": False,
                 "stdout": "",
-                "stderr": "Exception; see logs",
+                "stderr": f"Exception: {exc}",
+                "stdout_path": None,
+                "stderr_path": None,
             }
 
     def _build_variables(self, suite: Data.RobotSuite) -> Dict[str, str]:
@@ -153,3 +190,58 @@ class RobotExecutor:
         if (suite_dir / "robot_libs" / "rxg_listener.py").exists():
             return "robot_libs.rxg_listener.RxgListener"
         return None
+
+    def _write_run_logs(
+        self, run_dir: Path, stdout: str, stderr: str
+    ) -> tuple[Optional[Path], Optional[Path]]:
+        stdout_path = run_dir / "robot_stdout.log"
+        stderr_path = run_dir / "robot_stderr.log"
+
+        def write(path: Path, content: str) -> Optional[Path]:
+            try:
+                path.write_text(content)
+                return path
+            except Exception:
+                self.logger.exception("Failed writing %s", path)
+                return None
+
+        return write(stdout_path, stdout), write(stderr_path, stderr)
+
+    def _log_run_result(
+        self,
+        suite: Data.RobotSuite,
+        returncode: Optional[int],
+        timed_out: bool,
+        stdout: str,
+        stderr: str,
+        stdout_path: Optional[Path],
+        stderr_path: Optional[Path],
+    ) -> None:
+        summary = {
+            "suite_id": suite.id,
+            "entrypoint": suite.entrypoint,
+            "returncode": returncode,
+            "timed_out": timed_out,
+            "stdout_path": str(stdout_path) if stdout_path else None,
+            "stderr_path": str(stderr_path) if stderr_path else None,
+        }
+        if timed_out or returncode not in (0, None):
+            self.logger.warning(
+                "Robot suite execution issue: %s; stderr preview: %s",
+                summary,
+                self._summarize(stderr),
+            )
+        else:
+            self.logger.info(
+                "Robot suite execution complete: %s; stdout preview: %s",
+                summary,
+                self._summarize(stdout),
+            )
+
+    def _summarize(self, text: str, limit: int = 600) -> str:
+        trimmed = text.strip()
+        if not trimmed:
+            return "<empty>"
+        if len(trimmed) <= limit:
+            return trimmed
+        return f"{trimmed[:limit]}... (truncated, {len(trimmed)} chars)"

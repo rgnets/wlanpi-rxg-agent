@@ -39,7 +39,7 @@ def _env_level(name: str, default: str = "INFO") -> int:
 
 
 BUS_LOG_ENABLED = _env_on("RXG_BUS_LOG", "on")
-BUS_LOG_LEVEL = _env_level("RXG_BUS_LOG_LEVEL", "INFO")
+BUS_LOG_LEVEL = _env_level("BUS_LOG_LEVEL", "INFO")
 BUS_LOG_PAYLOAD = _env_on("RXG_BUS_LOG_PAYLOAD", "off")
 
 # Build middlewares based on env configuration

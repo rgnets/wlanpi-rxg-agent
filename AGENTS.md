@@ -1,4 +1,4 @@
-# Repository Guidelines
+20Michae# Repository Guidelines
 
 ## Project Structure & Module Organization
 - Source: `wlanpi_rxg_agent/`; entry: `__main__.py` (Uvicorn serving `rxg_agent.app`).
@@ -46,16 +46,16 @@
 - The agent and integration tests change network state; use test hardware or containers.
 
 ## Observability
-- Env vars: `RXG_LOG_LEVEL` (global), `RXG_BUS_LOG` (on/off), `RXG_BUS_LOG_LEVEL`, `RXG_BUS_LOG_PAYLOAD` (on/off).
+- Env vars: `GLOBAL_LOG_LEVEL` (global), `RXG_BUS_LOG` (on/off), `BUS_LOG_LEVEL`, `RXG_BUS_LOG_PAYLOAD` (on/off).
 - Bus logging records received/succeeded/failed messages; enable payloads only when debugging.
 
 ### Systemd Drop-in (example)
 - Create: `/etc/systemd/system/wlanpi-rxg-agent.service.d/override.conf`
 ```
 [Service]
-Environment=RXG_LOG_LEVEL=INFO
+Environment=GLOBAL_LOG_LEVEL=INFO
 Environment=RXG_BUS_LOG=on
-Environment=RXG_BUS_LOG_LEVEL=INFO
+Environment=BUS_LOG_LEVEL=INFO
 Environment=RXG_BUS_LOG_PAYLOAD=off
 ```
 - Apply: `sudo systemctl daemon-reload && sudo systemctl restart wlanpi-rxg-agent`

@@ -82,6 +82,9 @@ class RxgSupplicant:
         message_bus.add_handler(
             supplicant_domain.Messages.Certified, self.re_emit_certified_if_new
         )
+        command_bus.add_handler(
+            supplicant_domain.Commands.GetActiveServer, self.handle_get_active_server
+        )
 
     async def re_emit_certified_if_new(
         self, event: supplicant_domain.Messages.Certified
@@ -93,6 +96,11 @@ class RxgSupplicant:
             message_bus.handle(
                 supplicant_domain.Messages.NewCertifiedConnection(**event.__dict__)
             )
+
+    async def handle_get_active_server(
+        self, _command: supplicant_domain.Commands.GetActiveServer
+    ) -> Optional[str]:
+        return self.active_server
 
     async def startup_complete_handler(self, event):
         await self.load_config()

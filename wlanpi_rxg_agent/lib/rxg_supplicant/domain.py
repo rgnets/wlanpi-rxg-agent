@@ -89,3 +89,9 @@ class Messages:
 
     class Error(agent_domain.Messages.Error):
         pass
+
+
+class Commands:
+    @dataclass
+    class GetActiveServer:
+        pass
