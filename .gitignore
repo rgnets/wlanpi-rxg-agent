@@ -7,3 +7,5 @@ venv
 /wlanpi_rxg_agent.egg-info
 /dist
 /build
+.idea/deployment.xml
+__pycache__
