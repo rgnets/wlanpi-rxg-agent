@@ -9,3 +9,4 @@ venv
 /build
 .idea/deployment.xml
 __pycache__
+*.pyc
