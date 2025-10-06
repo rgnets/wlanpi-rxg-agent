@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -64,6 +65,7 @@ class RobotExecutor:
             venv_bin = python_executable.parent
             env["VIRTUAL_ENV"] = str(venv_bin.parent)
             env["PATH"] = f"{venv_bin}:{env.get('PATH', '')}"
+        self._ensure_node_on_path(env)
         # Ensure Python can import bundle libs
         env["PYTHONPATH"] = f"{suite_dir}:{env.get('PYTHONPATH','')}" if env.get("PYTHONPATH") else str(suite_dir)
 
@@ -245,3 +247,26 @@ class RobotExecutor:
         if len(trimmed) <= limit:
             return trimmed
         return f"{trimmed[:limit]}... (truncated, {len(trimmed)} chars)"
+
+    def _ensure_node_on_path(self, env: Dict[str, str]) -> None:
+        current_path = env.get("PATH", "")
+        if shutil.which("node", path=current_path):
+            return
+
+        nvm_dir = Path(env.get("NVM_DIR", Path.home() / ".nvm"))
+        node_versions_dir = nvm_dir / "versions" / "node"
+        if node_versions_dir.exists():
+            candidates = sorted(node_versions_dir.glob("*/bin"), reverse=True)
+            for candidate in candidates:
+                node_bin = candidate / "node"
+                if node_bin.exists():
+                    env["PATH"] = f"{candidate}:{current_path}" if current_path else str(candidate)
+                    if shutil.which("node", path=env["PATH"]):
+                        self.logger.debug(
+                            "Added node bin %s to PATH for suite execution", candidate
+                        )
+                        return
+        self.logger.warning(
+            "node binary not found in PATH; Browser keywords may fail (PATH=%s)",
+            env.get("PATH", ""),
+        )

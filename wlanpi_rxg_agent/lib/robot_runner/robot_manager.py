@@ -1,4 +1,5 @@
 import asyncio
+import glob
 import hashlib
 import inspect
 import io
@@ -21,7 +22,7 @@ from wlanpi_rxg_agent.lib.agent_actions.domain import Data
 from wlanpi_rxg_agent.lib.rxg_supplicant import domain as supplicant_domain
 
 
-SUITES_BASE_DIR = Path("/var/lib/wlanpi-rxg-agent/robot_suites")
+SUITES_BASE_DIR = Path("/tmp/robot_suites")
 
 
 @dataclass
@@ -179,8 +180,8 @@ class RobotManager:
         python_exe = self._ensure_virtualenv(
             paths.suite_dir, force=refresh_performed
         )
-        pip_log = await self._maybe_install_requirements(paths.suite_dir, python_exe)
-        return SuitePreparation(paths.suite_dir, python_exe, pip_log)
+        prep_log = await self._maybe_install_requirements(paths.suite_dir, python_exe)
+        return SuitePreparation(paths.suite_dir, python_exe, prep_log)
 
     async def _handle_new_certified_connection(
         self, event: supplicant_domain.Messages.NewCertifiedConnection
@@ -255,6 +256,12 @@ class RobotManager:
             )
             return Path(sys.executable)
 
+        if not self._ensure_pip_available(python_executable):
+            self.logger.warning(
+                "pip unavailable in %s; falling back to system python", python_executable
+            )
+            return Path(sys.executable)
+
         return python_executable
 
     def _create_virtualenv_fallback(self, venv_dir: Path) -> Path:
@@ -270,18 +277,64 @@ class RobotManager:
             return Path(sys.executable)
         return python_executable
 
+    def _ensure_pip_available(self, python_executable: Path) -> bool:
+        pip_binary = python_executable.parent / "pip"
+        if pip_binary.exists():
+            return True
+
+        try:
+            proc = subprocess.run(
+                [str(python_executable), "-m", "ensurepip", "--upgrade"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+        except Exception:
+            self.logger.exception(
+                "Failed invoking ensurepip for virtualenv at %s", python_executable.parent
+            )
+            return False
+
+        if proc.returncode != 0:
+            self.logger.warning(
+                "ensurepip failed (code %s): %s",
+                proc.returncode,
+                proc.stderr.decode(errors="ignore"),
+            )
+            return False
+
+        if (python_executable.parent / "pip").exists() or (
+            python_executable.parent / "pip3"
+        ).exists():
+            return True
+
+        self.logger.warning(
+            "ensurepip completed but pip still missing in %s",
+            python_executable.parent,
+        )
+        return False
+
     async def _maybe_install_requirements(
         self, suite_dir: Path, python_exe: Path
     ) -> str:
+        logs: list[str] = []
         req_file = suite_dir / "requirements.txt"
         if not req_file.exists():
-            self.logger.debug("No requirements.txt found for suite at %s", suite_dir)
-            return "requirements.txt not found"
-        log = await self._pip_install_requirements(python_exe, req_file)
-        self.logger.debug(
-            "pip install output for suite at %s:\n%s", suite_dir, log or "<empty>"
-        )
-        return log
+            msg = "requirements.txt not found"
+            self.logger.debug("%s for suite at %s", msg, suite_dir)
+            logs.append(msg)
+        else:
+            pip_log = await self._pip_install_requirements(python_exe, req_file)
+            self.logger.debug(
+                "pip install output for suite at %s:\n%s", suite_dir, pip_log or "<empty>"
+            )
+            if pip_log:
+                logs.append("pip install output:\n" + pip_log)
+
+        rfbrowser_log = await self._initialize_rfbrowser(suite_dir, python_exe)
+        if rfbrowser_log:
+            logs.append("rfbrowser init output:\n" + rfbrowser_log)
+
+        return "\n\n".join(filter(None, logs))
 
     async def _pip_install_requirements(self, python_exe: Path, req_file: Path) -> str:
         """Install requirements with pip into the provided virtualenv. Returns combined output."""
@@ -317,3 +370,81 @@ class RobotManager:
         except Exception:
             self.logger.exception("Exception during pip install of RobotSuite requirements")
             return "pip install raised exception"
+
+    async def _initialize_rfbrowser(
+        self, suite_dir: Path, python_exe: Path
+    ) -> str:
+        env = os.environ.copy()
+        venv_bin = python_exe.parent
+        env["VIRTUAL_ENV"] = str(venv_bin.parent)
+        env["PATH"] = f"{venv_bin}:{env.get('PATH', '')}"
+
+        rfbrowser_bin = venv_bin / "rfbrowser"
+        if not rfbrowser_bin.exists():
+            self.logger.debug(
+                "rfbrowser binary not found for suite at %s (looked at %s)",
+                suite_dir,
+                rfbrowser_bin,
+            )
+            return "rfbrowser binary not found"
+
+        npm_in_path = shutil.which("npm", path=env.get("PATH"))
+        if npm_in_path is None:
+            nvm_dir = Path(env.get("NVM_DIR", Path.home() / ".nvm"))
+            candidate_bins = sorted(
+                glob.glob(str(nvm_dir / "versions" / "node" / "*" / "bin")),
+                reverse=True,
+            )
+            if candidate_bins:
+                env["PATH"] = f"{candidate_bins[0]}:{env.get('PATH', '')}"
+                npm_in_path = shutil.which("npm", path=env.get("PATH"))
+                self.logger.debug(
+                    "Added NVM node bin %s to PATH for rfbrowser; npm=%s",
+                    candidate_bins[0],
+                    npm_in_path,
+                )
+            else:
+                self.logger.debug("No NVM directories found at %s", nvm_dir)
+
+        if npm_in_path is None:
+            self.logger.warning(
+                "npm not found in PATH; rfbrowser init may fail (PATH=%s)", env.get("PATH")
+            )
+
+        self.logger.info("Initializing rfbrowser for suite at %s", suite_dir)
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                str(rfbrowser_bin),
+                "init",
+                cwd=str(suite_dir),
+                env=env,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            try:
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=300)
+            except asyncio.TimeoutError:
+                self.logger.warning("rfbrowser init timed out for suite at %s", suite_dir)
+                proc.terminate()
+                return "rfbrowser init timed out"
+
+            combined = stdout.decode(errors="ignore") + stderr.decode(errors="ignore")
+            if proc.returncode != 0:
+                self.logger.warning(
+                    "rfbrowser init failed (code %s) for suite at %s",
+                    proc.returncode,
+                    suite_dir,
+                )
+            else:
+                self.logger.debug(
+                    "rfbrowser init completed for suite at %s", suite_dir
+                )
+            return combined.strip()
+        except FileNotFoundError:
+            self.logger.warning(
+                "rfbrowser executable missing despite expected path %s", rfbrowser_bin
+            )
+            return "rfbrowser executable missing"
+        except Exception:
+            self.logger.exception("Exception during rfbrowser init for suite at %s", suite_dir)
+            return "rfbrowser init raised exception"
